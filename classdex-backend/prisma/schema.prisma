@@ -1,0 +1,22 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Connection URL lives in prisma.config.ts via env("DATABASE_URL").
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  FACULTY
+  STUDENT
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role
+  createdAt DateTime @default(now())
+}
