@@ -1,0 +1,79 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Connection URL lives in prisma.config.ts via env("DATABASE_URL").
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  FACULTY
+  STUDENT
+}
+
+model User {
+  id             String          @id @default(cuid())
+  name           String
+  email          String          @unique
+  password       String
+  role           Role
+  createdAt      DateTime        @default(now())
+  facultyProfile FacultyProfile?
+  studentProfile StudentProfile?
+  classes        Class[]         @relation("FacultyClasses")
+}
+
+model FacultyProfile {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  name       String?
+  department String?
+  photo      String?  @db.Text
+  email      String?
+  contact    String?
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model StudentProfile {
+  id          String            @id @default(cuid())
+  userId      String            @unique
+  name        String
+  address     String?
+  program     String?
+  section     String?
+  studentId   String            @unique
+  photo       String            @db.Text
+  email       String
+  birthdate   DateTime?         @db.Date
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enrollments ClassEnrollment[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+model Class {
+  id          String            @id @default(cuid())
+  sectionName String
+  classCode   String            @unique
+  description String?
+  schedule    String?
+  facultyId   String
+  faculty     User              @relation("FacultyClasses", fields: [facultyId], references: [id], onDelete: Cascade)
+  enrollments ClassEnrollment[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+model ClassEnrollment {
+  id               String         @id @default(cuid())
+  studentProfileId String
+  classId          String
+  studentProfile   StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  class            Class          @relation(fields: [classId], references: [id], onDelete: Cascade)
+  joinedAt         DateTime       @default(now())
+
+  @@unique([studentProfileId, classId])
+}
