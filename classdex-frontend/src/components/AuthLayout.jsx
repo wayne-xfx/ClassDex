@@ -1,24 +1,11 @@
 import { Link } from "react-router-dom";
+import ThemeToggle from "./ThemeToggle";
 
-export function Logo({ to = "/", light = false }) {
+export function Logo({ to = "/" }) {
   return (
-    <Link to={to} className="inline-flex items-center gap-2 no-underline">
-      <span
-        className={`grid h-9 w-9 place-items-center rounded-md border-2 text-sm font-bold ${
-          light
-            ? "border-white/70 bg-white/10 text-white"
-            : "border-navy bg-white text-navy"
-        }`}
-      >
-        CD
-      </span>
-      <span
-        className={`text-lg font-semibold tracking-tight ${
-          light ? "text-white" : "text-navy"
-        }`}
-      >
-        ClassDex
-      </span>
+    <Link to={to} className="brand" aria-label="ClassDex home">
+      <img src="/classdex-logo.svg" alt="" className="brand-logo logo-light" />
+      <img src="/classdex-logo-dark.svg" alt="" className="brand-logo logo-dark" />
     </Link>
   );
 }
@@ -26,6 +13,7 @@ export function Logo({ to = "/", light = false }) {
 export function AuthLayout({ title, subtitle, children, footer }) {
   return (
     <div className="min-h-screen bg-paper">
+      <div className="auth-theme-toggle"><ThemeToggle /></div>
       <div className="mx-auto grid min-h-screen max-w-6xl items-center gap-10 px-4 py-10 lg:grid-cols-2">
         <aside className="hidden lg:block">
           <Logo />

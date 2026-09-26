@@ -1,13 +1,15 @@
 import { Link } from "react-router-dom";
-import { Logo } from "../components/AuthLayout";
+import { Brand } from "../components/AppShell";
+import ThemeToggle from "../components/ThemeToggle";
 
 export default function Landing() {
   return (
     <div className="min-h-screen bg-paper">
       <header className="border-b border-slate-200 bg-white/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-          <Logo />
+          <Brand />
           <nav className="flex items-center gap-3">
+            <ThemeToggle />
             <Link
               to="/login"
               className="rounded-lg px-4 py-2 text-sm font-medium text-navy hover:bg-slate-100"
@@ -75,7 +77,7 @@ export default function Landing() {
               <dl className="mt-6 grid gap-3 text-sm text-slate-600">
                 <div className="flex justify-between border-b border-dashed border-slate-200 pb-2">
                   <dt>Student ID</dt>
-                  <dd className="font-medium text-navy">2021-01234</dd>
+                  <dd className="font-medium text-navy">2300039</dd>
                 </div>
                 <div className="flex justify-between border-b border-dashed border-slate-200 pb-2">
                   <dt>Email</dt>

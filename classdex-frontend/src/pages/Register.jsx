@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { AuthLayout } from "../components/AuthLayout";
+import PasswordField from "../components/PasswordField";
 import { useAuth } from "../context/AuthContext";
 
 const ROLES = [
@@ -19,10 +20,12 @@ const ROLES = [
 export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [form, setForm] = useState({
     name: "",
     email: "",
     password: "",
+    confirmPassword: "",
     role: "FACULTY",
   });
   const [error, setError] = useState("");
@@ -38,9 +41,14 @@ export default function Register() {
     setSubmitting(true);
     try {
       const user = await register(form);
-      navigate(user.role === "FACULTY" ? "/faculty" : "/student", {
-        replace: true,
-      });
+      const requestedPath = location.state?.from?.pathname;
+      const safeRequestedPath =
+        user.role === "STUDENT" && requestedPath?.startsWith("/join/")
+          ? requestedPath
+          : user.role === "FACULTY" && requestedPath?.startsWith("/faculty/")
+            ? requestedPath
+            : null;
+      navigate(safeRequestedPath || (user.role === "FACULTY" ? "/faculty" : "/student"), { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -119,21 +127,27 @@ export default function Register() {
           />
         </label>
 
-        <label className="block text-sm font-medium text-navy">
-          Password
-          <input
-            required
-            type="password"
-            minLength={8}
-            value={form.password}
-            onChange={update("password")}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-ink outline-none focus:border-royal"
-            autoComplete="new-password"
-          />
-          <span className="mt-1 block text-xs font-normal text-slate-500">
-            At least 8 characters
-          </span>
-        </label>
+        <PasswordField
+          label="Password"
+          name="password"
+          value={form.password}
+          onChange={update("password")}
+          autoComplete="new-password"
+          minLength={8}
+          hint="At least 8 characters"
+        />
+
+        <PasswordField
+          label="Confirm password"
+          name="confirmPassword"
+          value={form.confirmPassword}
+          onChange={update("confirmPassword")}
+          autoComplete="new-password"
+          minLength={8}
+        />
+        {form.confirmPassword && form.password !== form.confirmPassword ? (
+          <p className="field-error" role="alert">Passwords do not match.</p>
+        ) : null}
 
         {error ? (
           <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">

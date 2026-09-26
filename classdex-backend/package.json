@@ -6,7 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node index.js",
-    "dev": "node index.js"
+    "dev": "node index.js",
+    "db:setup": "prisma generate && node scripts/apply-schema.js"
   },
   "keywords": [],
   "author": "",
