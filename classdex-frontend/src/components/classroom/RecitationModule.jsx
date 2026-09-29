@@ -101,14 +101,14 @@ export default function RecitationModule({
         <button
           type="button"
           className="button button-primary recitation-primary-action"
-          disabled={!count || busy}
+          disabled={!count || busy || savingScore}
           onClick={onShuffle}
         >
           <Icon name="shuffle" />
           {busy ? "Shuffling…" : student ? "Call next" : "Shuffle"}
         </button>
         {student ? (
-          <button type="button" className="button button-secondary" disabled={!count || busy} onClick={onSkip}>
+          <button type="button" className="button button-secondary" disabled={count < 2 || busy || savingScore} onClick={onSkip}>
             <Icon name="arrow" /> Skip
           </button>
         ) : null}

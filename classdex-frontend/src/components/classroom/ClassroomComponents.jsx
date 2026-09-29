@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import Icon from "../Icon";
 
 const STATUS_LABELS = {
@@ -9,15 +9,32 @@ const STATUS_LABELS = {
 };
 
 export function ModuleTabs({ active, onChange }) {
+  const tabRefs = useRef([]);
   const tabs = [
     { id: "deck", label: "Class deck", icon: "book" },
     { id: "attendance", label: "Take attendance", icon: "check" },
     { id: "recitation", label: "Recitation", icon: "user" },
   ];
 
+  function handleTabKeyDown(event, index) {
+    const nextIndex = event.key === "ArrowRight"
+      ? (index + 1) % tabs.length
+      : event.key === "ArrowLeft"
+        ? (index - 1 + tabs.length) % tabs.length
+        : event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? tabs.length - 1
+            : -1;
+    if (nextIndex < 0) return;
+    event.preventDefault();
+    onChange(tabs[nextIndex].id);
+    tabRefs.current[nextIndex]?.focus();
+  }
+
   return (
     <div className="module-tabs" role="tablist" aria-label="Class modules">
-      {tabs.map((tab) => (
+      {tabs.map((tab, index) => (
         <button
           className={`module-tab${active === tab.id ? " is-active" : ""}`}
           id={`module-tab-${tab.id}`}
@@ -26,6 +43,9 @@ export function ModuleTabs({ active, onChange }) {
           role="tab"
           aria-selected={active === tab.id}
           aria-controls={`module-panel-${tab.id}`}
+          tabIndex={active === tab.id ? 0 : -1}
+          ref={(element) => { tabRefs.current[index] = element; }}
+          onKeyDown={(event) => handleTabKeyDown(event, index)}
           onClick={() => onChange(tab.id)}
         >
           <Icon name={tab.icon} size={17} />
@@ -159,7 +179,7 @@ export function ConfirmDialog({ title, description, confirmLabel, onConfirm, onC
         <h2 id="confirm-title">{title}</h2>
         <p>{description}</p>
         <div className="confirm-actions">
-          <button type="button" className="button button-secondary" onClick={onCancel} disabled={busy}>Cancel</button>
+          <button type="button" className="button button-secondary" onClick={onCancel} disabled={busy} autoFocus>Cancel</button>
           <button type="button" className="button button-primary" onClick={onConfirm} disabled={busy}>
             {busy ? "Saving…" : confirmLabel}
           </button>

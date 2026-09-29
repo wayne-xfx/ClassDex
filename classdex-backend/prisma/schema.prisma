@@ -12,6 +12,17 @@ enum Role {
   STUDENT
 }
 
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  ABSENT
+}
+
+enum RecitationMethod {
+  RANDOM
+  WEIGHTED
+}
+
 model User {
   id             String          @id @default(cuid())
   name           String
@@ -38,33 +49,37 @@ model FacultyProfile {
 }
 
 model StudentProfile {
-  id          String            @id @default(cuid())
-  userId      String            @unique
+  id          String             @id @default(cuid())
+  userId      String             @unique
   name        String
   address     String?
   program     String?
   section     String?
-  studentId   String            @unique
-  photo       String            @db.Text
+  studentId   String             @unique
+  photo       String             @db.Text
   email       String
-  birthdate   DateTime?         @db.Date
-  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  birthdate   DateTime?          @db.Date
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   enrollments ClassEnrollment[]
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  attendance  AttendanceRecord[]
+  recitations RecitationLog[]
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
 }
 
 model Class {
-  id          String            @id @default(cuid())
-  sectionName String
-  classCode   String            @unique
-  description String?
-  schedule    String?
-  facultyId   String
-  faculty     User              @relation("FacultyClasses", fields: [facultyId], references: [id], onDelete: Cascade)
-  enrollments ClassEnrollment[]
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  id                 String            @id @default(cuid())
+  sectionName        String
+  classCode          String            @unique
+  description        String?
+  schedule           String?
+  gracePeriodMinutes Int               @default(15)
+  facultyId          String
+  faculty            User              @relation("FacultyClasses", fields: [facultyId], references: [id], onDelete: Cascade)
+  enrollments        ClassEnrollment[]
+  sessions           ClassSession[]
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
 }
 
 model ClassEnrollment {
@@ -76,4 +91,44 @@ model ClassEnrollment {
   joinedAt         DateTime       @default(now())
 
   @@unique([studentProfileId, classId])
+}
+
+model ClassSession {
+  id          String             @id @default(cuid())
+  classId     String
+  date        DateTime           @db.Date
+  startedAt   DateTime           @default(now())
+  endedAt     DateTime?
+  class       Class              @relation(fields: [classId], references: [id], onDelete: Cascade)
+  attendance  AttendanceRecord[]
+  recitations RecitationLog[]
+
+  @@unique([classId, date])
+}
+
+model AttendanceRecord {
+  id             String           @id @default(cuid())
+  sessionId      String
+  studentId      String
+  status         AttendanceStatus
+  markedAt       DateTime         @default(now())
+  session        ClassSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  studentProfile StudentProfile   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, studentId])
+  @@index([sessionId, status])
+}
+
+model RecitationLog {
+  id             String           @id @default(cuid())
+  sessionId      String
+  studentId      String
+  method         RecitationMethod
+  calledAt       DateTime         @default(now())
+  score          Int?
+  session        ClassSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  studentProfile StudentProfile   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, calledAt])
+  @@index([studentId])
 }
