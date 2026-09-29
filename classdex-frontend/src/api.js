@@ -63,6 +63,8 @@ export const api = {
     request("/classes", { method: "POST", body: JSON.stringify(payload) }),
   classDetails: (id) => request(`/classes/${encodeURIComponent(id)}`),
   classDeck: (id) => request(`/classes/${encodeURIComponent(id)}/deck`),
+  studentClassRecords: (classId, studentId) =>
+    request(`/classes/${encodeURIComponent(classId)}/students/${encodeURIComponent(studentId)}/records`),
   todaySession: (id) =>
     request(`/classes/${encodeURIComponent(id)}/sessions/today`, { method: "POST" }),
   updateClass: (id, payload) =>

@@ -523,6 +523,8 @@ app.get(
                 select: {
                   id: true,
                   name: true,
+                  address: true,
+                  email: true,
                   photo: true,
                   studentId: true,
                   program: true,
@@ -595,6 +597,84 @@ app.get(
     } catch (error) {
       console.error("Class deck lookup failed:", error);
       return res.status(500).json({ message: "Unable to load this class deck." });
+    }
+  },
+);
+
+app.get(
+  "/api/classes/:id/students/:studentId/records",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      const classRecord = await prisma.class.findFirst({
+        where: { id: req.params.id, facultyId: req.session.userId },
+        select: { id: true },
+      });
+      if (!classRecord) {
+        return res.status(404).json({ message: "Class not found." });
+      }
+
+      const enrollment = await prisma.classEnrollment.findFirst({
+        where: {
+          classId: classRecord.id,
+          studentProfileId: req.params.studentId,
+        },
+        select: {
+          studentProfile: {
+            select: {
+              id: true,
+              name: true,
+              photo: true,
+              studentId: true,
+              program: true,
+              section: true,
+            },
+          },
+        },
+      });
+      if (!enrollment) {
+        return res.status(404).json({ message: "Student not found in this class." });
+      }
+
+      const [attendanceRecords, recitationRecords] = await Promise.all([
+        prisma.attendanceRecord.findMany({
+          where: {
+            studentId: enrollment.studentProfile.id,
+            session: { is: { classId: classRecord.id } },
+          },
+          select: {
+            id: true,
+            status: true,
+            markedAt: true,
+            session: { select: { id: true, date: true } },
+          },
+          orderBy: { markedAt: "desc" },
+        }),
+        prisma.recitationLog.findMany({
+          where: {
+            studentId: enrollment.studentProfile.id,
+            session: { is: { classId: classRecord.id } },
+          },
+          select: {
+            id: true,
+            method: true,
+            calledAt: true,
+            score: true,
+            session: { select: { id: true, date: true } },
+          },
+          orderBy: { calledAt: "desc" },
+        }),
+      ]);
+
+      return res.json({
+        student: enrollment.studentProfile,
+        attendance: attendanceRecords,
+        recitations: recitationRecords,
+      });
+    } catch (error) {
+      console.error("Student class records lookup failed:", error);
+      return res.status(500).json({ message: "Unable to load this student's records." });
     }
   },
 );
@@ -777,7 +857,7 @@ app.post(
       const attendance = await prisma.attendanceRecord.findMany({
         where: {
           sessionId: sessionRecord.id,
-          status: { in: ["PRESENT", "LATE"] },
+          status: "PRESENT",
         },
         select: {
           studentId: true,
