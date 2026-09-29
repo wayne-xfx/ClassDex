@@ -1,4 +1,4 @@
-const ELIGIBLE_ATTENDANCE_STATUSES = new Set(["PRESENT", "LATE"]);
+const ELIGIBLE_ATTENDANCE_STATUSES = new Set(["PRESENT"]);
 
 function eligibleCandidates(attendanceRecords) {
   return attendanceRecords

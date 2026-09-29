@@ -7,8 +7,10 @@ import {
   ModuleTabs,
   StatCounter,
   StudentCard,
+  StudentDetailDialog,
   Toast,
 } from "../components/classroom/ClassroomComponents";
+import { compareStudentsByLastName } from "../components/classroom/studentNames";
 import AttendanceModule from "../components/classroom/AttendanceModule";
 import RecitationModule from "../components/classroom/RecitationModule";
 import { api } from "../api";
@@ -51,6 +53,11 @@ export default function FacultyClass() {
   const [recitationHistory, setRecitationHistory] = useState([]);
   const [recitationBusy, setRecitationBusy] = useState(false);
   const [savingRecitationScore, setSavingRecitationScore] = useState(false);
+  const [recitationAnimationEnabled, setRecitationAnimationEnabled] = useState(true);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [studentRecords, setStudentRecords] = useState(null);
+  const [studentRecordsError, setStudentRecordsError] = useState("");
+  const studentRecordsLoading = Boolean(selectedStudent && !studentRecords && !studentRecordsError);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,21 +106,42 @@ export default function FacultyClass() {
     })),
     [attendanceOverrides, classRecord],
   );
+  const sortedStudents = useMemo(() => [...students].sort(compareStudentsByLastName), [students]);
   const attendanceCounts = useMemo(() => students.reduce((counts, student) => {
     counts[student.status] += 1;
     return counts;
   }, { PRESENT: 0, LATE: 0, ABSENT: 0, UNMARKED: 0 }), [students]);
   const eligibleStudents = useMemo(
-    () => students.filter((student) => student.status === "PRESENT" || student.status === "LATE"),
-    [students],
+    () => sortedStudents.filter((student) => student.status === "PRESENT"),
+    [sortedStudents],
   );
   const filteredStudents = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
-    if (!query) return students;
-    return students.filter((student) =>
+    if (!query) return sortedStudents;
+    return sortedStudents.filter((student) =>
       `${student.name} ${student.studentId}`.toLocaleLowerCase().includes(query),
     );
-  }, [search, students]);
+  }, [search, sortedStudents]);
+
+  const openStudentProfile = useCallback((student) => {
+    setStudentRecords(null);
+    setStudentRecordsError("");
+    setSelectedStudent(student);
+  }, []);
+  const closeStudentProfile = useCallback(() => setSelectedStudent(null), []);
+
+  useEffect(() => {
+    if (!selectedStudent || !id) return undefined;
+    let cancelled = false;
+    api.studentClassRecords(id, selectedStudent.id)
+      .then((data) => {
+        if (!cancelled) setStudentRecords(data);
+      })
+      .catch((recordsError) => {
+        if (!cancelled) setStudentRecordsError(recordsError.message);
+      });
+    return () => { cancelled = true; };
+  }, [id, selectedStudent]);
 
   async function updateAttendance(student, requestedStatus, notify = true) {
     const previousStatus = student.status;
@@ -189,10 +217,15 @@ export default function FacultyClass() {
     }
   }
 
-    async function shuffleRecitation(skipCurrent = false) {
+  async function shuffleRecitation(skipCurrent = false, animate = recitationAnimationEnabled) {
       if (!classRecord?.session?.id || !eligibleStudents.length) return;
       setRecitationBusy(true);
       try {
+        const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const shuffleDuration = animate && !reduceMotion ? 2400 : 0;
+        if (shuffleDuration) {
+          await new Promise((resolve) => window.setTimeout(resolve, shuffleDuration));
+        }
         const excludeStudentId = skipCurrent ? recitationCall?.student.id : null;
         const { recitation } = await api.shuffleRecitation(
           classRecord.session.id,
@@ -208,9 +241,9 @@ export default function FacultyClass() {
       } finally {
         setRecitationBusy(false);
       }
-    }
+  }
 
-    async function updateRecitationScore(score) {
+  async function updateRecitationScore(score) {
       if (!recitationCall) return;
       const previousScore = recitationCall.log.score;
       const optimisticLog = { ...recitationCall.log, score };
@@ -236,7 +269,7 @@ export default function FacultyClass() {
         showToast(scoreError.message, "error");
       } finally {
         setSavingRecitationScore(false);
-      }
+  }
     }
 
   const today = new Intl.DateTimeFormat("en-PH", {
@@ -338,7 +371,13 @@ export default function FacultyClass() {
                     filteredStudents.length ? (
                       <div className={`student-grid ${layout === "list" ? "student-grid-list" : ""}`}>
                         {filteredStudents.map((student) => (
-                          <StudentCard key={student.id} student={student} status={student.status} layout={layout} />
+                          <StudentCard
+                            key={student.id}
+                            student={student}
+                            status={student.status}
+                            layout={layout}
+                            onOpen={openStudentProfile}
+                          />
                         ))}
                       </div>
                     ) : (
@@ -366,11 +405,12 @@ export default function FacultyClass() {
                 </>
               ) : activeModule === "attendance" ? (
                 <AttendanceModule
-                  students={students}
+                  students={sortedStudents}
                   counts={attendanceCounts}
                   layout={layout}
                   gracePeriodMinutes={gracePeriodMinutes}
                   onStatusChange={updateAttendance}
+                  onOpenStudent={openStudentProfile}
                   onMarkAll={markAllPresent}
                   onSaveGracePeriod={saveGracePeriod}
                   pendingStudentIds={pendingStudentIds}
@@ -383,14 +423,26 @@ export default function FacultyClass() {
                   history={recitationHistory}
                   mode={recitationMode}
                   onModeChange={setRecitationMode}
-                  onShuffle={shuffleRecitation}
+                  onShuffle={(animate) => shuffleRecitation(false, animate)}
                   onScoreChange={updateRecitationScore}
-                  onSkip={() => shuffleRecitation(true)}
+                  onSkip={(animate) => shuffleRecitation(true, animate)}
                   busy={recitationBusy}
                   savingScore={savingRecitationScore}
+                  animationEnabled={recitationAnimationEnabled}
+                  onAnimationChange={setRecitationAnimationEnabled}
                 />
               )}
             </section>
+            {selectedStudent ? (
+              <StudentDetailDialog
+                student={selectedStudent}
+                className={classRecord.sectionName}
+                records={studentRecords}
+                loading={studentRecordsLoading}
+                error={studentRecordsError}
+                onClose={closeStudentProfile}
+              />
+            ) : null}
           </>
         ) : null}
       </div>

@@ -8,6 +8,7 @@ export default function AttendanceModule({
   layout,
   gracePeriodMinutes,
   onStatusChange,
+  onOpenStudent,
   onMarkAll,
   onSaveGracePeriod,
   pendingStudentIds = [],
@@ -103,7 +104,7 @@ export default function AttendanceModule({
       {displayedStudents.length ? (
         <div className={`student-grid ${layout === "list" ? "student-grid-list" : ""}`}>
           {displayedStudents.map((student) => (
-            <StudentCard key={student.id} student={student} status={student.status} layout={layout}>
+            <StudentCard key={student.id} student={student} status={student.status} layout={layout} onOpen={onOpenStudent}>
               <div className="status-button-row" aria-label={`Attendance status for ${student.name}`}>
                 {["PRESENT", "LATE", "ABSENT"].map((status) => (
                   <StatusButton
