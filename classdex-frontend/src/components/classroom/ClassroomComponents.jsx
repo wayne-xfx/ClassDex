@@ -18,7 +18,7 @@ export function ModuleTabs({ active, onChange }) {
   const tabRefs = useRef([]);
   const tabs = [
     { id: "deck", label: "Class deck", icon: "book" },
-    { id: "attendance", label: "Take attendance", icon: "check" },
+    { id: "attendance", label: "Attendance", icon: "check" },
     { id: "recitation", label: "Recitation", icon: "user" },
   ];
 
@@ -219,14 +219,14 @@ export function StudentDetailDialog({ student, className, records, loading, erro
   );
 }
 
-export function StatusButton({ status, active, disabled = false, onClick }) {
+export function StatusButton({ status, active, disabled = false, clearOnActive = true, onClick }) {
   const names = { PRESENT: "Present", LATE: "Late", ABSENT: "Absent" };
   const icons = { PRESENT: "check", LATE: "clock", ABSENT: "x" };
   return (
     <button
       type="button"
       className={`status-button status-button-${status.toLowerCase()}${active ? " is-active" : ""}`}
-      aria-label={`${names[status]}${active ? " (selected; activate to clear)" : ""}`}
+      aria-label={`${names[status]}${active && clearOnActive ? " (selected; activate to clear)" : ""}`}
       aria-pressed={active}
       disabled={disabled}
       onClick={onClick}

@@ -2135,6 +2135,142 @@ textarea {
   background: color-mix(in srgb, var(--card) 80%, transparent);
 }
 
+.attendance-roster-actions {
+  min-width: 0;
+}
+
+.attendance-roster-actions .deck-search {
+  width: min(270px, 28vw);
+}
+
+.attendance-taking {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 18px;
+  background: color-mix(in srgb, var(--card) 78%, transparent);
+}
+
+.attendance-taking-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.attendance-taking-header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.attendance-taking-header strong {
+  color: var(--navy);
+  font-size: 12px;
+}
+
+.attendance-progress {
+  height: 6px;
+  overflow: hidden;
+  margin: 14px 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--muted) 14%, var(--card));
+}
+
+.attendance-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #278655, #58b887);
+  transition: width 180ms ease-out;
+}
+
+.attendance-focus-stage {
+  min-height: 440px;
+  border: 0;
+  padding: 12px 0 0;
+  background: transparent;
+  perspective: none;
+}
+
+.attendance-focus-card {
+  min-height: 390px;
+  justify-content: center;
+}
+
+.attendance-focus-actions {
+  display: flex;
+  width: min(390px, 100%);
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.attendance-focus-actions .status-button {
+  min-height: 50px;
+  font-size: 12px;
+}
+
+.attendance-previous {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 5px;
+  margin-top: 7px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 670;
+  cursor: pointer;
+}
+
+.attendance-previous svg {
+  transform: rotate(180deg);
+}
+
+.attendance-previous:hover {
+  color: var(--royal);
+}
+
+.attendance-previous:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--royal) 64%, transparent);
+  outline-offset: 2px;
+}
+
+.attendance-complete {
+  display: flex;
+  min-height: 300px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  text-align: center;
+}
+
+.attendance-complete > span {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--accent-teal) 14%, var(--card));
+  color: var(--accent-teal);
+}
+
+.attendance-complete h3 {
+  margin: 15px 0 5px;
+  color: var(--navy);
+  font-size: 19px;
+}
+
+.attendance-complete p {
+  max-width: 410px;
+  margin: 0 0 17px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .unmarked-filter {
   display: inline-flex;
   min-height: 44px;
@@ -2336,6 +2472,24 @@ textarea {
   .attendance-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .attendance-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .attendance-roster-actions {
+    flex-wrap: wrap;
+  }
+
+  .attendance-roster-actions .deck-search {
+    width: 100%;
+  }
+
+  .attendance-taking-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 @media (max-width: 520px) {
@@ -2347,6 +2501,11 @@ textarea {
 
   .attendance-toolbar .button {
     width: 100%;
+  }
+
+  .attendance-roster-actions .deck-search {
+    width: auto;
+    flex: 1;
   }
 
   .status-button {
@@ -2515,20 +2674,6 @@ textarea {
     ),
     var(--card);
   box-shadow: 0 16px 38px rgba(18, 38, 79, 0.15);
-  transform-origin: 50% 70%;
-  animation: recitation-land 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-
-.recitation-card-glint {
-  position: absolute;
-  top: -30%;
-  left: -50%;
-  width: 35%;
-  height: 160%;
-  transform: rotate(25deg);
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, #fff 48%, transparent), transparent);
-  animation: recitation-glint 260ms ease-out 50ms both;
-  pointer-events: none;
 }
 
 .recitation-call-label {
@@ -2819,33 +2964,6 @@ textarea {
   color: var(--muted);
   font-size: 9px;
   white-space: nowrap;
-}
-
-@keyframes recitation-land {
-  0% { opacity: 0; transform: rotateY(82deg) scale(0.96); }
-  70% { opacity: 1; transform: rotateY(-7deg) scale(1.01); }
-  100% { opacity: 1; transform: rotateY(0) scale(1); }
-}
-
-@keyframes recitation-glint {
-  from { opacity: 0; transform: translateX(0) rotate(25deg); }
-  40% { opacity: 0.7; }
-  to { opacity: 0; transform: translateX(480%) rotate(25deg); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .recitation-card {
-    animation: recitation-fade 160ms ease-out both;
-  }
-
-  .recitation-card-glint {
-    display: none;
-  }
-}
-
-@keyframes recitation-fade {
-  from { opacity: 0; }
-  to { opacity: 1; }
 }
 
 @media (max-width: 760px) {
@@ -3233,167 +3351,6 @@ textarea {
   margin: 0;
   color: var(--muted);
   font-size: 10px;
-}
-
-.recitation-animation-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  margin: 10px 2px;
-}
-
-.recitation-animation-switch {
-  position: relative;
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  gap: 11px;
-  color: var(--navy);
-  font-size: 11px;
-  font-weight: 680;
-  cursor: pointer;
-}
-
-.recitation-animation-switch input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-.recitation-switch-track {
-  position: relative;
-  width: 46px;
-  height: 26px;
-  flex: 0 0 auto;
-  border: 1px solid var(--line-strong);
-  border-radius: 20px;
-  background: color-mix(in srgb, var(--muted) 20%, var(--card));
-  transition: background-color 160ms ease, border-color 160ms ease;
-}
-
-.recitation-switch-track::after {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--card);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
-  content: "";
-  transition: transform 160ms ease;
-}
-
-.recitation-animation-switch input:checked + .recitation-switch-track {
-  border-color: var(--royal);
-  background: var(--royal);
-}
-
-.recitation-animation-switch input:checked + .recitation-switch-track::after {
-  transform: translateX(20px);
-}
-
-.recitation-animation-switch input:focus-visible + .recitation-switch-track {
-  outline: 3px solid color-mix(in srgb, var(--royal) 55%, transparent);
-  outline-offset: 3px;
-}
-
-.recitation-shuffling-card {
-  display: flex;
-  width: min(290px, 100%);
-  min-height: 284px;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--line);
-  border-top: 5px solid var(--royal);
-  border-radius: 19px;
-  padding: 19px;
-  background:
-    repeating-linear-gradient(to bottom, transparent 0, transparent 32px, color-mix(in srgb, var(--royal) 6%, transparent) 33px, transparent 34px),
-    var(--card);
-  box-shadow: 0 12px 30px rgba(18, 38, 79, 0.13);
-  animation: shuffle-flip 180ms ease-in-out infinite alternate;
-}
-
-.recitation-shuffling-photo {
-  display: grid;
-  width: 68px;
-  height: 68px;
-  place-items: center;
-  overflow: hidden;
-  border: 2px solid var(--card);
-  border-radius: 20px;
-  background: color-mix(in srgb, var(--royal) 10%, var(--card));
-  box-shadow: 0 0 0 1px var(--line);
-  color: var(--royal);
-}
-
-.recitation-shuffling-photo img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.recitation-shuffling-card > strong {
-  max-width: 100%;
-  overflow: hidden;
-  margin-top: 10px;
-  color: var(--navy);
-  font-size: 16px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.recitation-shuffling-card > span:not(.recitation-shuffling-label) {
-  margin-top: 3px;
-  color: var(--muted);
-  font-size: 10px;
-}
-
-.recitation-shuffling-lines {
-  display: flex;
-  width: 165px;
-  flex-direction: column;
-  gap: 5px;
-  margin-top: 14px;
-}
-
-.recitation-shuffling-lines i {
-  display: block;
-  height: 3px;
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--royal) 14%, var(--line));
-}
-
-.recitation-shuffling-lines i:nth-child(2) {
-  width: 82%;
-}
-
-.recitation-shuffling-lines i:nth-child(3) {
-  width: 63%;
-}
-
-.recitation-shuffling-label {
-  margin-top: 12px;
-  color: var(--royal);
-  font-size: 10px;
-  font-weight: 730;
-}
-
-@keyframes shuffle-flip {
-  from { transform: translateY(-3px) rotate(-2deg) rotateY(-5deg); }
-  to { transform: translateY(3px) rotate(2deg) rotateY(5deg); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .recitation-shuffling-card {
-    animation: recitation-fade 100ms ease-out both;
-  }
 }
 
 @media (max-width: 520px) {

@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import Icon from "../Icon";
 import { formatStudentName } from "./studentNames";
 
@@ -13,22 +12,9 @@ export default function RecitationModule({
   onSkip,
   busy = false,
   savingScore = false,
-  animationEnabled = true,
-  onAnimationChange,
-  shufflePreview = null,
 }) {
   const student = currentCall?.student || null;
   const count = eligibleStudents.length;
-  const [previewIndex, setPreviewIndex] = useState(0);
-
-  useEffect(() => {
-    if (!busy || !eligibleStudents.length) return undefined;
-    const interval = window.setInterval(() => {
-      setPreviewIndex((index) => (index + 1) % eligibleStudents.length);
-    }, 100);
-    return () => window.clearInterval(interval);
-  }, [busy, eligibleStudents.length]);
-  const previewStudent = shufflePreview || eligibleStudents[previewIndex] || null;
 
   return (
     <div className="recitation-module">
@@ -88,34 +74,9 @@ export default function RecitationModule({
         )}
       </section>
 
-      <div className="recitation-animation-toggle">
-        <label className="recitation-animation-switch">
-          <span>Shuffle animation</span>
-          <input
-            type="checkbox"
-            role="switch"
-            aria-label="Shuffle animation"
-            checked={animationEnabled}
-            onChange={(event) => onAnimationChange(event.target.checked)}
-          />
-          <span className="recitation-switch-track" aria-hidden="true" />
-        </label>
-      </div>
-
       <section className="recitation-stage" aria-live="polite" aria-atomic="true">
-        {busy && previewStudent ? (
-          <article className="recitation-shuffling-card" key={previewStudent.id}>
-            <div className="recitation-shuffling-photo">
-              {previewStudent.photo ? <img src={previewStudent.photo} alt="" /> : <Icon name="user" size={30} />}
-            </div>
-            <strong>{formatStudentName(previewStudent.name)}</strong>
-            <span>ID {previewStudent.studentId}</span>
-            <div className="recitation-shuffling-lines" aria-hidden="true"><i /><i /><i /></div>
-            <span className="recitation-shuffling-label">Shuffling the deck…</span>
-          </article>
-        ) : student ? (
+        {student ? (
           <article className="recitation-card" key={currentCall.log.id}>
-            <div className="recitation-card-glint" aria-hidden="true" />
             <span className="recitation-call-label"><Icon name="check" size={15} /> Your next speaker</span>
             <div className="recitation-student-photo">
               {student.photo ? <img src={student.photo} alt="" /> : <Icon name="user" size={36} />}
@@ -162,13 +123,13 @@ export default function RecitationModule({
           type="button"
           className="button button-primary recitation-primary-action"
           disabled={!count || busy || savingScore}
-          onClick={() => onShuffle(animationEnabled)}
+          onClick={onShuffle}
         >
           <Icon name="shuffle" />
-          {busy ? "Shuffling…" : student ? "Shuffle again" : "Shuffle"}
+          {busy ? "Picking…" : student ? "Shuffle again" : "Shuffle"}
         </button>
         {student ? (
-          <button type="button" className="button button-secondary" disabled={count < 2 || busy || savingScore} onClick={() => onSkip(animationEnabled)}>
+          <button type="button" className="button button-secondary" disabled={count < 2 || busy || savingScore} onClick={onSkip}>
             <Icon name="arrow" /> Skip
           </button>
         ) : null}

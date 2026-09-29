@@ -17,7 +17,7 @@ import { api } from "../api";
 
 const MODULE_LABELS = {
   deck: "Class deck",
-  attendance: "Take attendance",
+  attendance: "Attendance",
   recitation: "Recitation",
 };
 
@@ -53,7 +53,6 @@ export default function FacultyClass() {
   const [recitationHistory, setRecitationHistory] = useState([]);
   const [recitationBusy, setRecitationBusy] = useState(false);
   const [savingRecitationScore, setSavingRecitationScore] = useState(false);
-  const [recitationAnimationEnabled, setRecitationAnimationEnabled] = useState(true);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [studentRecords, setStudentRecords] = useState(null);
   const [studentRecordsError, setStudentRecordsError] = useState("");
@@ -155,7 +154,7 @@ export default function FacultyClass() {
       const appliedStatus = result.appliedStatus || result.attendance?.status || requestedStatus;
       setAttendanceOverrides((current) => ({ ...current, [student.id]: appliedStatus }));
       const automaticLate = requestedStatus === "PRESENT" && appliedStatus === "LATE";
-      if (notify && automaticLate) {
+      if (automaticLate) {
         showToast(
           `${student.name} was marked Late because the grace period has passed.`,
           "success",
@@ -171,22 +170,10 @@ export default function FacultyClass() {
       return appliedStatus;
     } catch (attendanceError) {
       setAttendanceOverrides((current) => ({ ...current, [student.id]: previousStatus }));
-      if (notify) showToast(attendanceError.message, "error");
+      showToast(attendanceError.message, "error");
       return null;
     } finally {
       setPendingStudentIds((current) => current.filter((studentId) => studentId !== student.id));
-    }
-  }
-
-  async function markAllPresent() {
-    const results = await Promise.all(students.map((student) => updateAttendance(student, "PRESENT", false)));
-    const lateCount = results.filter((status) => status === "LATE").length;
-    const failedCount = results.filter((status) => status === null).length;
-    if (failedCount) {
-      showToast(`${students.length - failedCount} saved; ${failedCount} attendance updates failed.`, "error");
-    } else {
-      const presentCount = results.filter((status) => status === "PRESENT").length;
-      showToast(`${presentCount} marked Present${lateCount ? ` · ${lateCount} marked Late after the grace period` : ""}.`);
     }
   }
 
@@ -217,15 +204,10 @@ export default function FacultyClass() {
     }
   }
 
-  async function shuffleRecitation(skipCurrent = false, animate = recitationAnimationEnabled) {
+  async function shuffleRecitation(skipCurrent = false) {
       if (!classRecord?.session?.id || !eligibleStudents.length) return;
       setRecitationBusy(true);
       try {
-        const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        const shuffleDuration = animate && !reduceMotion ? 2400 : 0;
-        if (shuffleDuration) {
-          await new Promise((resolve) => window.setTimeout(resolve, shuffleDuration));
-        }
         const excludeStudentId = skipCurrent ? recitationCall?.student.id : null;
         const { recitation } = await api.shuffleRecitation(
           classRecord.session.id,
@@ -408,9 +390,9 @@ export default function FacultyClass() {
                   students={sortedStudents}
                   counts={attendanceCounts}
                   layout={layout}
+                  onLayoutChange={setLayout}
                   gracePeriodMinutes={gracePeriodMinutes}
                   onStatusChange={updateAttendance}
-                  onMarkAll={markAllPresent}
                   onSaveGracePeriod={saveGracePeriod}
                   pendingStudentIds={pendingStudentIds}
                   savingGracePeriod={savingGracePeriod}
@@ -422,13 +404,11 @@ export default function FacultyClass() {
                   history={recitationHistory}
                   mode={recitationMode}
                   onModeChange={setRecitationMode}
-                  onShuffle={(animate) => shuffleRecitation(false, animate)}
+                  onShuffle={() => shuffleRecitation(false)}
                   onScoreChange={updateRecitationScore}
-                  onSkip={(animate) => shuffleRecitation(true, animate)}
+                  onSkip={() => shuffleRecitation(true)}
                   busy={recitationBusy}
                   savingScore={savingRecitationScore}
-                  animationEnabled={recitationAnimationEnabled}
-                  onAnimationChange={setRecitationAnimationEnabled}
                 />
               )}
             </section>
