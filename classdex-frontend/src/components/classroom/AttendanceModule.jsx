@@ -15,6 +15,7 @@ export default function AttendanceModule({
 }) {
   const [onlyUnmarked, setOnlyUnmarked] = useState(false);
   const [confirmingBulk, setConfirmingBulk] = useState(false);
+  const [savingBulk, setSavingBulk] = useState(false);
   const [graceValue, setGraceValue] = useState(null);
   const inputGraceValue = graceValue ?? String(gracePeriodMinutes);
 
@@ -26,8 +27,18 @@ export default function AttendanceModule({
     event.preventDefault();
     const minutes = Number(inputGraceValue);
     if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) return;
-    await onSaveGracePeriod(minutes);
-    setGraceValue(null);
+    const saved = await onSaveGracePeriod(minutes);
+    if (saved) setGraceValue(null);
+  }
+
+  async function confirmMarkAll() {
+    setSavingBulk(true);
+    try {
+      await onMarkAll();
+      setConfirmingBulk(false);
+    } finally {
+      setSavingBulk(false);
+    }
   }
 
   return (
@@ -82,7 +93,7 @@ export default function AttendanceModule({
         <button
           type="button"
           className="button button-primary"
-          disabled={!students.length || students.every((student) => student.status === "PRESENT")}
+          disabled={!students.length || students.some((student) => pendingStudentIds.includes(student.id))}
           onClick={() => setConfirmingBulk(true)}
         >
           <Icon name="check" /> Mark all Present
@@ -126,10 +137,8 @@ export default function AttendanceModule({
           description={`This will mark all ${students.length} students Present, subject to the grace period. You can still edit any individual status afterward.`}
           confirmLabel="Mark all Present"
           onCancel={() => setConfirmingBulk(false)}
-          onConfirm={() => {
-            setConfirmingBulk(false);
-            onMarkAll();
-          }}
+          onConfirm={confirmMarkAll}
+          busy={savingBulk}
         />
       ) : null}
     </div>
