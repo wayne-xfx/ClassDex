@@ -89,15 +89,17 @@ export default function RecitationModule({
       </section>
 
       <div className="recitation-animation-toggle">
-        <label>
+        <label className="recitation-animation-switch">
+          <span>Shuffle animation</span>
           <input
             type="checkbox"
+            role="switch"
+            aria-label="Shuffle animation"
             checked={animationEnabled}
             onChange={(event) => onAnimationChange(event.target.checked)}
           />
-          <span>Shuffle animation</span>
+          <span className="recitation-switch-track" aria-hidden="true" />
         </label>
-        <small>{animationEnabled ? "Cards shuffle for about 2.4 seconds." : "Show the selected student right away."}</small>
       </div>
 
       <section className="recitation-stage" aria-live="polite" aria-atomic="true">
@@ -160,13 +162,13 @@ export default function RecitationModule({
           type="button"
           className="button button-primary recitation-primary-action"
           disabled={!count || busy || savingScore}
-          onClick={onShuffle}
+          onClick={() => onShuffle(animationEnabled)}
         >
           <Icon name="shuffle" />
           {busy ? "Shuffling…" : student ? "Shuffle again" : "Shuffle"}
         </button>
         {student ? (
-          <button type="button" className="button button-secondary" disabled={count < 2 || busy || savingScore} onClick={onSkip}>
+          <button type="button" className="button button-secondary" disabled={count < 2 || busy || savingScore} onClick={() => onSkip(animationEnabled)}>
             <Icon name="arrow" /> Skip
           </button>
         ) : null}

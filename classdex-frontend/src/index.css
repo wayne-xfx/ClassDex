@@ -121,7 +121,8 @@ textarea {
 .app-header-inner {
   display: flex;
   min-height: 76px;
-  max-width: 1200px;
+  width: 100%;
+  max-width: 1600px;
   margin: 0 auto;
   padding: 0 28px;
   align-items: center;
@@ -194,7 +195,8 @@ textarea {
 }
 
 .page-content {
-  max-width: 1200px;
+  width: 100%;
+  max-width: 1600px;
   margin: 0 auto;
   padding: 42px 28px 76px;
 }
@@ -3236,32 +3238,68 @@ textarea {
 .recitation-animation-toggle {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-end;
   margin: 10px 2px;
 }
 
-.recitation-animation-toggle label {
+.recitation-animation-switch {
+  position: relative;
   display: inline-flex;
   min-height: 44px;
   align-items: center;
-  gap: 8px;
+  gap: 11px;
   color: var(--navy);
   font-size: 11px;
   font-weight: 680;
   cursor: pointer;
 }
 
-.recitation-animation-toggle input {
-  width: 18px;
-  height: 18px;
-  accent-color: var(--royal);
+.recitation-animation-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
-.recitation-animation-toggle small {
-  color: var(--muted);
-  font-size: 9px;
-  text-align: right;
+.recitation-switch-track {
+  position: relative;
+  width: 46px;
+  height: 26px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line-strong);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--muted) 20%, var(--card));
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.recitation-switch-track::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--card);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  content: "";
+  transition: transform 160ms ease;
+}
+
+.recitation-animation-switch input:checked + .recitation-switch-track {
+  border-color: var(--royal);
+  background: var(--royal);
+}
+
+.recitation-animation-switch input:checked + .recitation-switch-track::after {
+  transform: translateX(20px);
+}
+
+.recitation-animation-switch input:focus-visible + .recitation-switch-track {
+  outline: 3px solid color-mix(in srgb, var(--royal) 55%, transparent);
+  outline-offset: 3px;
 }
 
 .recitation-shuffling-card {
@@ -3376,14 +3414,4 @@ textarea {
     height: 72px;
   }
 
-  .recitation-animation-toggle {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 0;
-  }
-
-  .recitation-animation-toggle small {
-    padding-left: 26px;
-    text-align: left;
-  }
 }

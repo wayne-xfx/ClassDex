@@ -410,7 +410,6 @@ export default function FacultyClass() {
                   layout={layout}
                   gracePeriodMinutes={gracePeriodMinutes}
                   onStatusChange={updateAttendance}
-                  onOpenStudent={openStudentProfile}
                   onMarkAll={markAllPresent}
                   onSaveGracePeriod={saveGracePeriod}
                   pendingStudentIds={pendingStudentIds}
