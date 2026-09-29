@@ -62,6 +62,9 @@ export const api = {
   createClass: (payload) =>
     request("/classes", { method: "POST", body: JSON.stringify(payload) }),
   classDetails: (id) => request(`/classes/${encodeURIComponent(id)}`),
+  classDeck: (id) => request(`/classes/${encodeURIComponent(id)}/deck`),
+  todaySession: (id) =>
+    request(`/classes/${encodeURIComponent(id)}/sessions/today`, { method: "POST" }),
   joinClass: (classCode) =>
     request("/classes/join", {
       method: "POST",

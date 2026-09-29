@@ -32,9 +32,10 @@ export default function FacultyClass() {
     setLoading(true);
     setError("");
     api
-      .classDetails(id)
-      .then(({ class: record }) => {
-        if (!cancelled) setClassRecord(record);
+      .todaySession(id)
+      .then(() => api.classDeck(id))
+      .then((deck) => {
+        if (!cancelled) setClassRecord(deck);
       })
       .catch((requestError) => {
         if (!cancelled) setError(requestError.message);
@@ -49,12 +50,19 @@ export default function FacultyClass() {
 
   const dismissToast = useCallback(() => setNotice(""), []);
   const students = useMemo(
-    () => classRecord?.enrollments.map(({ id: enrollmentId, studentProfile }) => ({
+    () => (classRecord?.students || classRecord?.enrollments?.map(({ id: enrollmentId, studentProfile }) => ({
       ...studentProfile,
       enrollmentId,
-    })) || [],
+    })) || []).map((student) => ({
+      ...student,
+      status: student.attendanceStatus || "UNMARKED",
+    })),
     [classRecord],
   );
+  const attendanceCounts = useMemo(() => students.reduce((counts, student) => {
+    counts[student.status] += 1;
+    return counts;
+  }, { PRESENT: 0, LATE: 0, ABSENT: 0, UNMARKED: 0 }), [students]);
   const filteredStudents = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     if (!query) return students;
@@ -158,16 +166,16 @@ export default function FacultyClass() {
                     </div>
                   </div>
                   <div className="deck-counts" aria-label="Today's attendance counts">
-                    <StatCounter label="Present" value={0} tone="present" />
-                    <StatCounter label="Late" value={0} tone="late" />
-                    <StatCounter label="Absent" value={0} tone="absent" />
-                    <StatCounter label="Unmarked" value={students.length} tone="neutral" />
+                    <StatCounter label="Present" value={attendanceCounts.PRESENT} tone="present" />
+                    <StatCounter label="Late" value={attendanceCounts.LATE} tone="late" />
+                    <StatCounter label="Absent" value={attendanceCounts.ABSENT} tone="absent" />
+                    <StatCounter label="Unmarked" value={attendanceCounts.UNMARKED} tone="neutral" />
                   </div>
                   {students.length ? (
                     filteredStudents.length ? (
                       <div className={`student-grid ${layout === "list" ? "student-grid-list" : ""}`}>
                         {filteredStudents.map((student) => (
-                          <StudentCard key={student.id} student={student} />
+                          <StudentCard key={student.id} student={student} status={student.status} layout={layout} />
                         ))}
                       </div>
                     ) : (
