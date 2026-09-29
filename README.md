@@ -12,10 +12,15 @@ card and join multiple classes.
    `SESSION_SECRET`, and `FRONTEND_ORIGIN=http://localhost:5173`. The database
    URL must point to a PostgreSQL database.
 3. From `classdex-backend/`, run `npm run db:setup` to generate the Prisma
-   client and apply the idempotent schema migration using PostgreSQL direct TLS.
+   client and apply the idempotent schema migrations using PostgreSQL direct TLS.
    Run `npm run dev` to start the API.
 4. From `classdex-frontend/`, run `npm run dev` and open
    `http://localhost:5173`.
+
+Run backend unit tests from `classdex-backend/` with `npm test`. The additive
+class-deck migration adds one Manila-calendar-day session per class, attendance
+records, and recitation logs. Weighted recitation uses the number of prior calls
+in that class as its participation history.
 
 The backend `.env` file is ignored by Git. Never put database credentials in
 frontend configuration. The setup script uses `sslnegotiation=direct`, which
@@ -35,6 +40,10 @@ selected image data with the profile record instead.
 - Email/password registration and login for faculty and students.
 - Faculty profile editing, class creation, unique invite codes, class rosters,
   and shareable join links.
+- Faculty class decks with searchable student cards, grid/list layouts, and
+  daily attendance counts.
+- Per-session attendance with editable status, a saved class grace period, and
+  weighted or random recitation with scores and called-today history.
 - Required student photo and reusable profile, with an exact seven-digit student
   ID validated in the browser and API.
 - Student enrollment in multiple classes with duplicate-join protection.

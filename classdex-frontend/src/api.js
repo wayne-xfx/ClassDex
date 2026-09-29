@@ -75,6 +75,19 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ status }),
     }),
+  shuffleRecitation: (sessionId, mode, excludeStudentId = null) =>
+    request(`/sessions/${encodeURIComponent(sessionId)}/recitation/shuffle`, {
+      method: "POST",
+      body: JSON.stringify({
+        mode,
+        ...(excludeStudentId ? { excludeStudentId } : {}),
+      }),
+    }),
+  updateRecitationScore: (logId, score) =>
+    request(`/recitation-logs/${encodeURIComponent(logId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ score }),
+    }),
   joinClass: (classCode) =>
     request("/classes/join", {
       method: "POST",

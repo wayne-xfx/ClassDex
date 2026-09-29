@@ -19,6 +19,16 @@ const MODULE_LABELS = {
   recitation: "Recitation",
 };
 
+function toRecitationCall(log) {
+  return {
+    id: log.id,
+    log,
+    student: log.studentProfile,
+    score: log.score,
+    calledAt: log.calledAt,
+  };
+}
+
 export default function FacultyClass() {
   const { id } = useParams();
   const [classRecord, setClassRecord] = useState(null);
@@ -39,6 +49,8 @@ export default function FacultyClass() {
   const [recitationMode, setRecitationMode] = useState("RANDOM");
   const [recitationCall, setRecitationCall] = useState(null);
   const [recitationHistory, setRecitationHistory] = useState([]);
+  const [recitationBusy, setRecitationBusy] = useState(false);
+  const [savingRecitationScore, setSavingRecitationScore] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,6 +62,8 @@ export default function FacultyClass() {
           setClassRecord({ ...deck.class, session: deck.session, students: deck.students });
           setGracePeriodMinutes(deck.class.gracePeriodMinutes);
           setAttendanceOverrides({});
+          setRecitationCall(null);
+          setRecitationHistory((deck.recitationHistory || []).map(toRecitationCall));
         }
       })
       .catch((requestError) => {
@@ -175,42 +189,55 @@ export default function FacultyClass() {
     }
   }
 
-  function shuffleLocally() {
-      if (!eligibleStudents.length) return;
-      let selected;
-      if (recitationMode === "WEIGHTED") {
-        const callCounts = new Map();
-        for (const call of recitationHistory) {
-          callCounts.set(call.student.id, (callCounts.get(call.student.id) || 0) + 1);
-        }
-        const weights = eligibleStudents.map((student) => 1 / (1 + (callCounts.get(student.id) || 0)));
-        const totalWeight = weights.reduce((total, weight) => total + weight, 0);
-        let choice = Math.random() * totalWeight;
-        selected = eligibleStudents[eligibleStudents.length - 1];
-        for (let index = 0; index < eligibleStudents.length; index += 1) {
-          choice -= weights[index];
-          if (choice < 0) {
-            selected = eligibleStudents[index];
-            break;
-          }
-        }
-      } else {
-        selected = eligibleStudents[Math.floor(Math.random() * eligibleStudents.length)];
+    async function shuffleRecitation(skipCurrent = false) {
+      if (!classRecord?.session?.id || !eligibleStudents.length) return;
+      setRecitationBusy(true);
+      try {
+        const excludeStudentId = skipCurrent ? recitationCall?.student.id : null;
+        const { recitation } = await api.shuffleRecitation(
+          classRecord.session.id,
+          recitationMode,
+          excludeStudentId,
+        );
+        const call = toRecitationCall(recitation);
+        setRecitationCall(call);
+        setRecitationHistory((current) => [call, ...current.filter((item) => item.id !== call.id)]);
+        showToast(`${call.student.name} called for recitation.`);
+      } catch (shuffleError) {
+        showToast(shuffleError.message, "error");
+      } finally {
+        setRecitationBusy(false);
       }
-      const calledAt = new Date().toISOString();
-      const log = { id: `preview-${calledAt}-${selected.id}`, score: null };
-      const call = { ...log, log, student: selected, calledAt };
-      setRecitationCall(call);
-      setRecitationHistory((current) => [call, ...current]);
     }
 
-  function scoreLocalRecitation(score) {
-    if (!recitationCall) return;
-    setRecitationCall((current) => ({ ...current, log: { ...current.log, score } }));
-    setRecitationHistory((current) => current.map((call) =>
-      call.id === recitationCall.id ? { ...call, score } : call,
-    ));
-  }
+    async function updateRecitationScore(score) {
+      if (!recitationCall) return;
+      const previousScore = recitationCall.log.score;
+      const optimisticLog = { ...recitationCall.log, score };
+      const optimisticCall = toRecitationCall(optimisticLog);
+      setRecitationCall(optimisticCall);
+      setRecitationHistory((current) => current.map((call) =>
+        call.id === recitationCall.id ? optimisticCall : call,
+      ));
+      setSavingRecitationScore(true);
+      try {
+        const { recitation } = await api.updateRecitationScore(recitationCall.id, score);
+        const savedCall = toRecitationCall(recitation);
+        setRecitationCall(savedCall);
+        setRecitationHistory((current) => current.map((call) =>
+          call.id === savedCall.id ? savedCall : call,
+        ));
+      } catch (scoreError) {
+        const previousCall = toRecitationCall({ ...recitationCall.log, score: previousScore });
+        setRecitationCall(previousCall);
+        setRecitationHistory((current) => current.map((call) =>
+          call.id === previousCall.id ? previousCall : call,
+        ));
+        showToast(scoreError.message, "error");
+      } finally {
+        setSavingRecitationScore(false);
+      }
+    }
 
   const today = new Intl.DateTimeFormat("en-PH", {
     weekday: "long",
@@ -356,9 +383,11 @@ export default function FacultyClass() {
                   history={recitationHistory}
                   mode={recitationMode}
                   onModeChange={setRecitationMode}
-                  onShuffle={shuffleLocally}
-                  onScoreChange={scoreLocalRecitation}
-                  onSkip={shuffleLocally}
+                  onShuffle={shuffleRecitation}
+                  onScoreChange={updateRecitationScore}
+                  onSkip={() => shuffleRecitation(true)}
+                  busy={recitationBusy}
+                  savingScore={savingRecitationScore}
                 />
               )}
             </section>

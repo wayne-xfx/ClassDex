@@ -1448,7 +1448,7 @@ textarea {
 }
 
 .layout-toggle button {
-  min-height: 36px;
+  min-height: 44px;
   border: 0;
   border-radius: 8px;
   padding: 0 10px;
@@ -1898,7 +1898,7 @@ textarea {
 .class-toast-action,
 .class-toast-close {
   display: inline-flex;
-  min-height: 34px;
+  min-height: 44px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
@@ -1918,7 +1918,7 @@ textarea {
 }
 
 .class-toast-close {
-  width: 34px;
+  width: 44px;
   color: var(--muted);
 }
 
@@ -2172,7 +2172,7 @@ textarea {
 .status-button {
   display: inline-flex;
   min-width: 44px;
-  min-height: 42px;
+  min-height: 44px;
   flex: 1 1 0;
   align-items: center;
   justify-content: center;
@@ -2615,8 +2615,8 @@ textarea {
 
 .score-chips button {
   display: grid;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   place-items: center;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -2881,8 +2881,4 @@ textarea {
     gap: 7px;
   }
 
-  .score-chips button {
-    width: 40px;
-    height: 40px;
-  }
 }
