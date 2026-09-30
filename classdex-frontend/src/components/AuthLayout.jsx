@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import ThemeToggle from "./ThemeToggle";
+import { Card } from "./DesignSystem";
 
 export function Logo({ to = "/" }) {
   return (
@@ -43,11 +44,11 @@ export function AuthLayout({ title, subtitle, children, footer }) {
           <div className="mb-6 lg:hidden">
             <Logo />
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          <Card className="auth-card rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
             <h2 className="text-2xl font-semibold text-navy">{title}</h2>
             <p className="mt-2 text-sm text-slate-600">{subtitle}</p>
             <div className="mt-6">{children}</div>
-          </div>
+          </Card>
           {footer ? (
             <p className="mt-5 text-center text-sm text-slate-600">{footer}</p>
           ) : null}
