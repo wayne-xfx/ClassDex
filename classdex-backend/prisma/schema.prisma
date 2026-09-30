@@ -23,6 +23,11 @@ enum RecitationMethod {
   WEIGHTED
 }
 
+enum ProjectType {
+  MIDTERM
+  FINALS
+}
+
 model User {
   id             String          @id @default(cuid())
   name           String
@@ -63,6 +68,8 @@ model StudentProfile {
   enrollments ClassEnrollment[]
   attendance  AttendanceRecord[]
   recitations RecitationLog[]
+  activityScores ActivityScore[]
+  projectScores  ProjectScore[]
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
 }
@@ -78,6 +85,8 @@ model Class {
   faculty            User              @relation("FacultyClasses", fields: [facultyId], references: [id], onDelete: Cascade)
   enrollments        ClassEnrollment[]
   sessions           ClassSession[]
+  activities         Activity[]
+  projects           Project[]
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 }
@@ -102,6 +111,8 @@ model ClassSession {
   class       Class              @relation(fields: [classId], references: [id], onDelete: Cascade)
   attendance  AttendanceRecord[]
   recitations RecitationLog[]
+  activities  Activity[]
+  projectScores ProjectScore[]
 
   @@unique([classId, date])
 }
@@ -130,5 +141,64 @@ model RecitationLog {
   studentProfile StudentProfile   @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@index([sessionId, calledAt])
+  @@index([studentId])
+}
+
+model Activity {
+  id        String          @id @default(cuid())
+  classId   String
+  sessionId String
+  title     String
+  maxScore  Int?
+  class     Class           @relation(fields: [classId], references: [id], onDelete: Cascade)
+  session   ClassSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  scores    ActivityScore[]
+  createdAt DateTime        @default(now())
+
+  @@index([sessionId])
+}
+
+model ActivityScore {
+  id          String         @id @default(cuid())
+  activityId  String
+  studentId   String
+  score       Int?
+  isAbsent    Boolean        @default(false)
+  activity       Activity       @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  studentProfile StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@unique([activityId, studentId])
+  @@index([studentId])
+}
+
+model Project {
+  id        String         @id @default(cuid())
+  classId   String
+  type      ProjectType
+  maxScore  Int?
+  class     Class          @relation(fields: [classId], references: [id], onDelete: Cascade)
+  scores    ProjectScore[]
+  createdAt DateTime       @default(now())
+
+  @@unique([classId, type])
+}
+
+model ProjectScore {
+  id          String          @id @default(cuid())
+  projectId   String
+  studentId   String
+  sessionId   String?
+  score       Int?
+  isAbsent    Boolean         @default(false)
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  studentProfile StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  session        ClassSession?  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@unique([projectId, studentId])
+  @@index([sessionId, studentId])
   @@index([studentId])
 }
