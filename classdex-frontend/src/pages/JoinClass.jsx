@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import Icon from "../components/Icon";
 import { api } from "../api";
+import { PageHeader } from "../components/DesignSystem";
 
 export default function JoinClass() {
   const { classCode: inviteCode = "" } = useParams();
@@ -28,11 +29,12 @@ export default function JoinClass() {
   return (
     <AppShell active="home">
       <div className="content-narrow">
-        <header className="page-heading">
-          <span className="eyebrow"><Icon name="users" /> Class invitation</span>
-          <h1>Join a class</h1>
-          <p>Enter the invite code from your faculty member to add this class to your dashboard.</p>
-        </header>
+        <PageHeader
+          eyebrow="Class invitation"
+          icon="users"
+          title="Join a class"
+          description="Enter the invite code from your faculty member to add this class to your dashboard."
+        />
         <form className="panel form-panel join-invite-panel" onSubmit={handleSubmit}>
           <label className="field">
             <span>Class invite code <b>*</b></span>

@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import Icon from "../components/Icon";
 import { api } from "../api";
+import { PageHeader } from "../components/DesignSystem";
 
 export default function CreateClass() {
   const navigate = useNavigate();
@@ -70,11 +71,12 @@ export default function CreateClass() {
     <AppShell active="home">
       <div className="content-narrow">
         <Link to="/faculty" className="back-link"><Icon name="chevron" /> Dashboard</Link>
-        <header className="page-heading">
-          <span className="eyebrow"><Icon name="plus" /> New classroom</span>
-          <h1>Create a class</h1>
-          <p>Set up a class space and share its invite code with students.</p>
-        </header>
+        <PageHeader
+          eyebrow="New classroom"
+          icon="plus"
+          title="Create a class"
+          description="Set up a class space and share its invite code with students."
+        />
         <form className="panel form-panel" onSubmit={handleSubmit}>
           <label className="field">
             <span>Section name <b>*</b></span>
