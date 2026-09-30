@@ -17,10 +17,11 @@ card and join multiple classes.
 4. From `classdex-frontend/`, run `npm run dev` and open
    `http://localhost:5173`.
 
-Run backend unit tests from `classdex-backend/` with `npm test`. The additive
-class-deck migration adds one Manila-calendar-day session per class, attendance
-records, and recitation logs. Weighted recitation uses the number of prior calls
-in that class as its participation history.
+Run backend unit tests from `classdex-backend/` with `npm test`. Additive
+migrations provide one Manila-calendar-day session per class, attendance and
+recitation records, session activities and scores, and fixed Midterm/Final
+projects with scores. Attendance updates synchronize absence flags with
+session-linked scores; weighted recitation uses prior calls in that class.
 
 The backend `.env` file is ignored by Git. Never put database credentials in
 frontend configuration. The setup script uses `sslnegotiation=direct`, which
