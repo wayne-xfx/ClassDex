@@ -17,59 +17,67 @@ const DETAIL_STATUS_LABELS = {
 export function ModuleTabs({ active, onChange }) {
   const tabRefs = useRef([]);
   const tabs = [
-    { id: "deck", label: "Class deck", icon: "book" },
     { id: "attendance", label: "Attendance", icon: "check" },
     { id: "recitation", label: "Recitation", icon: "user" },
+    { id: "activities", label: "Activities", icon: "book" },
+    { id: "projects", label: "Projects", icon: "book" },
+    { id: "quiz", label: "Quiz", icon: "book", disabled: true },
   ];
 
   function handleTabKeyDown(event, index) {
-    const nextIndex = event.key === "ArrowRight"
-      ? (index + 1) % tabs.length
+    const enabledTabs = tabs.filter((tab) => !tab.disabled);
+    const currentIndex = enabledTabs.findIndex((tab) => tab.id === tabs[index].id);
+    const nextEnabledIndex = event.key === "ArrowRight"
+      ? (currentIndex + 1) % enabledTabs.length
       : event.key === "ArrowLeft"
-        ? (index - 1 + tabs.length) % tabs.length
+        ? (currentIndex - 1 + enabledTabs.length) % enabledTabs.length
         : event.key === "Home"
           ? 0
           : event.key === "End"
-            ? tabs.length - 1
+            ? enabledTabs.length - 1
             : -1;
-    if (nextIndex < 0) return;
+    if (nextEnabledIndex < 0) return;
     event.preventDefault();
-    onChange(tabs[nextIndex].id);
-    tabRefs.current[nextIndex]?.focus();
+    const nextTab = enabledTabs[nextEnabledIndex];
+    onChange(nextTab.id);
+    tabRefs.current[tabs.indexOf(nextTab)]?.focus();
   }
 
   return (
-    <div className="module-tabs" role="tablist" aria-label="Class modules">
-      {tabs.map((tab, index) => (
+    <div className="module-navigation">
+      <button
+        type="button"
+        className={`module-deck-link${active === "deck" ? " is-active" : ""}`}
+        id="module-deck-link"
+        aria-current={active === "deck" ? "page" : undefined}
+        aria-controls="module-panel-deck"
+        onClick={() => onChange("deck")}
+      >
+        <Icon name="book" size={17} /> Class Deck
+      </button>
+      <div className="module-tabs" role="tablist" aria-label="Class modules">
+        {tabs.map((tab, index) => (
         <button
-          className={`module-tab${active === tab.id ? " is-active" : ""}`}
+          className={`module-tab${active === tab.id ? " is-active" : ""}${tab.disabled ? " module-tab-disabled" : ""}`}
           id={`module-tab-${tab.id}`}
           key={tab.id}
           type="button"
           role="tab"
           aria-selected={active === tab.id}
-          aria-controls={`module-panel-${tab.id}`}
-          tabIndex={active === tab.id ? 0 : -1}
+          aria-controls={tab.disabled ? undefined : `module-panel-${tab.id}`}
+          aria-disabled={tab.disabled || undefined}
+          title={tab.disabled ? "Quiz is coming soon" : undefined}
+          tabIndex={tab.disabled ? -1 : active === tab.id ? 0 : -1}
           ref={(element) => { tabRefs.current[index] = element; }}
-          onKeyDown={(event) => handleTabKeyDown(event, index)}
-          onClick={() => onChange(tab.id)}
+          onKeyDown={(event) => !tab.disabled && handleTabKeyDown(event, index)}
+          onClick={() => !tab.disabled && onChange(tab.id)}
         >
           <Icon name={tab.icon} size={17} />
           {tab.label}
+          {tab.disabled ? <span className="coming-soon-badge">Coming soon</span> : null}
         </button>
-      ))}
-      {["Activities", "Projects"].map((label) => (
-        <button
-          className="module-tab module-tab-disabled"
-          key={label}
-          type="button"
-          disabled
-          aria-label={`${label}, coming soon`}
-        >
-          {label}
-          <span>Coming soon</span>
-        </button>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -103,7 +111,7 @@ export function StudentCard({ student, status = "UNMARKED", children, layout = "
                 <h3>{formatStudentName(student.name)}</h3>
                 <span className="student-card-id">ID {student.studentId}</span>
               </div>
-              <span className={`student-status status-${status.toLowerCase()}`}>
+              <span className={`student-status status-${status.toLowerCase()}`} title={status === "ABSENT" ? "Marked absent in attendance" : undefined}>
                 <span aria-hidden="true" className="status-mark">
                   {status === "PRESENT" ? "✓" : status === "LATE" ? "◷" : status === "ABSENT" ? "!" : "·"}
                 </span>
@@ -126,7 +134,7 @@ export function StudentCard({ student, status = "UNMARKED", children, layout = "
                 <h3>{formatStudentName(student.name)}</h3>
                 <span className="student-card-id">ID {student.studentId}</span>
               </div>
-              <span className={`student-status status-${status.toLowerCase()}`}>
+              <span className={`student-status status-${status.toLowerCase()}`} title={status === "ABSENT" ? "Marked absent in attendance" : undefined}>
                 <span aria-hidden="true" className="status-mark">
                   {status === "PRESENT" ? "✓" : status === "LATE" ? "◷" : status === "ABSENT" ? "!" : "·"}
                 </span>
