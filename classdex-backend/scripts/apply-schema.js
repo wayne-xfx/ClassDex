@@ -79,10 +79,14 @@ async function applySchema() {
         "ClassSession",
         "AttendanceRecord",
         "RecitationLog",
+        "Activity",
+        "ActivityScore",
+        "Project",
+        "ProjectScore",
       ]],
     );
     const tables = rows.map(({ table_name }) => table_name);
-    if (tables.length !== 8) {
+    if (tables.length !== 12) {
       throw new Error(`Schema setup is incomplete. Found tables: ${tables.join(", ")}`);
     }
     const { rowCount: gracePeriodColumn } = await client.query(

@@ -7,6 +7,21 @@ const { randomBytes } = require("node:crypto");
 const { prisma } = require("./db");
 const { applyGracePeriod } = require("./attendance");
 const { eligibleCandidates, selectRecitationCandidate } = require("./recitation");
+const {
+  isValidScore,
+  syncAttendanceScoreAbsence,
+  createAbsentActivityScores,
+  createAbsentProjectScores,
+} = require("./gradebook");
+
+const SCORE_STUDENT_SELECT = {
+  id: true,
+  name: true,
+  photo: true,
+  studentId: true,
+  program: true,
+  section: true,
+};
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -751,6 +766,578 @@ app.patch(
   },
 );
 
+app.get(
+  "/api/sessions/:id/activities",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      const sessionRecord = await findOwnedSession(req.params.id, req.session.userId);
+      if (!sessionRecord) {
+        return res.status(404).json({ message: "Class session not found." });
+      }
+      const activities = await prisma.activity.findMany({
+        where: { sessionId: sessionRecord.id },
+        include: {
+          scores: {
+            include: { studentProfile: { select: SCORE_STUDENT_SELECT } },
+          },
+        },
+        orderBy: { createdAt: "asc" },
+      });
+      return res.json({ activities });
+    } catch (error) {
+      console.error("Session activities lookup failed:", error);
+      return res.status(500).json({ message: "Unable to load activities." });
+    }
+  },
+);
+
+app.post(
+  "/api/sessions/:id/activities",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    const title = String(req.body?.title || "").trim();
+    const maxScore = req.body?.maxScore === undefined ? null : req.body.maxScore;
+    if (!title) {
+      return res.status(400).json({ message: "Activity title is required." });
+    }
+    if (maxScore !== null && (!Number.isInteger(maxScore) || maxScore < 1)) {
+      return res.status(400).json({ message: "Maximum score must be null or a positive whole number." });
+    }
+
+    try {
+      const sessionRecord = await findOwnedSession(req.params.id, req.session.userId);
+      if (!sessionRecord) {
+        return res.status(404).json({ message: "Class session not found." });
+      }
+      const activity = await prisma.$transaction(async (transaction) => {
+        const createdActivity = await transaction.activity.create({
+          data: {
+            classId: sessionRecord.classId,
+            sessionId: sessionRecord.id,
+            title,
+            maxScore,
+          },
+        });
+        await createAbsentActivityScores(
+          transaction,
+          createdActivity.id,
+          sessionRecord.id,
+        );
+        return transaction.activity.findUnique({
+          where: { id: createdActivity.id },
+          include: {
+            scores: {
+              include: { studentProfile: { select: SCORE_STUDENT_SELECT } },
+            },
+          },
+        });
+      });
+      return res.status(201).json({ activity });
+    } catch (error) {
+      console.error("Activity creation failed:", error);
+      return res.status(500).json({ message: "Unable to create this activity." });
+    }
+  },
+);
+
+app.patch(
+  "/api/activities/:id",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    const body = req.body || {};
+    const fields = Object.keys(body);
+    if (!fields.length || fields.some((field) => !["title", "maxScore"].includes(field))) {
+      return res.status(400).json({ message: "Provide a title and/or maxScore to update." });
+    }
+    const data = {};
+    if (Object.prototype.hasOwnProperty.call(body, "title")) {
+      if (typeof body.title !== "string" || !body.title.trim() || body.title.trim().length > 120) {
+        return res.status(400).json({ message: "Activity title must be 1 to 120 characters." });
+      }
+      data.title = body.title.trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "maxScore")) {
+      if (body.maxScore !== null && (!Number.isInteger(body.maxScore) || body.maxScore < 1)) {
+        return res.status(400).json({ message: "Maximum score must be null or a positive whole number." });
+      }
+      data.maxScore = body.maxScore;
+    }
+
+    try {
+      const activity = await prisma.activity.findFirst({
+        where: {
+          id: req.params.id,
+          class: { is: { facultyId: req.session.userId } },
+        },
+        select: { id: true },
+      });
+      if (!activity) {
+        return res.status(404).json({ message: "Activity not found." });
+      }
+      if (data.maxScore !== undefined && data.maxScore !== null) {
+        const outOfRange = await prisma.activityScore.findFirst({
+          where: { activityId: activity.id, score: { gt: data.maxScore } },
+          select: { id: true },
+        });
+        if (outOfRange) {
+          return res.status(400).json({ message: "Maximum score cannot be lower than a score already recorded." });
+        }
+      }
+      const updatedActivity = await prisma.activity.update({
+        where: { id: activity.id },
+        data,
+        include: {
+          scores: { include: { studentProfile: { select: SCORE_STUDENT_SELECT } } },
+        },
+      });
+      return res.json({ activity: updatedActivity });
+    } catch (error) {
+      console.error("Activity update failed:", error);
+      return res.status(500).json({ message: "Unable to update this activity." });
+    }
+  },
+);
+
+app.delete(
+  "/api/activities/:id",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      const activity = await prisma.activity.findFirst({
+        where: {
+          id: req.params.id,
+          class: { is: { facultyId: req.session.userId } },
+        },
+        select: { id: true },
+      });
+      if (!activity) {
+        return res.status(404).json({ message: "Activity not found." });
+      }
+      await prisma.activity.delete({ where: { id: activity.id } });
+      return res.json({ message: "Activity deleted." });
+    } catch (error) {
+      console.error("Activity deletion failed:", error);
+      return res.status(500).json({ message: "Unable to delete this activity." });
+    }
+  },
+);
+
+app.get(
+  "/api/activities/:id/scores",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      const activity = await prisma.activity.findFirst({
+        where: {
+          id: req.params.id,
+          class: { is: { facultyId: req.session.userId } },
+        },
+        select: { id: true, classId: true },
+      });
+      if (!activity) {
+        return res.status(404).json({ message: "Activity not found." });
+      }
+      const enrollments = await prisma.classEnrollment.findMany({
+        where: { classId: activity.classId },
+        select: {
+          studentProfile: {
+            select: {
+              ...SCORE_STUDENT_SELECT,
+              activityScores: {
+                where: { activityId: activity.id },
+                select: { id: true, activityId: true, studentId: true, score: true, isAbsent: true },
+              },
+            },
+          },
+        },
+      });
+      const scores = enrollments.map(({ studentProfile }) => {
+        const { activityScores, ...profile } = studentProfile;
+        return activityScores[0] || {
+          id: null,
+          activityId: activity.id,
+          studentId: profile.id,
+          score: null,
+          isAbsent: false,
+          studentProfile: profile,
+        };
+      });
+      return res.json({ scores });
+    } catch (error) {
+      console.error("Activity scores lookup failed:", error);
+      return res.status(500).json({ message: "Unable to load activity scores." });
+    }
+  },
+);
+
+app.put(
+  "/api/activities/:id/scores/:studentId",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    const score = req.body?.score;
+    if (!Object.prototype.hasOwnProperty.call(req.body || {}, "score")) {
+      return res.status(400).json({ message: "A whole-number score, or null, is required." });
+    }
+    try {
+      const activity = await prisma.activity.findFirst({
+        where: {
+          id: req.params.id,
+          class: { is: { facultyId: req.session.userId } },
+        },
+        select: { id: true, maxScore: true, sessionId: true, classId: true },
+      });
+      if (!activity) {
+        return res.status(404).json({ message: "Activity not found." });
+      }
+      if (!isValidScore(score, activity.maxScore)) {
+        return res.status(400).json({
+          message: activity.maxScore == null
+            ? "Score must be a whole number from 0 or greater, or null."
+            : `Score must be a whole number from 0 to ${activity.maxScore}, or null.`,
+        });
+      }
+      const enrollment = await prisma.classEnrollment.findFirst({
+        where: {
+          classId: activity.classId,
+          studentProfileId: req.params.studentId,
+        },
+        select: { studentProfileId: true },
+      });
+      if (!enrollment) {
+        return res.status(404).json({ message: "Student not found in this class." });
+      }
+      const attendance = await prisma.attendanceRecord.findUnique({
+        where: {
+          sessionId_studentId: {
+            sessionId: activity.sessionId,
+            studentId: enrollment.studentProfileId,
+          },
+        },
+        select: { status: true },
+      });
+      if (attendance?.status === "ABSENT") {
+        return res.status(409).json({ message: "This student is marked absent. Update attendance to change scoring access." });
+      }
+      const activityScore = await prisma.activityScore.upsert({
+        where: {
+          activityId_studentId: {
+            activityId: activity.id,
+            studentId: enrollment.studentProfileId,
+          },
+        },
+        create: {
+          activityId: activity.id,
+          studentId: enrollment.studentProfileId,
+          score,
+          isAbsent: false,
+        },
+        update: { score, isAbsent: false },
+        include: { studentProfile: { select: SCORE_STUDENT_SELECT } },
+      });
+      return res.json({ score: activityScore });
+    } catch (error) {
+      console.error("Activity score update failed:", error);
+      return res.status(500).json({ message: "Unable to update the activity score." });
+    }
+  },
+);
+
+app.get(
+  "/api/classes/:id/projects",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      const classRecord = await prisma.class.findFirst({
+        where: { id: req.params.id, facultyId: req.session.userId },
+        select: { id: true },
+      });
+      if (!classRecord) {
+        return res.status(404).json({ message: "Class not found." });
+      }
+      const projects = await prisma.$transaction(async (transaction) => {
+        const existingTypes = new Set(
+          (await transaction.project.findMany({
+            where: { classId: classRecord.id },
+            select: { type: true },
+          })).map(({ type }) => type),
+        );
+        const todaySession = await transaction.classSession.findUnique({
+          where: {
+            classId_date: {
+              classId: classRecord.id,
+              date: manilaDate(),
+            },
+          },
+          select: { id: true },
+        });
+        for (const type of ["MIDTERM", "FINALS"]) {
+          await transaction.project.upsert({
+            where: { classId_type: { classId: classRecord.id, type } },
+            create: { classId: classRecord.id, type },
+            update: {},
+          });
+        }
+        for (const type of ["MIDTERM", "FINALS"]) {
+          if (!existingTypes.has(type) && todaySession) {
+            const project = await transaction.project.findUnique({
+              where: { classId_type: { classId: classRecord.id, type } },
+              select: { id: true },
+            });
+            await createAbsentProjectScores(
+              transaction,
+              project.id,
+              todaySession.id,
+            );
+          }
+        }
+        return transaction.project.findMany({
+          where: { classId: classRecord.id },
+          include: {
+            scores: {
+              include: {
+                studentProfile: { select: SCORE_STUDENT_SELECT },
+                session: { select: { id: true, date: true } },
+              },
+            },
+          },
+          orderBy: { type: "asc" },
+        });
+      });
+      return res.json({ projects });
+    } catch (error) {
+      console.error("Class projects lookup failed:", error);
+      return res.status(500).json({ message: "Unable to load this class's projects." });
+    }
+  },
+);
+
+app.patch(
+  "/api/projects/:id",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    const maxScore = req.body?.maxScore;
+    if (
+      Object.keys(req.body || {}).some((key) => key !== "maxScore") ||
+      !Number.isInteger(maxScore) ||
+      maxScore < 1
+    ) {
+      return res.status(400).json({
+        message: "Provide only a positive whole-number maxScore.",
+      });
+    }
+    try {
+      const project = await prisma.project.findFirst({
+        where: {
+          id: req.params.id,
+          class: { is: { facultyId: req.session.userId } },
+        },
+        select: { id: true, classId: true },
+      });
+      if (!project) {
+        return res.status(404).json({ message: "Project not found." });
+      }
+      const outOfRange = await prisma.projectScore.findFirst({
+        where: { projectId: project.id, score: { gt: maxScore } },
+        select: { id: true },
+      });
+      if (outOfRange) {
+        return res.status(400).json({ message: "Maximum score cannot be lower than a score already recorded." });
+      }
+      const updatedProject = await prisma.project.update({
+        where: { id: project.id },
+        data: { maxScore },
+      });
+      return res.json({ project: updatedProject });
+    } catch (error) {
+      console.error("Project update failed:", error);
+      return res.status(500).json({ message: "Unable to update this project." });
+    }
+  },
+);
+
+app.get(
+  "/api/projects/:id/scores",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      const project = await prisma.project.findFirst({
+        where: {
+          id: req.params.id,
+          class: { is: { facultyId: req.session.userId } },
+        },
+        select: { id: true, classId: true },
+      });
+      if (!project) {
+        return res.status(404).json({ message: "Project not found." });
+      }
+      const enrollments = await prisma.classEnrollment.findMany({
+        where: { classId: project.classId },
+        select: {
+          studentProfile: {
+            select: {
+              ...SCORE_STUDENT_SELECT,
+              projectScores: {
+                where: { projectId: project.id },
+                select: {
+                  id: true,
+                  projectId: true,
+                  studentId: true,
+                  sessionId: true,
+                  score: true,
+                  isAbsent: true,
+                  session: { select: { id: true, date: true } },
+                },
+              },
+            },
+          },
+        },
+      });
+      const scores = enrollments.map(({ studentProfile }) => {
+        const { projectScores, ...profile } = studentProfile;
+        return projectScores[0] || {
+          id: null,
+          projectId: project.id,
+          studentId: profile.id,
+          sessionId: null,
+          score: null,
+          isAbsent: false,
+          session: null,
+          studentProfile: profile,
+        };
+      });
+      return res.json({ scores });
+    } catch (error) {
+      console.error("Project scores lookup failed:", error);
+      return res.status(500).json({ message: "Unable to load project scores." });
+    }
+  },
+);
+
+app.put(
+  "/api/projects/:id/scores/:studentId",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    const score = req.body?.score;
+    const sessionId = req.body?.sessionId === undefined ? null : req.body.sessionId;
+    if (!Object.prototype.hasOwnProperty.call(req.body || {}, "score")) {
+      return res.status(400).json({ message: "A whole-number score, or null, is required." });
+    }
+    if (sessionId !== null && (typeof sessionId !== "string" || !sessionId.trim())) {
+      return res.status(400).json({ message: "Session ID must be a valid ID or null." });
+    }
+    try {
+      const project = await prisma.project.findFirst({
+        where: {
+          id: req.params.id,
+          class: { is: { facultyId: req.session.userId } },
+        },
+        select: { id: true, classId: true, maxScore: true },
+      });
+      if (!project) {
+        return res.status(404).json({ message: "Project not found." });
+      }
+      if (!isValidScore(score, project.maxScore)) {
+        return res.status(400).json({
+          message: project.maxScore == null
+            ? "Score must be a whole number from 0 or greater, or null."
+            : `Score must be a whole number from 0 to ${project.maxScore}, or null.`,
+        });
+      }
+      const enrollment = await prisma.classEnrollment.findFirst({
+        where: {
+          classId: project.classId,
+          studentProfileId: req.params.studentId,
+        },
+        select: { studentProfileId: true },
+      });
+      if (!enrollment) {
+        return res.status(404).json({ message: "Student not found in this class." });
+      }
+      if (sessionId) {
+        const sessionRecord = await prisma.classSession.findFirst({
+          where: { id: sessionId, classId: project.classId },
+          select: { id: true },
+        });
+        if (!sessionRecord) {
+          return res.status(404).json({ message: "Class session not found." });
+        }
+      }
+      const attendanceSessionId = sessionId || (await prisma.classSession.findUnique({
+        where: {
+          classId_date: {
+            classId: project.classId,
+            date: manilaDate(),
+          },
+        },
+        select: { id: true },
+      }))?.id;
+      if (attendanceSessionId) {
+        const attendance = await prisma.attendanceRecord.findUnique({
+          where: {
+            sessionId_studentId: {
+              sessionId: attendanceSessionId,
+              studentId: enrollment.studentProfileId,
+            },
+          },
+          select: { status: true },
+        });
+        if (attendance?.status === "ABSENT") {
+          return res.status(409).json({ message: "This student is marked absent. Update attendance to change scoring access." });
+        }
+      }
+      const projectScore = await prisma.$transaction(async (transaction) => {
+        const existingScore = await transaction.projectScore.findUnique({
+          where: {
+            projectId_studentId: {
+              projectId: project.id,
+              studentId: enrollment.studentProfileId,
+            },
+          },
+          select: { id: true },
+        });
+        const data = { score, isAbsent: false, sessionId };
+        if (existingScore) {
+          return transaction.projectScore.update({
+            where: { id: existingScore.id },
+            data,
+            include: {
+              studentProfile: { select: SCORE_STUDENT_SELECT },
+              session: { select: { id: true, date: true } },
+            },
+          });
+        }
+        return transaction.projectScore.create({
+          data: {
+            ...data,
+            projectId: project.id,
+            studentId: enrollment.studentProfileId,
+            sessionId,
+          },
+          include: {
+            studentProfile: { select: SCORE_STUDENT_SELECT },
+            session: { select: { id: true, date: true } },
+          },
+        });
+      });
+      return res.json({ score: projectScore });
+    } catch (error) {
+      console.error("Project score update failed:", error);
+      return res.status(500).json({ message: "Unable to update the project score." });
+    }
+  },
+);
+
 app.put(
   "/api/sessions/:id/attendance/:studentId",
   requireAuth,
@@ -786,45 +1373,55 @@ app.put(
         return res.status(404).json({ message: "Student not found in this class." });
       }
 
-      if (requestedStatus === null || requestedStatus === "UNMARKED") {
-        await prisma.attendanceRecord.deleteMany({
+      const result = await prisma.$transaction(async (transaction) => {
+        if (requestedStatus === null || requestedStatus === "UNMARKED") {
+          await transaction.attendanceRecord.deleteMany({
+            where: {
+              sessionId: sessionRecord.id,
+              studentId: enrollment.studentProfileId,
+            },
+          });
+          await syncAttendanceScoreAbsence(
+            transaction,
+            sessionRecord.id,
+            enrollment.studentProfileId,
+            false,
+          );
+          return {
+            attendance: null,
+            appliedStatus: "UNMARKED",
+            lateOverride: false,
+          };
+        }
+
+        const { appliedStatus, lateOverride } = applyGracePeriod(
+          requestedStatus,
+          sessionRecord.startedAt,
+          sessionRecord.class.gracePeriodMinutes,
+        );
+        const attendance = await transaction.attendanceRecord.upsert({
           where: {
+            sessionId_studentId: {
+              sessionId: sessionRecord.id,
+              studentId: enrollment.studentProfileId,
+            },
+          },
+          create: {
             sessionId: sessionRecord.id,
             studentId: enrollment.studentProfileId,
+            status: appliedStatus,
           },
+          update: { status: appliedStatus, markedAt: new Date() },
         });
-        return res.json({
-          attendance: null,
-          appliedStatus: "UNMARKED",
-          lateOverride: false,
-        });
-      }
-
-      const { appliedStatus, lateOverride } = applyGracePeriod(
-        requestedStatus,
-        sessionRecord.startedAt,
-        sessionRecord.class.gracePeriodMinutes,
-      );
-
-      const attendance = await prisma.attendanceRecord.upsert({
-        where: {
-          sessionId_studentId: {
-            sessionId: sessionRecord.id,
-            studentId: enrollment.studentProfileId,
-          },
-        },
-        create: {
-          sessionId: sessionRecord.id,
-          studentId: enrollment.studentProfileId,
-          status: appliedStatus,
-        },
-        update: { status: appliedStatus, markedAt: new Date() },
+        await syncAttendanceScoreAbsence(
+          transaction,
+          sessionRecord.id,
+          enrollment.studentProfileId,
+          appliedStatus === "ABSENT",
+        );
+        return { attendance, appliedStatus, lateOverride };
       });
-      return res.json({
-        attendance,
-        appliedStatus,
-        lateOverride,
-      });
+      return res.json(result);
     } catch (error) {
       console.error("Session attendance update failed:", error);
       return res.status(500).json({ message: "Unable to update attendance." });
