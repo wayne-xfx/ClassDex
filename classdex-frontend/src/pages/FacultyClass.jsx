@@ -9,6 +9,7 @@ import {
   StudentCard,
   Toast,
 } from "../components/classroom/ClassroomComponents";
+import AttendanceModule from "../components/classroom/AttendanceModule";
 import { api } from "../api";
 
 const MODULE_LABELS = {
@@ -20,44 +21,55 @@ const MODULE_LABELS = {
 export default function FacultyClass() {
   const { id } = useParams();
   const [classRecord, setClassRecord] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loadedClassId, setLoadedClassId] = useState(null);
+  const loading = loadedClassId !== id;
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [activeModule, setActiveModule] = useState("deck");
   const [search, setSearch] = useState("");
   const [layout, setLayout] = useState("grid");
+  const [attendanceOverrides, setAttendanceOverrides] = useState({});
+  const [gracePeriodMinutes, setGracePeriodMinutes] = useState(15);
+  const [toastAction, setToastAction] = useState(null);
+  const [toastActionLabel, setToastActionLabel] = useState("");
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError("");
     api
       .todaySession(id)
       .then(() => api.classDeck(id))
       .then((deck) => {
-        if (!cancelled) setClassRecord(deck);
+        if (!cancelled) {
+          setClassRecord({ ...deck.class, session: deck.session, students: deck.students });
+          setGracePeriodMinutes(deck.class.gracePeriodMinutes);
+          setAttendanceOverrides({});
+        }
       })
       .catch((requestError) => {
         if (!cancelled) setError(requestError.message);
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setLoadedClassId(id);
       });
     return () => {
       cancelled = true;
     };
   }, [id]);
 
-  const dismissToast = useCallback(() => setNotice(""), []);
+  const dismissToast = useCallback(() => {
+    setNotice("");
+    setToastAction(null);
+    setToastActionLabel("");
+  }, []);
   const students = useMemo(
     () => (classRecord?.students || classRecord?.enrollments?.map(({ id: enrollmentId, studentProfile }) => ({
       ...studentProfile,
       enrollmentId,
     })) || []).map((student) => ({
       ...student,
-      status: student.attendanceStatus || "UNMARKED",
+      status: attendanceOverrides[student.id] ?? student.attendanceStatus ?? "UNMARKED",
     })),
-    [classRecord],
+    [attendanceOverrides, classRecord],
   );
   const attendanceCounts = useMemo(() => students.reduce((counts, student) => {
     counts[student.status] += 1;
@@ -71,11 +83,49 @@ export default function FacultyClass() {
     );
   }, [search, students]);
 
+  function markStudentLocally(student, requestedStatus) {
+    const startedAt = Date.parse(classRecord?.session?.startedAt || "");
+    const afterGrace = Number.isFinite(startedAt) && Date.now() > startedAt + gracePeriodMinutes * 60_000;
+    const appliedStatus = requestedStatus === "PRESENT" && afterGrace ? "LATE" : requestedStatus;
+    setAttendanceOverrides((current) => ({ ...current, [student.id]: appliedStatus }));
+    if (appliedStatus === "LATE" && requestedStatus === "PRESENT") {
+      setNotice(`${student.name} was marked Late because the grace period has passed.`);
+      setToastActionLabel("Undo");
+      setToastAction(() => () => {
+        setAttendanceOverrides((current) => ({ ...current, [student.id]: student.status }));
+        setNotice("");
+      });
+    }
+  }
+
+  function markAllLocally() {
+    const startedAt = Date.parse(classRecord?.session?.startedAt || "");
+    const afterGrace = Number.isFinite(startedAt) && Date.now() > startedAt + gracePeriodMinutes * 60_000;
+    const status = afterGrace ? "LATE" : "PRESENT";
+    setAttendanceOverrides((current) => ({
+      ...current,
+      ...Object.fromEntries(students.map((student) => [student.id, status])),
+    }));
+    setNotice(afterGrace
+      ? `All ${students.length} students were marked Late because the grace period has passed.`
+      : `All ${students.length} students marked Present.`);
+    setToastActionLabel("");
+    setToastAction(null);
+  }
+
+  function saveGracePeriodLocally(minutes) {
+    setGracePeriodMinutes(minutes);
+    setClassRecord((current) => ({ ...current, gracePeriodMinutes: minutes }));
+    setNotice(`Grace period set to ${minutes} minutes.`);
+  }
+
   async function copyInvite() {
     if (!classRecord) return;
     const link = `${window.location.origin}/join/${classRecord.classCode}`;
     try {
       await navigator.clipboard.writeText(link);
+      setToastActionLabel("");
+      setToastAction(null);
       setNotice("Invite link copied. Share it with your students.");
     } catch {
       setNotice(`Copy unavailable — share code ${classRecord.classCode} or link ${link}`);
@@ -123,7 +173,12 @@ export default function FacultyClass() {
 
             <div className="classroom-date"><Icon name="clock" size={16} /> {today}</div>
             <ModuleTabs active={activeModule} onChange={setActiveModule} />
-            <Toast message={notice} onDismiss={dismissToast} />
+            <Toast
+              message={notice}
+              onDismiss={dismissToast}
+              actionLabel={toastActionLabel}
+              onAction={toastAction}
+            />
 
             <section
               id={`module-panel-${activeModule}`}
@@ -178,6 +233,17 @@ export default function FacultyClass() {
                           <StudentCard key={student.id} student={student} status={student.status} layout={layout} />
                         ))}
                       </div>
+                    ) : activeModule === "attendance" ? (
+                      <AttendanceModule
+                        students={students}
+                        counts={attendanceCounts}
+                        layout={layout}
+                        gracePeriodMinutes={gracePeriodMinutes}
+                        onStatusChange={markStudentLocally}
+                        onMarkAll={markAllLocally}
+                        onSaveGracePeriod={saveGracePeriodLocally}
+                        savingGracePeriod={false}
+                      />
                     ) : (
                       <div className="deck-no-results">
                         <Icon name="search" />
