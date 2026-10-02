@@ -13,12 +13,16 @@ import {
 import { compareStudentsByLastName } from "../components/classroom/studentNames";
 import AttendanceModule from "../components/classroom/AttendanceModule";
 import RecitationModule from "../components/classroom/RecitationModule";
+import { ActivitiesModule, ProjectsModule } from "../components/classroom/ScoringModules";
 import { api } from "../api";
 
 const MODULE_LABELS = {
   deck: "Class deck",
   attendance: "Attendance",
   recitation: "Recitation",
+  activities: "Activities",
+  projects: "Projects",
+  quiz: "Quiz",
 };
 
 function toRecitationCall(log) {
@@ -311,7 +315,7 @@ export default function FacultyClass() {
             <section
               id={`module-panel-${activeModule}`}
               role="tabpanel"
-              aria-labelledby={`module-tab-${activeModule}`}
+              aria-labelledby={activeModule === "deck" ? "module-deck-link" : `module-tab-${activeModule}`}
               className="classroom-module"
             >
               {activeModule === "deck" ? (
@@ -402,9 +406,10 @@ export default function FacultyClass() {
                   pendingStudentIds={pendingStudentIds}
                   savingGracePeriod={savingGracePeriod}
                 />
-              ) : (
+              ) : activeModule === "recitation" ? (
                 <RecitationModule
                   eligibleStudents={eligibleStudents}
+                  absentStudents={sortedStudents.filter((student) => student.status === "ABSENT")}
                   currentCall={recitationCall}
                   history={recitationHistory}
                   mode={recitationMode}
@@ -417,7 +422,11 @@ export default function FacultyClass() {
                   animationEnabled={recitationAnimationEnabled}
                   onAnimationChange={setRecitationAnimationEnabled}
                 />
-              )}
+              ) : activeModule === "activities" ? (
+                <ActivitiesModule key={classRecord.session.id} sessionId={classRecord.session.id} students={sortedStudents} />
+              ) : activeModule === "projects" ? (
+                <ProjectsModule key={id} classId={id} sessionId={classRecord.session.id} students={sortedStudents} />
+              ) : null}
             </section>
             {selectedStudent ? (
               <StudentDetailDialog
