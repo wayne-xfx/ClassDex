@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import Icon from "../Icon";
+import { StatusPill } from "../DesignSystem";
 import { formatStudentName } from "./studentNames";
 
 export default function RecitationModule({
   eligibleStudents,
+  absentStudents = [],
   currentCall,
   history,
   mode,
@@ -91,6 +93,22 @@ export default function RecitationModule({
           <p className="recitation-mini-empty">Mark students Present or Late in Attendance to add their cards.</p>
         )}
       </section>
+      {absentStudents.length ? (
+        <section className="recitation-absent-list" aria-label="Students excluded from the shuffle">
+          <strong>Not in the shuffle pool</strong>
+          <div>
+            {absentStudents.map((absentStudent) => (
+              <article className="recitation-absent-card" key={absentStudent.id}>
+                <div className="recitation-mini-photo">
+                  {absentStudent.photo ? <img src={absentStudent.photo} alt="" /> : <Icon name="user" size={17} />}
+                </div>
+                <span>{formatStudentName(absentStudent.name)}</span>
+                <StatusPill tone="absent" icon="x" title="Marked absent in attendance">Absent</StatusPill>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <div className="recitation-animation-toggle">
         <label className="recitation-animation-switch">
