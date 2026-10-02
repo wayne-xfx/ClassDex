@@ -5,6 +5,8 @@ const session = require("express-session");
 const bcrypt = require("bcryptjs");
 const { randomBytes } = require("node:crypto");
 const { prisma } = require("./db");
+const { applyGracePeriod } = require("./attendance");
+const { eligibleCandidates, selectRecitationCandidate } = require("./recitation");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -76,6 +78,24 @@ function isValidPhoto(photo) {
 
 function normalizeClassCode(value) {
   return String(value || "").trim().toUpperCase();
+}
+
+function manilaDate(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const dateParts = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return new Date(`${dateParts.year}-${dateParts.month}-${dateParts.day}T00:00:00.000Z`);
+}
+
+async function findOwnedSession(sessionId, facultyId) {
+  return prisma.classSession.findFirst({
+    where: { id: sessionId, class: { is: { facultyId } } },
+    include: { class: true },
+  });
 }
 
 function isDatabaseUnavailable(error) {
@@ -484,6 +504,476 @@ app.get(
     } catch (error) {
       console.error("Class lookup failed:", error);
       return res.status(500).json({ message: "Unable to load this class." });
+    }
+  },
+);
+
+app.get(
+  "/api/classes/:id/deck",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      const classRecord = await prisma.class.findFirst({
+        where: { id: req.params.id, facultyId: req.session.userId },
+        include: {
+          enrollments: {
+            include: {
+              studentProfile: {
+                select: {
+                  id: true,
+                  name: true,
+                  address: true,
+                  email: true,
+                  photo: true,
+                  studentId: true,
+                  program: true,
+                  section: true,
+                },
+              },
+            },
+            orderBy: { joinedAt: "asc" },
+          },
+        },
+      });
+      if (!classRecord) {
+        return res.status(404).json({ message: "Class not found." });
+      }
+
+      const session = await prisma.classSession.findUnique({
+        where: {
+          classId_date: {
+            classId: classRecord.id,
+            date: manilaDate(),
+          },
+        },
+        include: {
+          attendance: {
+            select: { studentId: true, status: true, markedAt: true },
+            orderBy: { markedAt: "asc" },
+          },
+          recitations: {
+            include: {
+              studentProfile: {
+                select: {
+                  id: true,
+                  name: true,
+                  photo: true,
+                  studentId: true,
+                  program: true,
+                  section: true,
+                },
+              },
+            },
+            orderBy: { calledAt: "desc" },
+          },
+        },
+      });
+      const { enrollments, ...classData } = classRecord;
+      const attendanceByStudent = new Map(
+        (session?.attendance || []).map((record) => [
+          record.studentId,
+          record.status,
+        ]),
+      );
+      return res.json({
+        class: classData,
+        students: enrollments.map(({ studentProfile }) => ({
+          ...studentProfile,
+          studentProfileId: studentProfile.id,
+          attendanceStatus: attendanceByStudent.get(studentProfile.id) || null,
+        })),
+        session: session
+          ? {
+              id: session.id,
+              classId: session.classId,
+              date: session.date,
+              startedAt: session.startedAt,
+              endedAt: session.endedAt,
+            }
+          : null,
+        recitationHistory: session?.recitations || [],
+      });
+    } catch (error) {
+      console.error("Class deck lookup failed:", error);
+      return res.status(500).json({ message: "Unable to load this class deck." });
+    }
+  },
+);
+
+app.get(
+  "/api/classes/:id/students/:studentId/records",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      const classRecord = await prisma.class.findFirst({
+        where: { id: req.params.id, facultyId: req.session.userId },
+        select: { id: true },
+      });
+      if (!classRecord) {
+        return res.status(404).json({ message: "Class not found." });
+      }
+
+      const enrollment = await prisma.classEnrollment.findFirst({
+        where: {
+          classId: classRecord.id,
+          studentProfileId: req.params.studentId,
+        },
+        select: {
+          studentProfile: {
+            select: {
+              id: true,
+              name: true,
+              photo: true,
+              studentId: true,
+              program: true,
+              section: true,
+            },
+          },
+        },
+      });
+      if (!enrollment) {
+        return res.status(404).json({ message: "Student not found in this class." });
+      }
+
+      const [attendanceRecords, recitationRecords] = await Promise.all([
+        prisma.attendanceRecord.findMany({
+          where: {
+            studentId: enrollment.studentProfile.id,
+            session: { is: { classId: classRecord.id } },
+          },
+          select: {
+            id: true,
+            status: true,
+            markedAt: true,
+            session: { select: { id: true, date: true } },
+          },
+          orderBy: { markedAt: "desc" },
+        }),
+        prisma.recitationLog.findMany({
+          where: {
+            studentId: enrollment.studentProfile.id,
+            session: { is: { classId: classRecord.id } },
+          },
+          select: {
+            id: true,
+            method: true,
+            calledAt: true,
+            score: true,
+            session: { select: { id: true, date: true } },
+          },
+          orderBy: { calledAt: "desc" },
+        }),
+      ]);
+
+      return res.json({
+        student: enrollment.studentProfile,
+        attendance: attendanceRecords,
+        recitations: recitationRecords,
+      });
+    } catch (error) {
+      console.error("Student class records lookup failed:", error);
+      return res.status(500).json({ message: "Unable to load this student's records." });
+    }
+  },
+);
+
+app.post(
+  "/api/classes/:id/sessions/today",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      const classRecord = await prisma.class.findFirst({
+        where: { id: req.params.id, facultyId: req.session.userId },
+        select: { id: true },
+      });
+      if (!classRecord) {
+        return res.status(404).json({ message: "Class not found." });
+      }
+
+      const today = manilaDate();
+      const session = await prisma.classSession.upsert({
+        where: {
+          classId_date: {
+            classId: classRecord.id,
+            date: today,
+          },
+        },
+        create: {
+          classId: classRecord.id,
+          date: today,
+        },
+        update: {},
+      });
+      return res.json({ session });
+    } catch (error) {
+      console.error("Today's class session lookup or creation failed:", error);
+      return res.status(500).json({ message: "Unable to open today's class session." });
+    }
+  },
+);
+
+app.patch(
+  "/api/classes/:id",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    const gracePeriodMinutes = req.body?.gracePeriodMinutes;
+    if (
+      !Number.isInteger(gracePeriodMinutes) ||
+      gracePeriodMinutes < 0 ||
+      gracePeriodMinutes > 1440
+    ) {
+      return res.status(400).json({
+        message: "Grace period must be a whole number from 0 to 1440 minutes.",
+      });
+    }
+
+    try {
+      const classRecord = await prisma.class.findFirst({
+        where: { id: req.params.id, facultyId: req.session.userId },
+        select: { id: true },
+      });
+      if (!classRecord) {
+        return res.status(404).json({ message: "Class not found." });
+      }
+      const updatedClass = await prisma.class.update({
+        where: { id: classRecord.id },
+        data: { gracePeriodMinutes },
+      });
+      return res.json({ class: updatedClass });
+    } catch (error) {
+      console.error("Class grace period update failed:", error);
+      return res.status(500).json({ message: "Unable to update this class." });
+    }
+  },
+);
+
+app.put(
+  "/api/sessions/:id/attendance/:studentId",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    const requestedStatus = req.body?.status;
+    if (
+      requestedStatus !== null &&
+      requestedStatus !== "UNMARKED" &&
+      !["PRESENT", "LATE", "ABSENT"].includes(requestedStatus)
+    ) {
+      return res.status(400).json({
+        message: "Attendance status must be PRESENT, LATE, ABSENT, or UNMARKED.",
+      });
+    }
+    if (!Object.prototype.hasOwnProperty.call(req.body || {}, "status")) {
+      return res.status(400).json({ message: "Attendance status is required." });
+    }
+
+    try {
+      const sessionRecord = await findOwnedSession(req.params.id, req.session.userId);
+      if (!sessionRecord) {
+        return res.status(404).json({ message: "Class session not found." });
+      }
+      const enrollment = await prisma.classEnrollment.findFirst({
+        where: {
+          classId: sessionRecord.classId,
+          studentProfileId: req.params.studentId,
+        },
+        select: { studentProfileId: true },
+      });
+      if (!enrollment) {
+        return res.status(404).json({ message: "Student not found in this class." });
+      }
+
+      if (requestedStatus === null || requestedStatus === "UNMARKED") {
+        await prisma.attendanceRecord.deleteMany({
+          where: {
+            sessionId: sessionRecord.id,
+            studentId: enrollment.studentProfileId,
+          },
+        });
+        return res.json({
+          attendance: null,
+          appliedStatus: "UNMARKED",
+          lateOverride: false,
+        });
+      }
+
+      const { appliedStatus, lateOverride } = applyGracePeriod(
+        requestedStatus,
+        sessionRecord.startedAt,
+        sessionRecord.class.gracePeriodMinutes,
+      );
+
+      const attendance = await prisma.attendanceRecord.upsert({
+        where: {
+          sessionId_studentId: {
+            sessionId: sessionRecord.id,
+            studentId: enrollment.studentProfileId,
+          },
+        },
+        create: {
+          sessionId: sessionRecord.id,
+          studentId: enrollment.studentProfileId,
+          status: appliedStatus,
+        },
+        update: { status: appliedStatus, markedAt: new Date() },
+      });
+      return res.json({
+        attendance,
+        appliedStatus,
+        lateOverride,
+      });
+    } catch (error) {
+      console.error("Session attendance update failed:", error);
+      return res.status(500).json({ message: "Unable to update attendance." });
+    }
+  },
+);
+
+app.post(
+  "/api/sessions/:id/recitation/shuffle",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    const mode = req.body?.mode;
+    if (!["RANDOM", "WEIGHTED"].includes(mode)) {
+      return res.status(400).json({ message: "Mode must be RANDOM or WEIGHTED." });
+    }
+    const excludeStudentId = req.body?.excludeStudentId;
+    if (
+      excludeStudentId !== undefined &&
+      (typeof excludeStudentId !== "string" || !excludeStudentId.trim())
+    ) {
+      return res.status(400).json({ message: "The student to skip must be a valid student ID." });
+    }
+
+    try {
+      const sessionRecord = await findOwnedSession(req.params.id, req.session.userId);
+      if (!sessionRecord) {
+        return res.status(404).json({ message: "Class session not found." });
+      }
+      const attendance = await prisma.attendanceRecord.findMany({
+        where: {
+          sessionId: sessionRecord.id,
+          status: { in: ["PRESENT", "LATE"] },
+        },
+        select: {
+          studentId: true,
+          status: true,
+          studentProfile: {
+            select: {
+              id: true,
+              name: true,
+              photo: true,
+              studentId: true,
+              program: true,
+              section: true,
+            },
+          },
+        },
+      });
+      let eligible = eligibleCandidates(attendance);
+      if (!eligible.length) {
+        return res.status(409).json({ message: "No Present or Late students are eligible for recitation." });
+      }
+      if (excludeStudentId) {
+        eligible = eligible.filter(({ studentId }) => studentId !== excludeStudentId);
+        if (!eligible.length) {
+          return res.status(409).json({ message: "No other eligible student is available to skip to." });
+        }
+      }
+
+      if (mode === "WEIGHTED") {
+        const priorCalls = await prisma.recitationLog.groupBy({
+          by: ["studentId"],
+          where: {
+            studentId: { in: eligible.map(({ studentId }) => studentId) },
+            session: { is: { classId: sessionRecord.classId } },
+          },
+          _count: { _all: true },
+        });
+        const callsByStudent = new Map(
+          priorCalls.map(({ studentId, _count }) => [studentId, _count._all]),
+        );
+        for (const candidate of eligible) {
+          candidate.priorCalls = callsByStudent.get(candidate.studentId) || 0;
+        }
+      }
+
+      const selected = selectRecitationCandidate(eligible, mode);
+      const log = await prisma.recitationLog.create({
+        data: {
+          sessionId: sessionRecord.id,
+          studentId: selected.studentId,
+          method: mode,
+        },
+        include: {
+          studentProfile: {
+            select: {
+              id: true,
+              name: true,
+              photo: true,
+              studentId: true,
+              program: true,
+              section: true,
+            },
+          },
+        },
+      });
+      return res.json({ recitation: log });
+    } catch (error) {
+      console.error("Recitation shuffle failed:", error);
+      return res.status(500).json({ message: "Unable to select a student for recitation." });
+    }
+  },
+);
+
+app.patch(
+  "/api/recitation-logs/:id",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    const score = req.body?.score;
+    if (!Object.prototype.hasOwnProperty.call(req.body || {}, "score")) {
+      return res.status(400).json({ message: "A score from 0 to 5, or null, is required." });
+    }
+    if (score !== null && (!Number.isInteger(score) || score < 0 || score > 5)) {
+      return res.status(400).json({ message: "Score must be a whole number from 0 to 5, or null." });
+    }
+
+    try {
+      const log = await prisma.recitationLog.findFirst({
+        where: {
+          id: req.params.id,
+          session: { is: { class: { is: { facultyId: req.session.userId } } } },
+        },
+        select: { id: true },
+      });
+      if (!log) {
+        return res.status(404).json({ message: "Recitation record not found." });
+      }
+      const updatedLog = await prisma.recitationLog.update({
+        where: { id: log.id },
+        data: { score },
+        include: {
+          studentProfile: {
+            select: {
+              id: true,
+              name: true,
+              photo: true,
+              studentId: true,
+              program: true,
+              section: true,
+            },
+          },
+        },
+      });
+      return res.json({ recitation: updatedLog });
+    } catch (error) {
+      console.error("Recitation score update failed:", error);
+      return res.status(500).json({ message: "Unable to update the recitation score." });
     }
   },
 );

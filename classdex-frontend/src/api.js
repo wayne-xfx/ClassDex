@@ -63,6 +63,8 @@ export const api = {
     request("/classes", { method: "POST", body: JSON.stringify(payload) }),
   classDetails: (id) => request(`/classes/${encodeURIComponent(id)}`),
   classDeck: (id) => request(`/classes/${encodeURIComponent(id)}/deck`),
+  studentClassRecords: (classId, studentId) =>
+    request(`/classes/${encodeURIComponent(classId)}/students/${encodeURIComponent(studentId)}/records`),
   todaySession: (id) =>
     request(`/classes/${encodeURIComponent(id)}/sessions/today`, { method: "POST" }),
   updateClass: (id, payload) =>
@@ -74,6 +76,19 @@ export const api = {
     request(`/sessions/${encodeURIComponent(sessionId)}/attendance/${encodeURIComponent(studentId)}`, {
       method: "PUT",
       body: JSON.stringify({ status }),
+    }),
+  shuffleRecitation: (sessionId, mode, excludeStudentId = null) =>
+    request(`/sessions/${encodeURIComponent(sessionId)}/recitation/shuffle`, {
+      method: "POST",
+      body: JSON.stringify({
+        mode,
+        ...(excludeStudentId ? { excludeStudentId } : {}),
+      }),
+    }),
+  updateRecitationScore: (logId, score) =>
+    request(`/recitation-logs/${encodeURIComponent(logId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ score }),
     }),
   joinClass: (classCode) =>
     request("/classes/join", {

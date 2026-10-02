@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import Icon from "../Icon";
+import { formatStudentName } from "./studentNames";
 
 export default function RecitationModule({
   eligibleStudents,
@@ -11,9 +13,21 @@ export default function RecitationModule({
   onSkip,
   busy = false,
   savingScore = false,
+  animationEnabled = true,
+  onAnimationChange,
 }) {
   const student = currentCall?.student || null;
   const count = eligibleStudents.length;
+  const [previewIndex, setPreviewIndex] = useState(0);
+
+  useEffect(() => {
+    if (!busy || !animationEnabled || !eligibleStudents.length) return undefined;
+    const interval = window.setInterval(() => {
+      setPreviewIndex((index) => (index + 1) % eligibleStudents.length);
+    }, 100);
+    return () => window.clearInterval(interval);
+  }, [animationEnabled, busy, eligibleStudents.length]);
+  const previewStudent = eligibleStudents[previewIndex] || null;
 
   return (
     <div className="recitation-module">
@@ -21,11 +35,11 @@ export default function RecitationModule({
         <div>
           <span className="eyebrow"><Icon name="shuffle" /> Recitation</span>
           <h2>Who’s up next?</h2>
-          <p>Only students marked Present or Late today can be called.</p>
+          <p>Students marked Present or Late today can be called.</p>
         </div>
         <div className="recitation-pool-count">
           <span>{count}</span>
-          <div><strong>{count} {count === 1 ? "student" : "students"} in the pool</strong><small>Present or Late today</small></div>
+          <div><strong>{count} {count === 1 ? "student" : "students"} in the pool</strong><small>Present today</small></div>
         </div>
       </div>
 
@@ -52,15 +66,64 @@ export default function RecitationModule({
         </span>
       </div>
 
+      <section className="recitation-mini-deck" aria-label="Eligible students in the shuffle deck">
+        <div className="recitation-mini-deck-heading">
+          <strong>Shuffle deck</strong>
+          <span>Present and Late students · {count} cards</span>
+        </div>
+        {count ? (
+          <div className="recitation-mini-cards">
+            {eligibleStudents.map((eligibleStudent) => (
+              <div
+                className="recitation-mini-card"
+                key={eligibleStudent.id}
+                title={`${formatStudentName(eligibleStudent.name)} · ${eligibleStudent.status === "LATE" ? "Late" : "Present"}`}
+              >
+                <div className="recitation-mini-photo">
+                  {eligibleStudent.photo ? <img src={eligibleStudent.photo} alt="" /> : <Icon name="user" size={17} />}
+                </div>
+                <span>{formatStudentName(eligibleStudent.name)}</span>
+                {eligibleStudent.status === "LATE" ? <small className="recitation-mini-late">Late</small> : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="recitation-mini-empty">Mark students Present or Late in Attendance to add their cards.</p>
+        )}
+      </section>
+
+      <div className="recitation-animation-toggle">
+        <label className="recitation-animation-switch">
+          <span>Shuffle animation</span>
+          <input
+            type="checkbox"
+            role="switch"
+            aria-label="Shuffle animation"
+            checked={animationEnabled}
+            onChange={(event) => onAnimationChange(event.target.checked)}
+          />
+          <span className="recitation-switch-track" aria-hidden="true" />
+        </label>
+      </div>
+
       <section className="recitation-stage" aria-live="polite" aria-atomic="true">
-        {student ? (
+        {busy && animationEnabled && previewStudent ? (
+          <article className="recitation-shuffling-card" key={previewStudent.id}>
+            <div className="recitation-shuffling-photo">
+              {previewStudent.photo ? <img src={previewStudent.photo} alt="" /> : <Icon name="user" size={30} />}
+            </div>
+            <strong>{formatStudentName(previewStudent.name)}</strong>
+            <span>ID {previewStudent.studentId}</span>
+            <div className="recitation-shuffling-lines" aria-hidden="true"><i /><i /><i /></div>
+            <span className="recitation-shuffling-label">Shuffling the deck…</span>
+          </article>
+        ) : student ? (
           <article className="recitation-card" key={currentCall.log.id}>
-            <div className="recitation-card-glint" aria-hidden="true" />
             <span className="recitation-call-label"><Icon name="check" size={15} /> Your next speaker</span>
             <div className="recitation-student-photo">
               {student.photo ? <img src={student.photo} alt="" /> : <Icon name="user" size={36} />}
             </div>
-            <h3>{student.name}</h3>
+            <h3>{formatStudentName(student.name)}</h3>
             <p className="recitation-student-id">Student ID · {student.studentId}</p>
             <p className="recitation-student-program">
               {[student.program, student.section].filter(Boolean).join(" · ") || "Student"}
@@ -92,7 +155,7 @@ export default function RecitationModule({
             <h3>{count ? "The deck is ready" : "No one in the pool yet"}</h3>
             <p>{count
               ? "Shuffle to reveal the next student. You can change or skip the pick at any time."
-              : "Mark students Present or Late in Take attendance. Absent and Unmarked students are never included."}</p>
+              : "Mark students Present or Late in Attendance. Absent and Unmarked students are never included."}</p>
           </div>
         )}
       </section>
@@ -101,14 +164,14 @@ export default function RecitationModule({
         <button
           type="button"
           className="button button-primary recitation-primary-action"
-          disabled={!count || busy}
-          onClick={onShuffle}
+          disabled={!count || busy || savingScore}
+          onClick={() => onShuffle(animationEnabled)}
         >
           <Icon name="shuffle" />
-          {busy ? "Shuffling…" : student ? "Call next" : "Shuffle"}
+          {busy ? "Picking…" : student ? "Shuffle again" : "Shuffle"}
         </button>
         {student ? (
-          <button type="button" className="button button-secondary" disabled={!count || busy} onClick={onSkip}>
+          <button type="button" className="button button-secondary" disabled={count < 2 || busy || savingScore} onClick={() => onSkip(animationEnabled)}>
             <Icon name="arrow" /> Skip
           </button>
         ) : null}
