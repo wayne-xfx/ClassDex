@@ -1,8 +1,21 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import Icon from "../components/Icon";
+import {
+  EmptyState,
+  ModuleTabs,
+  StatCounter,
+  StudentCard,
+  Toast,
+} from "../components/classroom/ClassroomComponents";
 import { api } from "../api";
+
+const MODULE_LABELS = {
+  deck: "Class deck",
+  attendance: "Take attendance",
+  recitation: "Recitation",
+};
 
 export default function FacultyClass() {
   const { id } = useParams();
@@ -10,9 +23,14 @@ export default function FacultyClass() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [activeModule, setActiveModule] = useState("deck");
+  const [search, setSearch] = useState("");
+  const [layout, setLayout] = useState("grid");
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
+    setError("");
     api
       .classDetails(id)
       .then(({ class: record }) => {
@@ -29,53 +47,158 @@ export default function FacultyClass() {
     };
   }, [id]);
 
+  const dismissToast = useCallback(() => setNotice(""), []);
+  const students = useMemo(
+    () => classRecord?.enrollments.map(({ id: enrollmentId, studentProfile }) => ({
+      ...studentProfile,
+      enrollmentId,
+    })) || [],
+    [classRecord],
+  );
+  const filteredStudents = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase();
+    if (!query) return students;
+    return students.filter((student) =>
+      `${student.name} ${student.studentId}`.toLocaleLowerCase().includes(query),
+    );
+  }, [search, students]);
+
   async function copyInvite() {
+    if (!classRecord) return;
     const link = `${window.location.origin}/join/${classRecord.classCode}`;
     try {
       await navigator.clipboard.writeText(link);
-      setNotice("Invite link copied to clipboard.");
+      setNotice("Invite link copied. Share it with your students.");
     } catch {
-      setNotice(`Invite link: ${link}`);
+      setNotice(`Copy unavailable — share code ${classRecord.classCode} or link ${link}`);
     }
   }
 
+  const today = new Intl.DateTimeFormat("en-PH", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "Asia/Manila",
+  }).format(new Date());
+
   return (
     <AppShell active="home">
-      <div className="content-wide">
-        <Link to="/faculty" className="back-link"><Icon name="chevron" /> All classes</Link>
-        {loading ? <div className="loading-card">Loading class roster…</div> : error ? <p className="notice notice-error" role="alert">{error}</p> : classRecord ? (
+      <div className="content-wide classroom-page">
+        <nav className="class-breadcrumb" aria-label="Breadcrumb">
+          <Link to="/faculty">Dashboard</Link>
+          <Icon name="chevron" size={14} />
+          <span>{classRecord?.sectionName || "Class"}</span>
+          <Icon name="chevron" size={14} />
+          <span aria-current="page">{MODULE_LABELS[activeModule]}</span>
+        </nav>
+
+        {loading ? (
+          <div className="student-grid student-grid-skeleton" aria-label="Loading class deck">
+            {Array.from({ length: 8 }, (_, index) => <div className="student-skeleton" key={index} />)}
+          </div>
+        ) : error ? (
+          <div className="notice notice-error" role="alert">{error}</div>
+        ) : classRecord ? (
           <>
-            <header className="class-detail-heading">
-              <div>
-                <span className="eyebrow"><Icon name="book" /> Class roster</span>
+            <header className="classroom-heading">
+              <div className="classroom-title">
+                <span className="eyebrow"><Icon name="book" /> Your classroom</span>
                 <h1>{classRecord.sectionName}</h1>
-                <p>{classRecord.description || "Your class and student roster."}</p>
+                <p>{classRecord.description || "Your class roster, organized like a deck of index cards."}</p>
               </div>
-              <button type="button" className="button button-primary" onClick={copyInvite}><Icon name="copy" /> Copy invite link</button>
+              <div className="classroom-meta">
+                <span className="class-code-pill"><span>CLASS CODE</span><strong>{classRecord.classCode}</strong></span>
+                <span className="class-schedule-pill"><Icon name="clock" /> {classRecord.schedule || "Schedule not set"}</span>
+              </div>
             </header>
-            {notice ? <p className="notice notice-success" role="status">{notice}</p> : null}
-            <div className="detail-stats">
-              <div className="panel stat-card"><span className="stat-icon"><Icon name="users" /></span><div><strong>{classRecord.enrollments.length}</strong><span>Students enrolled</span></div></div>
-              <div className="panel stat-card"><span className="stat-icon stat-amber"><Icon name="clock" /></span><div><strong>{classRecord.schedule || "Not set"}</strong><span>Class schedule</span></div></div>
-              <div className="panel stat-card"><span className="stat-icon stat-teal"><Icon name="copy" /></span><div><strong>{classRecord.classCode}</strong><span>Invite code</span></div></div>
-            </div>
-            <section className="panel roster-panel">
-              <div className="section-heading">
-                <div><h2>Student roster</h2><p>Students who joined with this class code or invite link.</p></div>
-              </div>
-              {classRecord.enrollments.length ? (
-                <div className="roster-list">
-                  {classRecord.enrollments.map(({ id: enrollmentId, studentProfile }) => (
-                    <article className="roster-row" key={enrollmentId}>
-                      <div className="roster-avatar">{studentProfile.photo ? <img src={studentProfile.photo} alt="" /> : <Icon name="user" />}</div>
-                      <div className="roster-name"><strong>{studentProfile.name}</strong><span>{studentProfile.program || "Program not provided"}{studentProfile.section ? ` · ${studentProfile.section}` : ""}</span></div>
-                      <span className="student-number">{studentProfile.studentId}</span>
-                      <span className="muted roster-email">{studentProfile.email}</span>
-                    </article>
-                  ))}
-                </div>
+
+            <div className="classroom-date"><Icon name="clock" size={16} /> {today}</div>
+            <ModuleTabs active={activeModule} onChange={setActiveModule} />
+            <Toast message={notice} onDismiss={dismissToast} />
+
+            <section
+              id={`module-panel-${activeModule}`}
+              role="tabpanel"
+              aria-labelledby={`module-tab-${activeModule}`}
+              className="classroom-module"
+            >
+              {activeModule === "deck" ? (
+                <>
+                  <div className="deck-toolbar">
+                    <div className="deck-title">
+                      <h2>Student deck</h2>
+                      <p>{students.length} {students.length === 1 ? "student" : "students"} admitted to this class</p>
+                    </div>
+                    <div className="deck-actions">
+                      <label className="deck-search">
+                        <Icon name="search" size={17} />
+                        <span className="sr-only">Search students by name or ID</span>
+                        <input
+                          value={search}
+                          onChange={(event) => setSearch(event.target.value)}
+                          placeholder="Search name or ID"
+                          type="search"
+                        />
+                      </label>
+                      <div className="layout-toggle" role="group" aria-label="Student card layout">
+                        <button
+                          type="button"
+                          className={layout === "grid" ? "is-active" : ""}
+                          aria-pressed={layout === "grid"}
+                          onClick={() => setLayout("grid")}
+                        >Grid</button>
+                        <button
+                          type="button"
+                          className={layout === "list" ? "is-active" : ""}
+                          aria-pressed={layout === "list"}
+                          onClick={() => setLayout("list")}
+                        >List</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="deck-counts" aria-label="Today's attendance counts">
+                    <StatCounter label="Present" value={0} tone="present" />
+                    <StatCounter label="Late" value={0} tone="late" />
+                    <StatCounter label="Absent" value={0} tone="absent" />
+                    <StatCounter label="Unmarked" value={students.length} tone="neutral" />
+                  </div>
+                  {students.length ? (
+                    filteredStudents.length ? (
+                      <div className={`student-grid ${layout === "list" ? "student-grid-list" : ""}`}>
+                        {filteredStudents.map((student) => (
+                          <StudentCard key={student.id} student={student} />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="deck-no-results">
+                        <Icon name="search" />
+                        <strong>No matching students</strong>
+                        <span>Try another name or student ID.</span>
+                      </div>
+                    )
+                  ) : (
+                    <EmptyState
+                      title="Your deck is ready for its first student"
+                      description="Share an invite link or class code and admitted students will appear here as index cards."
+                      icon="users"
+                      action={(
+                        <div className="empty-state-actions">
+                          <button type="button" className="button button-primary" onClick={copyInvite}>
+                            <Icon name="copy" /> Copy invite link
+                          </button>
+                          <span>Or share code <strong>{classRecord.classCode}</strong></span>
+                        </div>
+                      )}
+                    />
+                  )}
+                </>
               ) : (
-                <div className="empty-roster"><div className="empty-art"><Icon name="users" /></div><h3>No students yet</h3><p>Share the class invite link or code to get started.</p></div>
+                <div className="module-placeholder panel">
+                  <span className="module-placeholder-icon"><Icon name={activeModule === "attendance" ? "check" : "user"} size={24} /></span>
+                  <h2>{MODULE_LABELS[activeModule]}</h2>
+                  <p>This module is being prepared for your class.</p>
+                </div>
               )}
             </section>
           </>
