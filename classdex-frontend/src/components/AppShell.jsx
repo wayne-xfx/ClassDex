@@ -17,7 +17,9 @@ export default function AppShell({ children, active = "" }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState("");
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const faculty = user?.role === "FACULTY";
+  const profilePath = faculty ? "/faculty/profile" : "/student/profile";
 
   async function handleLogout() {
     try {
@@ -61,16 +63,29 @@ export default function AppShell({ children, active = "" }) {
           </nav>
           <div className="header-actions">
             <ThemeToggle />
-            <span className="header-user">{user?.name}</span>
-            <button
-              type="button"
-              className="icon-button logout-button"
-              onClick={handleLogout}
-              aria-label="Log out"
-              title="Log out"
-            >
-              <Icon name="logout" />
-            </button>
+            <div className="user-menu">
+              <button
+                type="button"
+                className="user-menu-trigger"
+                aria-expanded={userMenuOpen}
+                aria-haspopup="menu"
+                onClick={() => setUserMenuOpen((open) => !open)}
+              >
+                <span className="user-menu-avatar" aria-hidden="true">{user?.name?.charAt(0)?.toUpperCase() || "U"}</span>
+                <span className="header-user">{user?.name}</span>
+                <Icon name="chevron" size={14} />
+              </button>
+              {userMenuOpen ? (
+                <div className="user-menu-popover" role="menu">
+                  <Link to={profilePath} role="menuitem" onClick={() => setUserMenuOpen(false)}>
+                    <Icon name="user" /> Profile
+                  </Link>
+                  <button type="button" role="menuitem" onClick={handleLogout}>
+                    <Icon name="logout" /> Log out
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       </header>

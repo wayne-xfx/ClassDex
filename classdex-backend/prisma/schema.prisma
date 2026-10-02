@@ -12,6 +12,22 @@ enum Role {
   STUDENT
 }
 
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  ABSENT
+}
+
+enum RecitationMethod {
+  RANDOM
+  WEIGHTED
+}
+
+enum ProjectType {
+  MIDTERM
+  FINALS
+}
+
 model User {
   id             String          @id @default(cuid())
   name           String
@@ -38,33 +54,41 @@ model FacultyProfile {
 }
 
 model StudentProfile {
-  id          String            @id @default(cuid())
-  userId      String            @unique
+  id          String             @id @default(cuid())
+  userId      String             @unique
   name        String
   address     String?
   program     String?
   section     String?
-  studentId   String            @unique
-  photo       String            @db.Text
+  studentId   String             @unique
+  photo       String             @db.Text
   email       String
-  birthdate   DateTime?         @db.Date
-  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  birthdate   DateTime?          @db.Date
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   enrollments ClassEnrollment[]
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  attendance  AttendanceRecord[]
+  recitations RecitationLog[]
+  activityScores ActivityScore[]
+  projectScores  ProjectScore[]
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
 }
 
 model Class {
-  id          String            @id @default(cuid())
-  sectionName String
-  classCode   String            @unique
-  description String?
-  schedule    String?
-  facultyId   String
-  faculty     User              @relation("FacultyClasses", fields: [facultyId], references: [id], onDelete: Cascade)
-  enrollments ClassEnrollment[]
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  id                 String            @id @default(cuid())
+  sectionName        String
+  classCode          String            @unique
+  description        String?
+  schedule           String?
+  gracePeriodMinutes Int               @default(15)
+  facultyId          String
+  faculty            User              @relation("FacultyClasses", fields: [facultyId], references: [id], onDelete: Cascade)
+  enrollments        ClassEnrollment[]
+  sessions           ClassSession[]
+  activities         Activity[]
+  projects           Project[]
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
 }
 
 model ClassEnrollment {
@@ -76,4 +100,105 @@ model ClassEnrollment {
   joinedAt         DateTime       @default(now())
 
   @@unique([studentProfileId, classId])
+}
+
+model ClassSession {
+  id          String             @id @default(cuid())
+  classId     String
+  date        DateTime           @db.Date
+  startedAt   DateTime           @default(now())
+  endedAt     DateTime?
+  class       Class              @relation(fields: [classId], references: [id], onDelete: Cascade)
+  attendance  AttendanceRecord[]
+  recitations RecitationLog[]
+  activities  Activity[]
+  projectScores ProjectScore[]
+
+  @@unique([classId, date])
+}
+
+model AttendanceRecord {
+  id             String           @id @default(cuid())
+  sessionId      String
+  studentId      String
+  status         AttendanceStatus
+  markedAt       DateTime         @default(now())
+  session        ClassSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  studentProfile StudentProfile   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, studentId])
+  @@index([sessionId, status])
+}
+
+model RecitationLog {
+  id             String           @id @default(cuid())
+  sessionId      String
+  studentId      String
+  method         RecitationMethod
+  calledAt       DateTime         @default(now())
+  score          Int?
+  session        ClassSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  studentProfile StudentProfile   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, calledAt])
+  @@index([studentId])
+}
+
+model Activity {
+  id        String          @id @default(cuid())
+  classId   String
+  sessionId String
+  title     String
+  maxScore  Int?
+  class     Class           @relation(fields: [classId], references: [id], onDelete: Cascade)
+  session   ClassSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  scores    ActivityScore[]
+  createdAt DateTime        @default(now())
+
+  @@index([sessionId])
+}
+
+model ActivityScore {
+  id          String         @id @default(cuid())
+  activityId  String
+  studentId   String
+  score       Int?
+  isAbsent    Boolean        @default(false)
+  activity       Activity       @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  studentProfile StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@unique([activityId, studentId])
+  @@index([studentId])
+}
+
+model Project {
+  id        String         @id @default(cuid())
+  classId   String
+  type      ProjectType
+  maxScore  Int?
+  class     Class          @relation(fields: [classId], references: [id], onDelete: Cascade)
+  scores    ProjectScore[]
+  createdAt DateTime       @default(now())
+
+  @@unique([classId, type])
+}
+
+model ProjectScore {
+  id          String          @id @default(cuid())
+  projectId   String
+  studentId   String
+  sessionId   String?
+  score       Int?
+  isAbsent    Boolean         @default(false)
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  studentProfile StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  session        ClassSession?  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@unique([projectId, studentId])
+  @@index([sessionId, studentId])
+  @@index([studentId])
 }

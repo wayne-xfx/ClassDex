@@ -62,6 +62,65 @@ export const api = {
   createClass: (payload) =>
     request("/classes", { method: "POST", body: JSON.stringify(payload) }),
   classDetails: (id) => request(`/classes/${encodeURIComponent(id)}`),
+  classDeck: (id) => request(`/classes/${encodeURIComponent(id)}/deck`),
+  studentClassRecords: (classId, studentId) =>
+    request(`/classes/${encodeURIComponent(classId)}/students/${encodeURIComponent(studentId)}/records`),
+  todaySession: (id) =>
+    request(`/classes/${encodeURIComponent(id)}/sessions/today`, { method: "POST" }),
+  updateClass: (id, payload) =>
+    request(`/classes/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  setAttendance: (sessionId, studentId, status) =>
+    request(`/sessions/${encodeURIComponent(sessionId)}/attendance/${encodeURIComponent(studentId)}`, {
+      method: "PUT",
+      body: JSON.stringify({ status }),
+    }),
+  shuffleRecitation: (sessionId, mode, excludeStudentId = null) =>
+    request(`/sessions/${encodeURIComponent(sessionId)}/recitation/shuffle`, {
+      method: "POST",
+      body: JSON.stringify({
+        mode,
+        ...(excludeStudentId ? { excludeStudentId } : {}),
+      }),
+    }),
+  updateRecitationScore: (logId, score) =>
+    request(`/recitation-logs/${encodeURIComponent(logId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ score }),
+    }),
+  sessionActivities: (sessionId) => request(`/sessions/${encodeURIComponent(sessionId)}/activities`),
+  createActivity: (sessionId, payload) =>
+    request(`/sessions/${encodeURIComponent(sessionId)}/activities`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateActivity: (activityId, payload) =>
+    request(`/activities/${encodeURIComponent(activityId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  deleteActivity: (activityId) =>
+    request(`/activities/${encodeURIComponent(activityId)}`, { method: "DELETE" }),
+  activityScores: (activityId) => request(`/activities/${encodeURIComponent(activityId)}/scores`),
+  setActivityScore: (activityId, studentId, score) =>
+    request(`/activities/${encodeURIComponent(activityId)}/scores/${encodeURIComponent(studentId)}`, {
+      method: "PUT",
+      body: JSON.stringify({ score }),
+    }),
+  classProjects: (classId) => request(`/classes/${encodeURIComponent(classId)}/projects`),
+  updateProject: (projectId, payload) =>
+    request(`/projects/${encodeURIComponent(projectId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  projectScores: (projectId) => request(`/projects/${encodeURIComponent(projectId)}/scores`),
+  setProjectScore: (projectId, studentId, score, sessionId) =>
+    request(`/projects/${encodeURIComponent(projectId)}/scores/${encodeURIComponent(studentId)}`, {
+      method: "PUT",
+      body: JSON.stringify({ score, sessionId }),
+    }),
   joinClass: (classCode) =>
     request("/classes/join", {
       method: "POST",

@@ -4,6 +4,7 @@ import AppShell from "../components/AppShell";
 import Icon from "../components/Icon";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
+import { PageHeader } from "../components/DesignSystem";
 
 export default function StudentDashboard() {
   const { user } = useAuth();
@@ -56,14 +57,14 @@ export default function StudentDashboard() {
   return (
     <AppShell active="home">
       <div className="content-wide">
-        <div className="dashboard-heading">
-          <div>
-            <span className="eyebrow"><Icon name="users" /> Student workspace</span>
-            <h1>Hello, {profile?.name || user?.name?.split(" ")[0]}</h1>
-            <p>Your index card and every class you’re part of.</p>
-          </div>
-          <Link to="/student/profile" className="button button-secondary"><Icon name="user" /> {profile ? "Edit index card" : "Create index card"}</Link>
-        </div>
+        <PageHeader
+          className="dashboard-heading"
+          eyebrow="Student workspace"
+          icon="users"
+          title={`Hello, ${profile?.name || user?.name?.split(" ")[0]}`}
+          description="Your index card and every class you’re part of."
+          action={<Link to="/student/profile" className="button button-secondary"><Icon name="user" /> {profile ? "Edit index card" : "Create index card"}</Link>}
+        />
         {notice ? <p className="notice notice-success" role="status"><Icon name="check" /> {notice}</p> : null}
         {error ? <p className="notice notice-error" role="alert">{error}</p> : null}
 
