@@ -1238,6 +1238,574 @@ textarea {
   }
 }
 
+.module-navigation {
+  display: flex;
+  align-items: stretch;
+  gap: 9px;
+}
+
+.module-deck-link {
+  display: inline-flex;
+  min-height: 48px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0 15px;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.module-deck-link:hover,
+.module-deck-link.is-active {
+  border-color: color-mix(in srgb, var(--royal) 35%, var(--line));
+  background: color-mix(in srgb, var(--royal) 8%, var(--card));
+  color: var(--royal);
+}
+
+.module-tabs {
+  min-width: max-content;
+  flex: 1;
+}
+
+.module-tab-disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.coming-soon-badge {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: color-mix(in srgb, var(--muted) 12%, var(--card));
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.activity-module,
+.project-module,
+.project-scoring {
+  width: 100%;
+}
+
+.activity-module > .design-page-header,
+.project-module > .design-page-header {
+  margin-bottom: 25px;
+}
+
+.activity-list {
+  display: grid;
+  gap: 12px;
+}
+
+.activity-card {
+  display: flex;
+  min-height: 92px;
+  align-items: center;
+  gap: 15px;
+  padding: 17px;
+}
+
+.activity-card-icon,
+.project-card-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--royal) 11%, var(--card));
+  color: var(--royal);
+}
+
+.activity-card-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.activity-card-copy h2,
+.project-card h2 {
+  margin: 0;
+  color: var(--navy);
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+
+.activity-card-copy p,
+.project-card > p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.activity-form {
+  display: grid;
+  gap: 16px;
+}
+
+.activity-form .form-actions {
+  margin-top: 4px;
+}
+
+.scoring-sheet-heading {
+  display: flex;
+  justify-content: space-between;
+}
+
+.scoring-back {
+  margin-bottom: 12px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.scoring-sheet .page-heading {
+  margin-bottom: 20px;
+}
+
+.scoring-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 15px;
+}
+
+.scoring-stats .panel {
+  display: grid;
+  min-height: 88px;
+  align-content: center;
+  gap: 4px;
+  padding: 16px 18px;
+}
+
+.scoring-stats strong {
+  color: var(--navy);
+  font-size: 22px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.scoring-stats span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.scoring-absence-banner {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+  border: 1px solid color-mix(in srgb, var(--accent-amber) 32%, var(--line));
+  border-radius: 13px;
+  padding: 9px 13px;
+  background: color-mix(in srgb, var(--accent-amber) 11%, var(--card));
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.scoring-absence-banner > svg {
+  flex: 0 0 auto;
+  color: var(--accent-amber);
+}
+
+.scoring-toolbar {
+  display: flex;
+  min-height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  margin: 16px 0 10px;
+}
+
+.scoring-toolbar p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.scoring-filters {
+  display: flex;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 4px;
+  background: color-mix(in srgb, var(--royal) 4%, var(--card));
+}
+
+.scoring-filters button,
+.scoring-quick-scores button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 9px;
+  padding: 0 11px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.scoring-filters button.is-active {
+  background: var(--card);
+  color: var(--royal);
+  box-shadow: 0 2px 7px rgba(20, 38, 70, 0.09);
+}
+
+.scoring-list {
+  display: grid;
+  gap: 8px;
+}
+
+.scoring-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 78px;
+  align-items: center;
+  gap: 18px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  padding: 10px 14px;
+  background:
+    linear-gradient(transparent 31px, color-mix(in srgb, var(--royal) 6%, transparent) 32px, transparent 33px),
+    var(--card);
+  box-shadow: 0 5px 15px rgba(18, 38, 79, 0.04);
+  transition: transform 160ms ease, border-color 160ms ease, opacity 160ms ease;
+}
+
+.scoring-row:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--royal) 30%, var(--line));
+}
+
+.scoring-row-absent {
+  opacity: 0.58;
+}
+
+.scoring-student,
+.scoring-entry-controls {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 11px;
+}
+
+.scoring-student-photo {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--royal) 7%, var(--card));
+  color: var(--royal);
+}
+
+.scoring-student-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.scoring-student-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.scoring-student-copy strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scoring-student-copy span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.scoring-input {
+  width: 82px;
+  min-height: 44px;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  padding: 0 9px;
+  background: var(--input);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 750;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.scoring-input:focus-visible {
+  outline: none;
+  border-color: var(--royal);
+  box-shadow: var(--focus-ring);
+}
+
+.scoring-input:disabled {
+  cursor: not-allowed;
+}
+
+.scoring-quick-scores {
+  display: flex;
+  gap: 3px;
+}
+
+.scoring-quick-scores button {
+  min-width: 36px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+}
+
+.scoring-quick-scores button:hover:not(:disabled) {
+  border-color: var(--royal);
+  color: var(--royal);
+}
+
+.scoring-quick-scores button:disabled {
+  cursor: not-allowed;
+}
+
+.scoring-save-state {
+  display: inline-flex;
+  min-width: 54px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.scoring-save-saved {
+  color: var(--accent-present);
+}
+
+.scoring-save-error {
+  color: var(--accent-red);
+}
+
+.scoring-save-state button {
+  min-height: 36px;
+  border: 0;
+  background: transparent;
+  color: var(--accent-red);
+  font: inherit;
+  font-weight: 750;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.scoring-item-actions,
+.project-score-settings {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.project-score-settings {
+  align-items: flex-end;
+  margin-bottom: 12px;
+}
+
+.project-score-settings .field {
+  width: 160px;
+}
+
+.project-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 17px;
+}
+
+.project-card {
+  display: grid;
+  justify-items: start;
+  gap: 13px;
+  padding: 22px;
+}
+
+.project-card .project-card-icon {
+  width: 55px;
+  height: 55px;
+}
+
+.project-card-stats {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.project-card-stats strong {
+  color: var(--navy);
+  font-size: 14px;
+}
+
+.project-card .button {
+  width: 100%;
+}
+
+.scoring-loading {
+  display: grid;
+  min-height: 160px;
+  place-items: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.recitation-absent-list {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  padding: 13px;
+  background: color-mix(in srgb, var(--accent-red) 3%, var(--card));
+}
+
+.recitation-absent-list > strong {
+  display: block;
+  margin-bottom: 9px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.recitation-absent-list > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.recitation-absent-card {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent-red) 20%, var(--line));
+  border-radius: 12px;
+  padding: 4px 9px 4px 5px;
+  background: var(--card);
+  opacity: 0.62;
+}
+
+.recitation-absent-card .recitation-mini-photo {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+}
+
+.recitation-absent-card > span:not(.design-status-pill) {
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+@media (max-width: 760px) {
+  .module-navigation {
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .activity-card {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .activity-card .button {
+    width: 100%;
+  }
+
+  .scoring-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .scoring-entry-controls {
+    justify-content: flex-end;
+    padding-left: 56px;
+  }
+
+  .project-card-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .module-tabs .module-tab {
+    gap: 6px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+
+  .scoring-stats {
+    gap: 7px;
+  }
+
+  .scoring-stats .panel {
+    min-height: 76px;
+    padding: 12px;
+  }
+
+  .scoring-stats strong {
+    font-size: 18px;
+  }
+
+  .scoring-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 7px 0;
+  }
+
+  .scoring-filters {
+    width: 100%;
+  }
+
+  .scoring-filters button {
+    flex: 1;
+  }
+
+  .scoring-entry-controls {
+    justify-content: space-between;
+    padding-left: 0;
+  }
+
+  .scoring-item-actions {
+    flex-direction: column;
+  }
+
+  .scoring-item-actions .button {
+    width: 100%;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -2060,10 +2628,6 @@ textarea {
     min-height: 48px;
     padding: 0 10px;
     font-size: 11px;
-  }
-
-  .module-tab-disabled span {
-    display: none;
   }
 
   .deck-counts {
@@ -4539,6 +5103,22 @@ textarea {
 .user-menu-trigger:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
+}
+
+.button-destructive {
+  border-color: color-mix(in srgb, var(--accent-red) 32%, var(--line));
+  background: color-mix(in srgb, var(--accent-red) 12%, var(--card));
+  color: var(--accent-red);
+}
+
+.button-destructive:hover:not(:disabled) {
+  border-color: var(--accent-red);
+  background: color-mix(in srgb, var(--accent-red) 18%, var(--card));
+}
+
+.button-ghost {
+  background: transparent;
+  color: var(--muted);
 }
 
 .design-badge,
