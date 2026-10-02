@@ -5,6 +5,7 @@ import Icon from "../components/Icon";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { uploadPhoto } from "../utils/photoUpload";
+import { PageHeader } from "../components/DesignSystem";
 
 const EMPTY_FORM = {
   name: "",
@@ -79,11 +80,12 @@ export default function FacultyProfile() {
     <AppShell active="profile">
       <div className="content-narrow">
         <Link to="/faculty" className="back-link"><Icon name="chevron" /> Dashboard</Link>
-        <header className="page-heading">
-          <span className="eyebrow"><Icon name="user" /> Faculty card</span>
-          <h1>Your faculty profile</h1>
-          <p>Share a few details with students. You can update this any time.</p>
-        </header>
+        <PageHeader
+          eyebrow="Faculty card"
+          icon="user"
+          title="Your faculty profile"
+          description="Share a few details with students. You can update this any time."
+        />
         <form className="panel profile-panel" onSubmit={handleSubmit}>
           {loading ? <p className="muted">Loading your profile…</p> : (
             <>

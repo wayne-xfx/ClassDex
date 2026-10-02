@@ -13,6 +13,16 @@
   --input: #ffffff;
   --accent-teal: #2c9c92;
   --accent-amber: #e5a847;
+  --accent-red: #b13f4b;
+  --accent-present: #238452;
+  --radius-control: 12px;
+  --radius-card: 18px;
+  --radius-dialog: 22px;
+  --shadow-card: 0 12px 34px rgba(18, 38, 79, 0.09);
+  --shadow-floating: 0 22px 60px rgba(18, 38, 79, 0.16);
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--royal) 22%, transparent);
+  --brand-gradient: linear-gradient(135deg, #173b7b, #3569d4);
+  --space-page-x: clamp(18px, 4.5vw, 72px);
   --shadow-soft: 0 16px 45px rgba(18, 38, 79, 0.08);
 }
 
@@ -29,6 +39,8 @@
   --input: #111c2d;
   --accent-teal: #54c7b9;
   --accent-amber: #f1c16b;
+  --accent-red: #ff9da4;
+  --accent-present: #94e6b7;
   --shadow-soft: 0 18px 50px rgba(0, 0, 0, 0.25);
 }
 
@@ -38,7 +50,15 @@
   --color-ink: var(--ink);
   --color-paper: var(--paper);
   --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent-teal: var(--accent-teal);
+  --color-accent-amber: var(--accent-amber);
   --font-sans: "Inter", "Segoe UI", "Trebuchet MS", system-ui, sans-serif;
+  --radius-control: 12px;
+  --radius-card: 18px;
+  --radius-dialog: 22px;
+  --shadow-card: 0 12px 34px rgba(18, 38, 79, 0.09);
 }
 
 * {
@@ -122,9 +142,9 @@ textarea {
   display: flex;
   min-height: 76px;
   width: 100%;
-  max-width: 1600px;
+  max-width: 1800px;
   margin: 0 auto;
-  padding: 0 28px;
+  padding: 0 var(--space-page-x);
   align-items: center;
   justify-content: space-between;
   gap: 24px;
@@ -146,7 +166,7 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  border-radius: 11px;
+  border-radius: var(--radius-control);
   padding: 10px 12px;
   color: var(--muted);
   font-size: 13px;
@@ -196,9 +216,9 @@ textarea {
 
 .page-content {
   width: 100%;
-  max-width: 1600px;
+  max-width: 1800px;
   margin: 0 auto;
-  padding: 42px 28px 76px;
+  padding: 42px var(--space-page-x) 76px;
 }
 
 .content-wide {
@@ -277,7 +297,7 @@ textarea {
 }
 
 .button-primary {
-  background: linear-gradient(135deg, #173b7b, #3569d4);
+  background: var(--brand-gradient);
   color: #ffffff;
   box-shadow: 0 7px 16px rgba(42, 91, 183, 0.18);
 }
@@ -619,9 +639,26 @@ textarea {
 
 .panel {
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: var(--radius-card);
   background: var(--card);
-  box-shadow: var(--shadow-soft);
+  box-shadow: var(--shadow-card);
+}
+
+.button:focus-visible,
+.input:focus-visible,
+.deck-search:focus-within,
+.module-tab:focus-visible,
+.nav-link:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--royal) 62%, transparent);
+  outline-offset: 2px;
+}
+
+.field-error {
+  color: #a72f3a;
+}
+
+[data-theme="dark"] .field-error {
+  color: #ff9da4;
 }
 
 .form-grid {
@@ -669,7 +706,7 @@ textarea {
 
 .input:focus {
   border-color: var(--royal);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--royal) 15%, transparent);
+  box-shadow: var(--focus-ring);
 }
 
 .password-control {
@@ -4475,4 +4512,257 @@ textarea {
     height: 72px;
   }
 
+}
+
+.design-page-header {
+  display: block;
+}
+
+.design-page-header-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.design-page-header-action {
+  flex: 0 0 auto;
+}
+
+.panel:focus-within {
+  border-color: color-mix(in srgb, var(--royal) 28%, var(--line));
+}
+
+.button:focus-visible,
+.icon-button:focus-visible,
+.nav-link:focus-visible,
+.user-menu-trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.design-badge,
+.design-status-pill {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: color-mix(in srgb, var(--royal) 7%, var(--card));
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.design-badge-success,
+.design-status-present {
+  border-color: color-mix(in srgb, var(--accent-present) 30%, var(--line));
+  background: color-mix(in srgb, var(--accent-present) 12%, var(--card));
+  color: var(--accent-present);
+}
+
+.design-badge-warning,
+.design-status-late {
+  border-color: color-mix(in srgb, var(--accent-amber) 40%, var(--line));
+  background: color-mix(in srgb, var(--accent-amber) 14%, var(--card));
+  color: color-mix(in srgb, var(--accent-amber) 75%, var(--ink));
+}
+
+.design-badge-danger,
+.design-status-absent {
+  border-color: color-mix(in srgb, var(--accent-red) 35%, var(--line));
+  background: color-mix(in srgb, var(--accent-red) 12%, var(--card));
+  color: var(--accent-red);
+}
+
+.design-status-neutral {
+  color: var(--muted);
+}
+
+.design-select {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 17px) 20px, calc(100% - 12px) 20px;
+  background-repeat: no-repeat;
+  background-size: 5px 5px, 5px 5px;
+  padding-right: 34px;
+}
+
+.design-modal-backdrop {
+  position: fixed;
+  z-index: 50;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(14, 25, 47, 0.52);
+  backdrop-filter: blur(5px);
+}
+
+.design-modal {
+  position: relative;
+  width: min(100%, 520px);
+  max-height: min(90vh, 760px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-dialog);
+  padding: 28px;
+  background: var(--card);
+  box-shadow: var(--shadow-floating);
+}
+
+.design-modal h2 {
+  margin: 14px 40px 7px 0;
+  color: var(--navy);
+  font-size: 24px;
+  letter-spacing: -0.03em;
+}
+
+.design-modal-description {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.design-modal-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.design-modal-content {
+  margin-top: 20px;
+}
+
+.design-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.design-skeleton {
+  min-height: 14px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, var(--line) 25%, color-mix(in srgb, var(--card) 70%, var(--line)) 50%, var(--line) 75%);
+  background-size: 200% 100%;
+  animation: design-skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes design-skeleton-shimmer {
+  to { background-position-x: -200%; }
+}
+
+.user-menu {
+  position: relative;
+}
+
+.user-menu-trigger {
+  display: inline-flex;
+  min-height: 44px;
+  max-width: 220px;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  padding: 4px 8px 4px 5px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.user-menu-trigger:hover {
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--royal) 5%, var(--card));
+}
+
+.user-menu-avatar {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--royal) 13%, var(--card));
+  color: var(--royal);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.user-menu-popover {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  min-width: 190px;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  padding: 7px;
+  background: var(--card);
+  box-shadow: var(--shadow-floating);
+}
+
+.user-menu-popover a,
+.user-menu-popover button {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 11px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.user-menu-popover a:hover,
+.user-menu-popover button:hover {
+  background: color-mix(in srgb, var(--royal) 8%, var(--card));
+  color: var(--royal);
+}
+
+@media (max-width: 680px) {
+  .design-page-header-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .design-page-header-action,
+  .design-page-header-action > * {
+    width: 100%;
+  }
+
+  .design-modal {
+    padding: 22px;
+  }
+
+  .header-actions .user-menu-trigger .header-user,
+  .user-menu-trigger > svg {
+    display: none;
+  }
+
+  .user-menu-trigger {
+    padding: 4px;
+  }
 }

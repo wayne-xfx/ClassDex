@@ -1,122 +1,137 @@
 import { Link } from "react-router-dom";
 import { Brand } from "../components/AppShell";
+import Icon from "../components/Icon";
 import ThemeToggle from "../components/ThemeToggle";
+
+const FEATURES = [
+  {
+    number: "01",
+    icon: "user",
+    title: "One profile. Every class.",
+    description: "A reusable student index card keeps names, IDs, programs, and sections together.",
+  },
+  {
+    number: "02",
+    icon: "check",
+    title: "Attendance that keeps moving.",
+    description: "Mark students one by one or update the full roster with clear, editable records.",
+  },
+  {
+    number: "03",
+    icon: "shuffle",
+    title: "Fair, thoughtful recitation.",
+    description: "Call from the students who are here, with a weighted option that favors quieter voices.",
+  },
+];
 
 export default function Landing() {
   return (
-    <div className="min-h-screen bg-paper">
-      <header className="border-b border-slate-200 bg-white/80 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
+    <div className="landing-page">
+      <header className="landing-header">
+        <div className="landing-header-inner">
           <Brand />
-          <nav className="flex items-center gap-3">
+          <nav className="landing-nav" aria-label="Main navigation">
+            <a href="#how-it-works">How it works</a>
             <ThemeToggle />
-            <Link
-              to="/login"
-              className="rounded-lg px-4 py-2 text-sm font-medium text-navy hover:bg-slate-100"
-            >
-              Log in
-            </Link>
-            <Link
-              to="/register"
-              className="rounded-lg bg-navy px-4 py-2 text-sm font-medium text-white hover:bg-royal"
-            >
-              Register
-            </Link>
+            <Link to="/login" className="landing-login">Log in</Link>
+            <Link to="/register" className="button button-primary landing-register">Get started <Icon name="arrow" size={16} /></Link>
           </nav>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-16">
-        <section className="grid items-center gap-12 lg:grid-cols-2">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-royal">
-              For LNU faculty & students
+      <main className="landing-main">
+        <section className="landing-hero">
+          <div className="landing-copy">
+            <span className="landing-kicker"><span /> Made for Leyte Normal University</span>
+            <h1>Make every student <span>count.</span></h1>
+            <p className="landing-lead">
+              Your classroom, your roster, your call. ClassDex turns the familiar index card into a better way to manage class and bring every voice into the room.
             </p>
-            <h1 className="mt-4 text-4xl font-semibold leading-tight text-navy sm:text-5xl">
-              The digital index card for every classroom.
-            </h1>
-            <p className="mt-5 max-w-xl text-lg text-slate-600">
-              ClassDex replaces paper index cards with one reusable student
-              profile, class lists faculty can trust, and a fair shuffler for
-              cold-calling present students.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link
-                to="/register"
-                className="rounded-lg bg-navy px-5 py-3 text-sm font-semibold text-white hover:bg-royal"
-              >
-                Create an account
+            <div className="landing-ctas">
+              <Link to="/register" className="button button-primary landing-cta-primary">
+                Create your free account <Icon name="arrow" size={17} />
               </Link>
-              <Link
-                to="/login"
-                className="rounded-lg border border-navy px-5 py-3 text-sm font-semibold text-navy hover:bg-white"
-              >
-                Sign in
+              <Link to="/login" className="landing-cta-secondary">
+                I already have an account <Icon name="chevron" size={15} />
               </Link>
+            </div>
+            <div className="landing-proof">
+              <div className="landing-proof-avatars" aria-hidden="true">
+                <span>F</span><span>S</span><span><Icon name="users" size={16} /></span>
+              </div>
+              <p><strong>For faculty and students</strong><br />Built around the way LNU classrooms work.</p>
             </div>
           </div>
 
-          <div className="relative mx-auto w-full max-w-md">
-            <div className="absolute inset-x-8 top-6 h-full rounded-2xl bg-royal/15" />
-            <div className="absolute inset-x-4 top-3 h-full rounded-2xl bg-navy/10" />
-            <article className="relative rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex items-start justify-between gap-4">
+          <div className="landing-visual" aria-label="Preview of a ClassDex student index card and attendance dashboard">
+            <div className="landing-orbit landing-orbit-one" />
+            <div className="landing-orbit landing-orbit-two" />
+            <div className="landing-floating-note landing-note-top"><Icon name="check" size={15} /> Attendance saved</div>
+            <article className="landing-preview-card">
+              <div className="landing-card-top">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-widest text-royal">
-                    Index card
-                  </p>
-                  <h2 className="mt-2 text-2xl font-semibold text-navy">
-                    Juan Dela Cruz
-                  </h2>
-                  <p className="text-sm text-slate-600">BSEd English · 3A</p>
+                  <span className="landing-card-label"><Icon name="book" size={14} /> Student index card</span>
+                  <h2>Juan Dela Cruz</h2>
+                  <p>BSEd English <span>·</span> Section 3A</p>
                 </div>
-                <div className="grid h-16 w-16 place-items-center rounded-md bg-paper text-xs font-semibold text-navy">
-                  Photo
-                </div>
+                <div className="landing-avatar" aria-hidden="true">JD</div>
               </div>
-              <dl className="mt-6 grid gap-3 text-sm text-slate-600">
-                <div className="flex justify-between border-b border-dashed border-slate-200 pb-2">
-                  <dt>Student ID</dt>
-                  <dd className="font-medium text-navy">2300039</dd>
-                </div>
-                <div className="flex justify-between border-b border-dashed border-slate-200 pb-2">
-                  <dt>Email</dt>
-                  <dd className="font-medium text-navy">juan@lnu.edu.ph</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt>Reusable across classes</dt>
-                  <dd className="font-medium text-royal">Yes</dd>
-                </div>
+              <div className="landing-card-rule" />
+              <dl className="landing-student-meta">
+                <div><dt>Student ID</dt><dd>2300039</dd></div>
+                <div><dt>Class status</dt><dd className="landing-present"><span /> Present</dd></div>
               </dl>
+              <div className="landing-card-footer">
+                <span><Icon name="pin" size={14} /> One profile, every class</span>
+                <span className="landing-card-mark"><Icon name="check" size={14} /></span>
+              </div>
             </article>
+            <article className="landing-mini-panel">
+              <div className="landing-mini-heading"><span>Today's attendance</span><strong>24 / 28</strong></div>
+              <div className="landing-attendance-bar"><span /></div>
+              <div className="landing-mini-legend">
+                <span><i className="legend-present" /> Present</span>
+                <span><i className="legend-late" /> Late</span>
+                <span><i className="legend-unmarked" /> Unmarked</span>
+              </div>
+            </article>
+            <div className="landing-floating-note landing-note-bottom"><Icon name="shuffle" size={15} /> A fairer way to call on students</div>
           </div>
         </section>
 
-        <section className="mt-20 grid gap-4 sm:grid-cols-3">
-          {[
-            {
-              title: "One card, every class",
-              body: "Students keep a single profile that follows them into every course they join.",
-            },
-            {
-              title: "Join by link or code",
-              body: "Faculty share an invite. Students enroll without paper signup sheets.",
-            },
-            {
-              title: "Fair cold-calls next",
-              body: "A shuffler will pick from students marked present — no more drawing names from a hat.",
-            },
-          ].map((item) => (
-            <article
-              key={item.title}
-              className="rounded-2xl border border-slate-200 bg-white p-5"
-            >
-              <h3 className="font-semibold text-navy">{item.title}</h3>
-              <p className="mt-2 text-sm text-slate-600">{item.body}</p>
-            </article>
-          ))}
+        <section className="landing-how" id="how-it-works">
+          <div className="landing-section-heading">
+            <span className="landing-section-label">A better class routine</span>
+            <h2>Less time organizing.<br /><span>More time teaching.</span></h2>
+            <p>Everything you need to keep your classroom in sync, all in one calm, clear space.</p>
+          </div>
+          <div className="landing-feature-grid">
+            {FEATURES.map((feature) => (
+              <article className="landing-feature" key={feature.number}>
+                <div className="landing-feature-top">
+                  <span className="landing-feature-icon"><Icon name={feature.icon} size={20} /></span>
+                  <span className="landing-feature-number">{feature.number}</span>
+                </div>
+                <h3>{feature.title}</h3>
+                <p>{feature.description}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="landing-bottom-cta">
+          <div>
+            <span>Ready when you are</span>
+            <h2>Bring your classroom together.</h2>
+          </div>
+          <Link to="/register" className="button button-primary">Get started with ClassDex <Icon name="arrow" size={16} /></Link>
         </section>
       </main>
+
+      <footer className="landing-footer">
+        <Brand />
+        <span>Designed for better classroom moments at Leyte Normal University.</span>
+      </footer>
     </div>
   );
 }

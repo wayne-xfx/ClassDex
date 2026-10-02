@@ -5,6 +5,7 @@ import Icon from "../components/Icon";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { uploadPhoto } from "../utils/photoUpload";
+import { PageHeader } from "../components/DesignSystem";
 
 function emptyForm(user) {
   return {
@@ -90,11 +91,12 @@ export default function StudentProfile() {
     <AppShell active="profile">
       <div className="content-narrow">
         <Link to="/student" className="back-link"><Icon name="chevron" /> Dashboard</Link>
-        <header className="page-heading">
-          <span className="eyebrow"><Icon name="book" /> Your global index card</span>
-          <h1>Student profile</h1>
-          <p>This one card follows you into every class you join.</p>
-        </header>
+        <PageHeader
+          eyebrow="Your global index card"
+          icon="book"
+          title="Student profile"
+          description="This one card follows you into every class you join."
+        />
         <form className="panel profile-panel" onSubmit={handleSubmit}>
           {loading ? <p className="muted">Loading your index card…</p> : (
             <>
