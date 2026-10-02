@@ -53,6 +53,7 @@ export default function FacultyClass() {
   const [recitationHistory, setRecitationHistory] = useState([]);
   const [recitationBusy, setRecitationBusy] = useState(false);
   const [savingRecitationScore, setSavingRecitationScore] = useState(false);
+  const [recitationAnimationEnabled, setRecitationAnimationEnabled] = useState(true);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [studentRecords, setStudentRecords] = useState(null);
   const [studentRecordsError, setStudentRecordsError] = useState("");
@@ -111,7 +112,7 @@ export default function FacultyClass() {
     return counts;
   }, { PRESENT: 0, LATE: 0, ABSENT: 0, UNMARKED: 0 }), [students]);
   const eligibleStudents = useMemo(
-    () => sortedStudents.filter((student) => student.status === "PRESENT"),
+    () => sortedStudents.filter((student) => ["PRESENT", "LATE"].includes(student.status)),
     [sortedStudents],
   );
   const filteredStudents = useMemo(() => {
@@ -204,10 +205,14 @@ export default function FacultyClass() {
     }
   }
 
-  async function shuffleRecitation(skipCurrent = false) {
+  async function shuffleRecitation(skipCurrent = false, animate = recitationAnimationEnabled) {
       if (!classRecord?.session?.id || !eligibleStudents.length) return;
       setRecitationBusy(true);
       try {
+        const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        if (animate && !reduceMotion) {
+          await new Promise((resolve) => window.setTimeout(resolve, 2400));
+        }
         const excludeStudentId = skipCurrent ? recitationCall?.student.id : null;
         const { recitation } = await api.shuffleRecitation(
           classRecord.session.id,
@@ -404,11 +409,13 @@ export default function FacultyClass() {
                   history={recitationHistory}
                   mode={recitationMode}
                   onModeChange={setRecitationMode}
-                  onShuffle={() => shuffleRecitation(false)}
+                  onShuffle={(animate) => shuffleRecitation(false, animate)}
                   onScoreChange={updateRecitationScore}
-                  onSkip={() => shuffleRecitation(true)}
+                  onSkip={(animate) => shuffleRecitation(true, animate)}
                   busy={recitationBusy}
                   savingScore={savingRecitationScore}
+                  animationEnabled={recitationAnimationEnabled}
+                  onAnimationChange={setRecitationAnimationEnabled}
                 />
               )}
             </section>
