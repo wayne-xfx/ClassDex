@@ -15,8 +15,8 @@ export function AuthLayout({ title, subtitle, children, footer }) {
   return (
     <div className="min-h-screen bg-paper">
       <div className="auth-theme-toggle"><ThemeToggle /></div>
-      <div className="mx-auto grid min-h-screen max-w-6xl items-center gap-10 px-4 py-10 lg:grid-cols-2">
-        <aside className="hidden lg:block">
+      <div className="auth-layout-inner">
+        <aside className="auth-brand-pane hidden lg:block">
           <Logo />
           <p className="mt-8 max-w-md text-sm uppercase tracking-[0.2em] text-royal">
             Leyte Normal University
@@ -25,8 +25,8 @@ export function AuthLayout({ title, subtitle, children, footer }) {
             Your classroom index cards, digitized.
           </h1>
           <p className="mt-4 max-w-md text-slate-600">
-            One reusable student card. One faculty dashboard. Fair cold-calls
-            later — clear records today.
+            One reusable student card. Faster attendance. Fairer recitation.
+            Clear records for every class.
           </p>
           <div className="card-stack mt-10 max-w-sm rounded-2xl border border-slate-200 bg-white p-5">
             <p className="text-xs font-semibold uppercase tracking-widest text-royal">
@@ -40,7 +40,7 @@ export function AuthLayout({ title, subtitle, children, footer }) {
           </div>
         </aside>
 
-        <main className="mx-auto w-full max-w-md">
+        <main className="auth-form-pane">
           <div className="mb-6 lg:hidden">
             <Logo />
           </div>
