@@ -65,6 +65,16 @@ export const api = {
   classDeck: (id) => request(`/classes/${encodeURIComponent(id)}/deck`),
   todaySession: (id) =>
     request(`/classes/${encodeURIComponent(id)}/sessions/today`, { method: "POST" }),
+  updateClass: (id, payload) =>
+    request(`/classes/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  setAttendance: (sessionId, studentId, status) =>
+    request(`/sessions/${encodeURIComponent(sessionId)}/attendance/${encodeURIComponent(studentId)}`, {
+      method: "PUT",
+      body: JSON.stringify({ status }),
+    }),
   joinClass: (classCode) =>
     request("/classes/join", {
       method: "POST",

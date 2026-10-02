@@ -32,6 +32,9 @@ export default function FacultyClass() {
   const [gracePeriodMinutes, setGracePeriodMinutes] = useState(15);
   const [toastAction, setToastAction] = useState(null);
   const [toastActionLabel, setToastActionLabel] = useState("");
+  const [toastType, setToastType] = useState("success");
+  const [pendingStudentIds, setPendingStudentIds] = useState([]);
+  const [savingGracePeriod, setSavingGracePeriod] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,7 +63,14 @@ export default function FacultyClass() {
     setNotice("");
     setToastAction(null);
     setToastActionLabel("");
+    setToastType("success");
   }, []);
+  function showToast(message, type = "success", actionLabel = "", action = null) {
+    setNotice(message);
+    setToastType(type);
+    setToastActionLabel(actionLabel);
+    setToastAction(() => action);
+  }
   const students = useMemo(
     () => (classRecord?.students || classRecord?.enrollments?.map(({ id: enrollmentId, studentProfile }) => ({
       ...studentProfile,
@@ -83,40 +93,67 @@ export default function FacultyClass() {
     );
   }, [search, students]);
 
-  function markStudentLocally(student, requestedStatus) {
+  async function updateAttendance(student, requestedStatus, notify = true) {
+    const previousStatus = student.status;
     const startedAt = Date.parse(classRecord?.session?.startedAt || "");
     const afterGrace = Number.isFinite(startedAt) && Date.now() > startedAt + gracePeriodMinutes * 60_000;
-    const appliedStatus = requestedStatus === "PRESENT" && afterGrace ? "LATE" : requestedStatus;
-    setAttendanceOverrides((current) => ({ ...current, [student.id]: appliedStatus }));
-    if (appliedStatus === "LATE" && requestedStatus === "PRESENT") {
-      setNotice(`${student.name} was marked Late because the grace period has passed.`);
-      setToastActionLabel("Undo");
-      setToastAction(() => () => {
-        setAttendanceOverrides((current) => ({ ...current, [student.id]: student.status }));
-        setNotice("");
-      });
+    const optimisticStatus = requestedStatus === "PRESENT" && afterGrace ? "LATE" : requestedStatus;
+    setAttendanceOverrides((current) => ({ ...current, [student.id]: optimisticStatus }));
+    setPendingStudentIds((current) => [...current, student.id]);
+    try {
+      const result = await api.setAttendance(classRecord.session.id, student.id, requestedStatus);
+      const appliedStatus = result.appliedStatus || result.attendance?.status || requestedStatus;
+      setAttendanceOverrides((current) => ({ ...current, [student.id]: appliedStatus }));
+      const automaticLate = requestedStatus === "PRESENT" && appliedStatus === "LATE";
+      if (notify && automaticLate) {
+        showToast(
+          `${student.name} was marked Late because the grace period has passed.`,
+          "success",
+          "Undo",
+          () => updateAttendance({ ...student, status: appliedStatus }, previousStatus),
+        );
+      } else if (notify) {
+        const label = appliedStatus === "UNMARKED"
+          ? `${student.name}'s attendance was cleared.`
+          : `${student.name} marked ${appliedStatus.toLowerCase()}.`;
+        showToast(label);
+      }
+      return appliedStatus;
+    } catch (attendanceError) {
+      setAttendanceOverrides((current) => ({ ...current, [student.id]: previousStatus }));
+      if (notify) showToast(attendanceError.message, "error");
+      return null;
+    } finally {
+      setPendingStudentIds((current) => current.filter((studentId) => studentId !== student.id));
     }
   }
 
-  function markAllLocally() {
-    const startedAt = Date.parse(classRecord?.session?.startedAt || "");
-    const afterGrace = Number.isFinite(startedAt) && Date.now() > startedAt + gracePeriodMinutes * 60_000;
-    const status = afterGrace ? "LATE" : "PRESENT";
-    setAttendanceOverrides((current) => ({
-      ...current,
-      ...Object.fromEntries(students.map((student) => [student.id, status])),
-    }));
-    setNotice(afterGrace
-      ? `All ${students.length} students were marked Late because the grace period has passed.`
-      : `All ${students.length} students marked Present.`);
-    setToastActionLabel("");
-    setToastAction(null);
+  async function markAllPresent() {
+    const results = await Promise.all(students.map((student) => updateAttendance(student, "PRESENT", false)));
+    const lateCount = results.filter((status) => status === "LATE").length;
+    const failedCount = results.filter((status) => status === null).length;
+    if (failedCount) {
+      showToast(`${students.length - failedCount} saved; ${failedCount} attendance updates failed.`, "error");
+    } else {
+      const presentCount = results.filter((status) => status === "PRESENT").length;
+      showToast(`${presentCount} marked Present${lateCount ? ` · ${lateCount} marked Late after the grace period` : ""}.`);
+    }
   }
 
-  function saveGracePeriodLocally(minutes) {
-    setGracePeriodMinutes(minutes);
-    setClassRecord((current) => ({ ...current, gracePeriodMinutes: minutes }));
-    setNotice(`Grace period set to ${minutes} minutes.`);
+  async function saveGracePeriod(minutes) {
+    setSavingGracePeriod(true);
+    try {
+      const result = await api.updateClass(id, { gracePeriodMinutes: minutes });
+      setGracePeriodMinutes(result.class.gracePeriodMinutes);
+      setClassRecord((current) => ({ ...current, gracePeriodMinutes: result.class.gracePeriodMinutes }));
+      showToast(`Grace period set to ${result.class.gracePeriodMinutes} minutes.`);
+      return true;
+    } catch (saveError) {
+      showToast(saveError.message, "error");
+      return false;
+    } finally {
+      setSavingGracePeriod(false);
+    }
   }
 
   async function copyInvite() {
@@ -124,11 +161,9 @@ export default function FacultyClass() {
     const link = `${window.location.origin}/join/${classRecord.classCode}`;
     try {
       await navigator.clipboard.writeText(link);
-      setToastActionLabel("");
-      setToastAction(null);
-      setNotice("Invite link copied. Share it with your students.");
+      showToast("Invite link copied. Share it with your students.");
     } catch {
-      setNotice(`Copy unavailable — share code ${classRecord.classCode} or link ${link}`);
+      showToast(`Copy unavailable — share code ${classRecord.classCode} or link ${link}`, "error");
     }
   }
 
@@ -175,6 +210,7 @@ export default function FacultyClass() {
             <ModuleTabs active={activeModule} onChange={setActiveModule} />
             <Toast
               message={notice}
+              type={toastType}
               onDismiss={dismissToast}
               actionLabel={toastActionLabel}
               onAction={toastAction}
@@ -239,10 +275,11 @@ export default function FacultyClass() {
                         counts={attendanceCounts}
                         layout={layout}
                         gracePeriodMinutes={gracePeriodMinutes}
-                        onStatusChange={markStudentLocally}
-                        onMarkAll={markAllLocally}
-                        onSaveGracePeriod={saveGracePeriodLocally}
-                        savingGracePeriod={false}
+                        onStatusChange={updateAttendance}
+                        onMarkAll={markAllPresent}
+                        onSaveGracePeriod={saveGracePeriod}
+                        pendingStudentIds={pendingStudentIds}
+                        savingGracePeriod={savingGracePeriod}
                       />
                     ) : (
                       <div className="deck-no-results">
