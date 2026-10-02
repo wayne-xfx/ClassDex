@@ -2351,3 +2351,538 @@ textarea {
     font-size: 11px;
   }
 }
+
+.recitation-module {
+  padding-bottom: 35px;
+}
+
+.recitation-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.recitation-heading h2 {
+  margin: 6px 0;
+  color: var(--navy);
+  font-size: 22px;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+}
+
+.recitation-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.recitation-pool-count {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid color-mix(in srgb, var(--accent-teal) 30%, var(--line));
+  border-radius: 15px;
+  padding: 9px 15px;
+  background: color-mix(in srgb, var(--accent-teal) 7%, var(--card));
+}
+
+.recitation-pool-count > span {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--accent-teal) 16%, var(--card));
+  color: var(--navy);
+  font-size: 20px;
+  font-weight: 780;
+  font-variant-numeric: tabular-nums;
+}
+
+.recitation-pool-count > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.recitation-pool-count strong {
+  color: var(--navy);
+  font-size: 11px;
+}
+
+.recitation-pool-count small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.recitation-mode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 19px 0 15px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  padding: 6px;
+  background: color-mix(in srgb, var(--card) 82%, transparent);
+}
+
+.recitation-mode > span:first-child {
+  padding: 0 8px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 730;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.recitation-mode button {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  padding: 0 11px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.recitation-mode button:hover {
+  background: color-mix(in srgb, var(--royal) 7%, transparent);
+  color: var(--navy);
+}
+
+.recitation-mode button.is-active {
+  border-color: color-mix(in srgb, var(--royal) 18%, var(--line));
+  background: color-mix(in srgb, var(--royal) 11%, var(--card));
+  color: var(--royal);
+}
+
+.recitation-mode button:focus-visible,
+.score-chips button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--royal) 60%, transparent);
+  outline-offset: 2px;
+}
+
+.recitation-mode-help {
+  margin-left: auto;
+  padding: 0 8px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.recitation-stage {
+  display: grid;
+  min-height: 360px;
+  place-items: center;
+  border: 1px dashed var(--line-strong);
+  border-radius: 20px;
+  padding: 20px;
+  background:
+    radial-gradient(ellipse at 50% 20%, color-mix(in srgb, var(--royal) 8%, transparent), transparent 70%),
+    color-mix(in srgb, var(--card) 66%, transparent);
+  perspective: 1100px;
+}
+
+.recitation-card {
+  position: relative;
+  display: flex;
+  width: min(470px, 100%);
+  min-height: 330px;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-top: 5px solid var(--royal);
+  border-radius: 21px;
+  padding: 18px 24px 20px;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 36px,
+      color-mix(in srgb, var(--royal) 6%, transparent) 37px,
+      transparent 38px
+    ),
+    var(--card);
+  box-shadow: 0 16px 38px rgba(18, 38, 79, 0.15);
+  transform-origin: 50% 70%;
+  animation: recitation-land 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.recitation-card-glint {
+  position: absolute;
+  top: -30%;
+  left: -50%;
+  width: 35%;
+  height: 160%;
+  transform: rotate(25deg);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, #fff 48%, transparent), transparent);
+  animation: recitation-glint 260ms ease-out 50ms both;
+  pointer-events: none;
+}
+
+.recitation-call-label {
+  display: inline-flex;
+  min-height: 25px;
+  align-items: center;
+  gap: 6px;
+  border-radius: 20px;
+  padding: 0 9px;
+  background: color-mix(in srgb, var(--accent-teal) 11%, var(--card));
+  color: var(--accent-teal);
+  font-size: 9px;
+  font-weight: 790;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.recitation-student-photo {
+  display: grid;
+  width: 76px;
+  height: 76px;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  margin-top: 13px;
+  border: 3px solid var(--card);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--royal) 11%, var(--card));
+  box-shadow: 0 0 0 1px var(--line), 0 5px 15px rgba(18, 38, 79, 0.1);
+  color: var(--royal);
+}
+
+.recitation-student-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.recitation-card h3 {
+  max-width: 100%;
+  overflow: hidden;
+  margin: 10px 0 3px;
+  color: var(--navy);
+  font-size: clamp(20px, 3vw, 25px);
+  font-weight: 780;
+  letter-spacing: -0.035em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recitation-student-id {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.035em;
+}
+
+.recitation-student-program {
+  margin: 4px 0 12px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.recitation-score {
+  display: flex;
+  width: min(330px, 100%);
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 11px;
+}
+
+.recitation-score > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.score-chips {
+  display: flex;
+  gap: 5px;
+}
+
+.score-chips button {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 740;
+  cursor: pointer;
+  transition: transform 140ms ease, background-color 140ms ease, border-color 140ms ease;
+}
+
+.score-chips button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: var(--royal);
+}
+
+.score-chips button.is-active {
+  border-color: var(--royal);
+  background: var(--royal);
+  color: #fff;
+}
+
+.score-chips button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.recitation-empty-card {
+  display: flex;
+  max-width: 420px;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.recitation-deck-art {
+  position: relative;
+  width: 86px;
+  height: 75px;
+  margin-bottom: 14px;
+}
+
+.recitation-deck-art span {
+  position: absolute;
+  top: 4px;
+  display: grid;
+  width: 52px;
+  height: 66px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--card);
+  color: var(--royal);
+  box-shadow: 0 7px 16px rgba(18, 38, 79, 0.08);
+}
+
+.recitation-deck-art span:first-child {
+  left: 4px;
+  transform: rotate(-16deg);
+}
+
+.recitation-deck-art span:nth-child(2) {
+  left: 17px;
+  transform: rotate(9deg);
+}
+
+.recitation-deck-art span:last-child {
+  right: 4px;
+  transform: rotate(17deg);
+}
+
+.recitation-empty-card h3 {
+  margin: 0;
+  color: var(--navy);
+  font-size: 18px;
+}
+
+.recitation-empty-card p {
+  max-width: 385px;
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.recitation-actions {
+  display: flex;
+  justify-content: center;
+  gap: 9px;
+  margin-top: 15px;
+}
+
+.recitation-primary-action {
+  min-width: 150px;
+}
+
+.recitation-pool-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  text-align: center;
+}
+
+.recitation-pool-hint svg {
+  flex: 0 0 auto;
+}
+
+.recitation-history {
+  margin-top: 26px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  padding: 13px;
+  background: var(--card);
+}
+
+.recitation-history-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.recitation-history-heading h3 {
+  margin: 0;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.recitation-history-heading > span {
+  display: inline-grid;
+  min-width: 21px;
+  height: 21px;
+  place-items: center;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--royal) 10%, transparent);
+  color: var(--royal);
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.recitation-history ol {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin: 0;
+  padding: 0 0 2px;
+  list-style: none;
+}
+
+.recitation-history li {
+  display: flex;
+  min-width: 195px;
+  min-height: 50px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 6px 9px;
+}
+
+.history-student-photo {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--royal) 9%, var(--card));
+  color: var(--royal);
+}
+
+.history-student-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.history-student-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--navy);
+  font-size: 10px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-student-score,
+.recitation-history time {
+  color: var(--muted);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+@keyframes recitation-land {
+  0% { opacity: 0; transform: rotateY(82deg) scale(0.96); }
+  70% { opacity: 1; transform: rotateY(-7deg) scale(1.01); }
+  100% { opacity: 1; transform: rotateY(0) scale(1); }
+}
+
+@keyframes recitation-glint {
+  from { opacity: 0; transform: translateX(0) rotate(25deg); }
+  40% { opacity: 0.7; }
+  to { opacity: 0; transform: translateX(480%) rotate(25deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recitation-card {
+    animation: recitation-fade 160ms ease-out both;
+  }
+
+  .recitation-card-glint {
+    display: none;
+  }
+}
+
+@keyframes recitation-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (max-width: 760px) {
+  .recitation-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .recitation-mode-help {
+    flex-basis: 100%;
+    margin: 0;
+    padding: 4px 8px;
+  }
+}
+
+@media (max-width: 520px) {
+  .recitation-stage {
+    min-height: 350px;
+    padding: 12px;
+  }
+
+  .recitation-card {
+    min-height: 322px;
+    padding-right: 13px;
+    padding-left: 13px;
+  }
+
+  .recitation-mode > span:first-child {
+    flex-basis: 100%;
+    padding-top: 4px;
+  }
+
+  .recitation-score {
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .score-chips button {
+    width: 40px;
+    height: 40px;
+  }
+}

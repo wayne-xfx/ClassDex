@@ -10,6 +10,7 @@ import {
   Toast,
 } from "../components/classroom/ClassroomComponents";
 import AttendanceModule from "../components/classroom/AttendanceModule";
+import RecitationModule from "../components/classroom/RecitationModule";
 import { api } from "../api";
 
 const MODULE_LABELS = {
@@ -35,6 +36,9 @@ export default function FacultyClass() {
   const [toastType, setToastType] = useState("success");
   const [pendingStudentIds, setPendingStudentIds] = useState([]);
   const [savingGracePeriod, setSavingGracePeriod] = useState(false);
+  const [recitationMode, setRecitationMode] = useState("RANDOM");
+  const [recitationCall, setRecitationCall] = useState(null);
+  const [recitationHistory, setRecitationHistory] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,6 +89,10 @@ export default function FacultyClass() {
     counts[student.status] += 1;
     return counts;
   }, { PRESENT: 0, LATE: 0, ABSENT: 0, UNMARKED: 0 }), [students]);
+  const eligibleStudents = useMemo(
+    () => students.filter((student) => student.status === "PRESENT" || student.status === "LATE"),
+    [students],
+  );
   const filteredStudents = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     if (!query) return students;
@@ -165,6 +173,43 @@ export default function FacultyClass() {
     } catch {
       showToast(`Copy unavailable — share code ${classRecord.classCode} or link ${link}`, "error");
     }
+  }
+
+  function shuffleLocally() {
+      if (!eligibleStudents.length) return;
+      let selected;
+      if (recitationMode === "WEIGHTED") {
+        const callCounts = new Map();
+        for (const call of recitationHistory) {
+          callCounts.set(call.student.id, (callCounts.get(call.student.id) || 0) + 1);
+        }
+        const weights = eligibleStudents.map((student) => 1 / (1 + (callCounts.get(student.id) || 0)));
+        const totalWeight = weights.reduce((total, weight) => total + weight, 0);
+        let choice = Math.random() * totalWeight;
+        selected = eligibleStudents[eligibleStudents.length - 1];
+        for (let index = 0; index < eligibleStudents.length; index += 1) {
+          choice -= weights[index];
+          if (choice < 0) {
+            selected = eligibleStudents[index];
+            break;
+          }
+        }
+      } else {
+        selected = eligibleStudents[Math.floor(Math.random() * eligibleStudents.length)];
+      }
+      const calledAt = new Date().toISOString();
+      const log = { id: `preview-${calledAt}-${selected.id}`, score: null };
+      const call = { ...log, log, student: selected, calledAt };
+      setRecitationCall(call);
+      setRecitationHistory((current) => [call, ...current]);
+    }
+
+  function scoreLocalRecitation(score) {
+    if (!recitationCall) return;
+    setRecitationCall((current) => ({ ...current, log: { ...current.log, score } }));
+    setRecitationHistory((current) => current.map((call) =>
+      call.id === recitationCall.id ? { ...call, score } : call,
+    ));
   }
 
   const today = new Intl.DateTimeFormat("en-PH", {
@@ -269,18 +314,6 @@ export default function FacultyClass() {
                           <StudentCard key={student.id} student={student} status={student.status} layout={layout} />
                         ))}
                       </div>
-                    ) : activeModule === "attendance" ? (
-                      <AttendanceModule
-                        students={students}
-                        counts={attendanceCounts}
-                        layout={layout}
-                        gracePeriodMinutes={gracePeriodMinutes}
-                        onStatusChange={updateAttendance}
-                        onMarkAll={markAllPresent}
-                        onSaveGracePeriod={saveGracePeriod}
-                        pendingStudentIds={pendingStudentIds}
-                        savingGracePeriod={savingGracePeriod}
-                      />
                     ) : (
                       <div className="deck-no-results">
                         <Icon name="search" />
@@ -304,12 +337,29 @@ export default function FacultyClass() {
                     />
                   )}
                 </>
+              ) : activeModule === "attendance" ? (
+                <AttendanceModule
+                  students={students}
+                  counts={attendanceCounts}
+                  layout={layout}
+                  gracePeriodMinutes={gracePeriodMinutes}
+                  onStatusChange={updateAttendance}
+                  onMarkAll={markAllPresent}
+                  onSaveGracePeriod={saveGracePeriod}
+                  pendingStudentIds={pendingStudentIds}
+                  savingGracePeriod={savingGracePeriod}
+                />
               ) : (
-                <div className="module-placeholder panel">
-                  <span className="module-placeholder-icon"><Icon name={activeModule === "attendance" ? "check" : "user"} size={24} /></span>
-                  <h2>{MODULE_LABELS[activeModule]}</h2>
-                  <p>This module is being prepared for your class.</p>
-                </div>
+                <RecitationModule
+                  eligibleStudents={eligibleStudents}
+                  currentCall={recitationCall}
+                  history={recitationHistory}
+                  mode={recitationMode}
+                  onModeChange={setRecitationMode}
+                  onShuffle={shuffleLocally}
+                  onScoreChange={scoreLocalRecitation}
+                  onSkip={shuffleLocally}
+                />
               )}
             </section>
           </>

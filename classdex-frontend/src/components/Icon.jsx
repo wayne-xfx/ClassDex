@@ -21,6 +21,7 @@ const PATHS = {
   x: <path d="m6 6 12 12M18 6 6 18" />,
   search: <><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 5 5" /></>,
   shuffle: <><path d="m16 3 5 0-5 5M4 20l5-5m7 6 5 0-5-5M4 4l12 12" /><path d="M14 5h1a6 6 0 0 1 5 3M4 16h1a6 6 0 0 0 5-3" /></>,
+  sparkles: <><path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z" /><path d="m19 14 .9 2.1L22 17l-2.1.9L19 20l-.9-2.1L16 17l2.1-.9L19 14ZM5 3l.7 1.8L7.5 5.5l-1.8.7L5 8l-.7-1.8L2.5 5.5l1.8-.7L5 3Z" /></>,
   grid: <><rect x="3" y="3" width="8" height="8" rx="1" /><rect x="13" y="3" width="8" height="8" rx="1" /><rect x="3" y="13" width="8" height="8" rx="1" /><rect x="13" y="13" width="8" height="8" rx="1" /></>,
   list: <><path d="M9 6h12M9 12h12M9 18h12" /><path d="M4 6h.01M4 12h.01M4 18h.01" /></>,
   chevron: <path d="m9 18 6-6-6-6" />,
