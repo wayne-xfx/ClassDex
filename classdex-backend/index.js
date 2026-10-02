@@ -857,7 +857,7 @@ app.post(
       const attendance = await prisma.attendanceRecord.findMany({
         where: {
           sessionId: sessionRecord.id,
-          status: "PRESENT",
+          status: { in: ["PRESENT", "LATE"] },
         },
         select: {
           studentId: true,
@@ -876,7 +876,7 @@ app.post(
       });
       let eligible = eligibleCandidates(attendance);
       if (!eligible.length) {
-        return res.status(409).json({ message: "No present students are eligible for recitation." });
+        return res.status(409).json({ message: "No Present or Late students are eligible for recitation." });
       }
       if (excludeStudentId) {
         eligible = eligible.filter(({ studentId }) => studentId !== excludeStudentId);

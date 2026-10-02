@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { eligibleCandidates, selectRecitationCandidate } = require("../recitation");
 
-test("only Present students enter the recitation pool", () => {
+test("Present and Late students enter the recitation pool", () => {
   const candidates = eligibleCandidates([
     { studentId: "present", status: "PRESENT" },
     { studentId: "late", status: "LATE" },
@@ -12,12 +12,12 @@ test("only Present students enter the recitation pool", () => {
 
   assert.deepEqual(
     candidates.map(({ studentId }) => studentId),
-    ["present"],
+    ["present", "late"],
   );
   for (const mode of ["RANDOM", "WEIGHTED"]) {
     for (const value of [0, 0.25, 0.5, 0.75, 0.999]) {
       const selected = selectRecitationCandidate(candidates, mode, () => value);
-      assert.equal(selected.studentId, "present");
+      assert.ok(["present", "late"].includes(selected.studentId));
     }
   }
 });
