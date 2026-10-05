@@ -445,6 +445,13 @@ app.get(
   },
 );
 
+app.get("/api/faculty/classes/pending-counts", requireAuth, requireRole("FACULTY"), async (req, res) => {
+  try {
+    const classes = await prisma.class.findMany({ where: { facultyId: req.session.userId }, select: { id: true, _count: { select: { enrollments: { where: { status: "PENDING" } } } } } });
+    return res.json({ counts: Object.fromEntries(classes.map((item) => [item.id, item._count.enrollments])) });
+  } catch (error) { return res.status(500).json({ message: "Unable to load pending request counts." }); }
+});
+
 app.get(
   "/api/classes/check-code",
   requireAuth,
