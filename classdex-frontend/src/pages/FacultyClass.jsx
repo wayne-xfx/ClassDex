@@ -16,6 +16,7 @@ import RecitationModule from "../components/classroom/RecitationModule";
 import { ActivitiesModule, ProjectsModule } from "../components/classroom/ScoringModules";
 import RosterManager from "../components/classroom/RosterManager";
 import PendingValidationList from "../components/classroom/PendingValidationList";
+import QuizModule from "../components/classroom/QuizModule";
 import { api } from "../api";
 
 const MODULE_LABELS = {
@@ -455,6 +456,8 @@ export default function FacultyClass() {
                 <ActivitiesModule key={classRecord.session.id} sessionId={classRecord.session.id} students={sortedStudents} />
               ) : activeModule === "projects" ? (
                 <ProjectsModule key={id} classId={id} sessionId={classRecord.session.id} students={sortedStudents} />
+              ) : activeModule === "quiz" ? (
+                <QuizModule students={sortedStudents} />
               ) : null}
             </section>
             {selectedStudent ? (

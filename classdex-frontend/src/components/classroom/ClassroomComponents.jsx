@@ -21,7 +21,7 @@ export function ModuleTabs({ active, onChange }) {
     { id: "recitation", label: "Recitation", icon: "user" },
     { id: "activities", label: "Activities", icon: "book" },
     { id: "projects", label: "Projects", icon: "book" },
-    { id: "quiz", label: "Quiz", icon: "book", disabled: true },
+    { id: "quiz", label: "Quiz", icon: "book" },
   ];
 
   function handleTabKeyDown(event, index) {

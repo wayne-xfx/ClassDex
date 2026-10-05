@@ -5365,6 +5365,20 @@ textarea {
 .student-class-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: .4rem; margin-top: 1rem; padding-top: .85rem; border-top: 1px solid var(--border-color); }
 .student-class-summary span { display: grid; gap: .15rem; color: var(--text-muted); font-size: .68rem; text-transform: capitalize; }
 .student-class-summary b { color: var(--text-primary); font-size: 1rem; }
+.quiz-module { display: grid; gap: 1rem; }
+.quiz-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+.quiz-heading h2 { margin: .35rem 0; }
+.quiz-heading p { color: var(--text-muted); margin: 0; }
+.quiz-session-pill { padding: .6rem .85rem; border-radius: .75rem; background: var(--surface-muted); font-weight: 700; }
+.quiz-session-form { display: grid; grid-template-columns: 2fr 1fr auto; gap: .8rem; align-items: end; }
+.quiz-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: .8rem; }
+.quiz-student-card { display: flex; align-items: center; gap: .75rem; padding: .9rem; border: 1px solid var(--border-color); border-radius: .9rem; background: var(--surface-card); }
+.quiz-student-absent { opacity: .65; }
+.quiz-student-photo { width: 2.7rem; height: 2.7rem; border-radius: 50%; overflow: hidden; display: grid; place-items: center; background: var(--surface-muted); flex: 0 0 auto; }
+.quiz-student-photo img { width: 100%; height: 100%; object-fit: cover; }
+.quiz-student-copy { display: grid; gap: .2rem; min-width: 0; flex: 1; }.quiz-student-copy span { color: var(--text-muted); font-size: .78rem; }
+.quiz-score-field { display: flex; align-items: center; gap: .3rem; font-weight: 700; }.quiz-score-field input { width: 3.4rem; padding: .45rem; }.quiz-absent-flag { display: inline-flex; gap: .25rem; align-items: center; color: var(--danger, #b42318); font-size: .8rem; font-weight: 700; }
+@media (max-width: 700px) { .quiz-session-form { grid-template-columns: 1fr; } .quiz-heading { flex-direction: column; } }
 .enrolled-pill-pending { background: var(--accent-amber); color: #5e3900; }
 @media (max-width: 620px) { .student-class-summary { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 700px) { .classroom-pending-action { margin: 0 0 1rem; padding: 0; } .pending-row { align-items: flex-start; flex-wrap: wrap; } .pending-actions { width: 100%; } }
