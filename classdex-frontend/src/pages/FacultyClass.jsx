@@ -14,7 +14,7 @@ import { compareStudentsByLastName } from "../components/classroom/studentNames"
 import AttendanceModule from "../components/classroom/AttendanceModule";
 import RecitationModule from "../components/classroom/RecitationModule";
 import { ActivitiesModule, ProjectsModule } from "../components/classroom/ScoringModules";
-import RosterManager from "../components/classroom/RosterManager";
+import StudentListManager from "../components/classroom/StudentListManager";
 import { api } from "../api";
 
 const MODULE_LABELS = {
@@ -24,6 +24,7 @@ const MODULE_LABELS = {
   activities: "Activities",
   projects: "Projects",
   quiz: "Quiz",
+  "student-list": "Student List",
 };
 
 function toRecitationCall(log) {
@@ -44,7 +45,7 @@ export default function FacultyClass() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [activeModule, setActiveModule] = useState("deck");
-  const [showRosterManager, setShowRosterManager] = useState(false);
+  const [studentListCount, setStudentListCount] = useState(0);
   const [search, setSearch] = useState("");
   const [layout, setLayout] = useState("grid");
   const [attendanceOverrides, setAttendanceOverrides] = useState({});
@@ -89,6 +90,8 @@ export default function FacultyClass() {
       cancelled = true;
     };
   }, [id]);
+
+  useEffect(() => { let cancelled = false; api.classRoster(id).then(({ roster }) => { if (!cancelled) setStudentListCount(roster.length); }).catch(() => {}); return () => { cancelled = true; }; }, [id]);
 
   const dismissToast = useCallback(() => {
     setNotice("");
@@ -312,13 +315,7 @@ export default function FacultyClass() {
             </header>
 
             <div className="classroom-date"><Icon name="clock" size={16} /> {today}</div>
-            <div className="classroom-roster-action">
-              <button type="button" className="button button-secondary" onClick={() => setShowRosterManager((current) => !current)}>
-                <Icon name="users" size={16} /> {showRosterManager ? "Hide official roster" : "Manage official roster"}
-              </button>
-            </div>
-            {showRosterManager ? <RosterManager classId={id} onClose={() => setShowRosterManager(false)} /> : null}
-            <ModuleTabs active={activeModule} onChange={setActiveModule} />
+            <ModuleTabs active={activeModule} onChange={setActiveModule} studentListCount={studentListCount} />
             <Toast
               message={notice}
               type={toastType}
@@ -333,7 +330,7 @@ export default function FacultyClass() {
               aria-labelledby={activeModule === "deck" ? "module-deck-link" : `module-tab-${activeModule}`}
               className="classroom-module"
             >
-              {activeModule === "deck" ? (
+              {activeModule === "student-list" ? <StudentListManager classId={id} onCountChange={setStudentListCount} onClose={() => setActiveModule("deck")} /> : activeModule === "deck" ? (
                 <>
                   <div className="deck-toolbar">
                     <div className="deck-title">
