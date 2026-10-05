@@ -15,22 +15,12 @@ function validateRows(rows) {
   });
 }
 function parseLines(value) {
-  return value.split(/\r?\n/).map((line) => {
-    const parts = line.includes(",") ? line.split(",") : line.split(/\s*[-\t]\s*/);
-    return { name: String(parts[0] || "").trim(), studentId: String(parts[1] || "").trim() };
-  }).filter((row) => row.name || row.studentId);
+  return value.split(/\r?\n/).map((line) => { const parts = line.includes(",") ? line.split(",") : line.split(/\s*[-\t]\s*/); return { name: String(parts[0] || "").trim(), studentId: String(parts[1] || "").trim() }; }).filter((row) => row.name || row.studentId);
 }
 
 export default function StudentListManager({ classId, onClose, onCountChange }) {
-  const [rows, setRows] = useState([]);
-  const [name, setName] = useState("");
-  const [studentId, setStudentId] = useState("");
-  const [pasteValue, setPasteValue] = useState("");
-  const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const checkedRows = useMemo(() => validateRows(rows), [rows]);
-  const invalidCount = checkedRows.filter((row) => row.errors.length).length;
+  const [rows, setRows] = useState([]); const [name, setName] = useState(""); const [studentId, setStudentId] = useState(""); const [pasteValue, setPasteValue] = useState(""); const [message, setMessage] = useState(""); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false);
+  const checkedRows = useMemo(() => validateRows(rows), [rows]); const invalidCount = checkedRows.filter((row) => row.errors.length).length;
   useEffect(() => { let active = true; api.classRoster(classId).then(({ roster }) => { if (active) { setRows(roster.map((entry) => ({ id: entry.id, name: entry.studentName, studentId: entry.studentId }))); onCountChange?.(roster.length); } }).catch((error) => { if (active) setMessage(error.message); }).finally(() => { if (active) setLoading(false); }); return () => { active = false; }; }, [classId, onCountChange]);
   function addRow(event) { event.preventDefault(); setRows((current) => [...current, { name, studentId }]); setName(""); setStudentId(""); }
   function updateRow(index, field, value) { setRows((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: value } : row)); }
