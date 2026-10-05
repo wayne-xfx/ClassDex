@@ -457,7 +457,7 @@ export default function FacultyClass() {
               ) : activeModule === "projects" ? (
                 <ProjectsModule key={id} classId={id} sessionId={classRecord.session.id} students={sortedStudents} />
               ) : activeModule === "quiz" ? (
-                <QuizModule classId={id} students={sortedStudents} />
+                <QuizModule classId={id} students={sortedStudents} attendanceTaken={students.some((student) => student.status !== "UNMARKED")} onTakeAttendance={() => setActiveModule("attendance")} />
               ) : null}
             </section>
             {selectedStudent ? (
