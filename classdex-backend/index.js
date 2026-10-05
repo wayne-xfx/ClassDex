@@ -640,6 +640,29 @@ app.post("/api/classes/:id/quizzes", requireAuth, requireRole("FACULTY"), async 
   } catch (error) { return res.status(500).json({ message: "Unable to create quiz session." }); }
 });
 
+app.patch("/api/quizzes/:sessionId", requireAuth, requireRole("FACULTY"), async (req, res) => {
+  const title = String(req.body?.title || "").trim();
+  const totalItems = Number(req.body?.totalItems);
+  if (!title || !Number.isInteger(totalItems) || totalItems < 1) return res.status(400).json({ message: "Quiz title and a positive whole-number total are required." });
+  try {
+    const session = await prisma.quizSession.findFirst({ where: { id: req.params.sessionId, class: { is: { facultyId: req.session.userId } } }, include: { scores: { where: { score: { not: null } }, select: { studentId: true, score: true, studentProfile: { select: { name: true } } } } } });
+    if (!session) return res.status(404).json({ message: "Quiz session not found." });
+    const conflicts = session.scores.filter((item) => item.score > totalItems);
+    if (conflicts.length) return res.status(400).json({ message: "The new total is below existing scores.", conflicts: conflicts.map((item) => ({ studentId: item.studentId, name: item.studentProfile.name, score: item.score })) });
+    const updated = await prisma.quizSession.update({ where: { id: session.id }, data: { title, totalItems }, include: { scores: true } });
+    return res.json({ session: updated });
+  } catch (error) { return res.status(500).json({ message: "Unable to update quiz session." }); }
+});
+
+app.delete("/api/quizzes/:sessionId", requireAuth, requireRole("FACULTY"), async (req, res) => {
+  try {
+    const session = await prisma.quizSession.findFirst({ where: { id: req.params.sessionId, class: { is: { facultyId: req.session.userId } } }, select: { id: true } });
+    if (!session) return res.status(404).json({ message: "Quiz session not found." });
+    await prisma.quizSession.delete({ where: { id: session.id } });
+    return res.status(204).end();
+  } catch (error) { return res.status(500).json({ message: "Unable to delete quiz session." }); }
+});
+
 app.put("/api/quizzes/:sessionId/scores/:studentId", requireAuth, requireRole("FACULTY"), async (req, res) => {
   const score = Number(req.body?.score);
   if (!Number.isInteger(score) || score < 0) return res.status(400).json({ message: "Score must be a non-negative whole number." });
