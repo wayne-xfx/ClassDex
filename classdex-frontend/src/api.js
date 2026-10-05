@@ -59,6 +59,7 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   facultyClasses: () => request("/faculty/classes"),
+  facultyPendingCounts: () => request("/faculty/classes/pending-counts"),
   studentClasses: () => request("/student/classes"),
   checkClassCode: (code) =>
     request(`/classes/check-code?code=${encodeURIComponent(code)}`),

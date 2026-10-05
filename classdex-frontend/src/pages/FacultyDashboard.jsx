@@ -15,14 +15,16 @@ export default function FacultyDashboard() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState(location.state?.notice || "");
   const [profilePromptDismissed, setProfilePromptDismissed] = useState(false);
+  const [pendingCounts, setPendingCounts] = useState({});
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([api.facultyClasses(), api.facultyProfile()])
-      .then(([classData, profileData]) => {
+    Promise.all([api.facultyClasses(), api.facultyProfile(), api.facultyPendingCounts()])
+      .then(([classData, profileData, pendingData]) => {
         if (cancelled) return;
         setClasses(classData.classes);
         setProfile(profileData.profile);
+        setPendingCounts(pendingData.counts || {});
       })
       .catch((requestError) => {
         if (!cancelled) setError(requestError.message);
@@ -34,6 +36,8 @@ export default function FacultyDashboard() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => { const refresh = () => api.facultyPendingCounts().then(({ counts }) => setPendingCounts(counts || {})).catch(() => {}); const interval = window.setInterval(refresh, 30000); window.addEventListener("focus", refresh); return () => { window.clearInterval(interval); window.removeEventListener("focus", refresh); }; }, []);
 
   async function copyInvite(classCode) {
     try {
@@ -52,7 +56,7 @@ export default function FacultyDashboard() {
           eyebrow="Faculty workspace"
           icon="book"
           title={`Welcome back, ${profile?.name || user?.name?.split(" ")[0]}`}
-          description="All your classes, rosters, and invitations in one place."
+          description="All your classes, student lists, and invitations in one place."
           action={<Link to="/faculty/classes/new" className="button button-primary"><Icon name="plus" /> Create a class</Link>}
         />
 
@@ -85,7 +89,7 @@ export default function FacultyDashboard() {
               <article className="class-card" key={classRecord.id} style={{ "--card-accent": index % 2 ? "var(--accent-teal)" : "var(--accent-amber)" }}>
                 <div className="class-card-top">
                   <span className="class-icon"><Icon name="book" /></span>
-                  <span className="class-count"><Icon name="users" /> {classRecord._count.enrollments}</span>
+                  <span className="class-count"><Icon name="users" /> {classRecord._count.enrollments}</span>{pendingCounts[classRecord.id] ? <span className="class-count class-pending-count"><Icon name="users" /> {pendingCounts[classRecord.id]} pending</span> : null}
                 </div>
                 <p className="class-label">Section</p>
                 <h3>{classRecord.sectionName}</h3>
@@ -102,7 +106,7 @@ export default function FacultyDashboard() {
           <section className="empty-state">
             <div className="empty-art"><Icon name="book" size={28} /></div>
             <h3>No classes yet</h3>
-            <p>Create your first class to start building your classroom roster.</p>
+            <p>Create your first class to start building your classroom student list.</p>
             <Link to="/faculty/classes/new" className="button button-primary"><Icon name="plus" /> Create your first class</Link>
           </section>
         ) : null}

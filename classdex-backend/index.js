@@ -445,6 +445,13 @@ app.get(
   },
 );
 
+app.get("/api/faculty/classes/pending-counts", requireAuth, requireRole("FACULTY"), async (req, res) => {
+  try {
+    const classes = await prisma.class.findMany({ where: { facultyId: req.session.userId }, select: { id: true, _count: { select: { enrollments: { where: { status: "PENDING" } } } } } });
+    return res.json({ counts: Object.fromEntries(classes.map((item) => [item.id, item._count.enrollments])) });
+  } catch (error) { return res.status(500).json({ message: "Unable to load pending request counts." }); }
+});
+
 app.get(
   "/api/classes/check-code",
   requireAuth,
@@ -533,7 +540,7 @@ app.get(
       return res.json({ roster });
     } catch (error) {
       console.error("Roster lookup failed:", error);
-      return res.status(500).json({ message: "Unable to load the official roster." });
+      return res.status(500).json({ message: "Unable to load the student list." });
     }
   },
 );
@@ -553,8 +560,8 @@ app.post(
         if (entry.studentId) seen.add(entry.studentId);
         return { ...entry, row: index + 1, errors };
       }).filter((entry) => entry.errors.length);
-      if (!incoming.length) return res.status(400).json({ message: "Add at least one roster row." });
-      if (invalid.length) return res.status(400).json({ message: "Fix the invalid roster rows before saving.", invalidRows: invalid });
+      if (!incoming.length) return res.status(400).json({ message: "Add at least one student list row." });
+      if (invalid.length) return res.status(400).json({ message: "Fix the invalid student list rows before saving.", invalidRows: invalid });
       const roster = await prisma.$transaction(incoming.map((entry) => prisma.classRoster.upsert({
         where: { classId_studentId: { classId: req.params.id, studentId: entry.studentId } },
         create: { classId: req.params.id, studentName: entry.studentName, studentId: entry.studentId },
@@ -563,7 +570,7 @@ app.post(
       return res.status(201).json({ roster });
     } catch (error) {
       console.error("Roster save failed:", error);
-      return res.status(error.code === "P2002" ? 409 : 500).json({ message: error.code === "P2002" ? "That student ID is already in this roster." : "Unable to save the official roster." });
+      return res.status(error.code === "P2002" ? 409 : 500).json({ message: error.code === "P2002" ? "That student ID is already in this student list." : "Unable to save the student list." });
     }
   },
 );
@@ -578,10 +585,10 @@ app.patch(
     try {
       if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
       const updated = await prisma.classRoster.updateMany({ where: { id: req.params.entryId, classId: req.params.id }, data: { studentName: entry.studentName, studentId: entry.studentId } });
-      if (!updated.count) return res.status(404).json({ message: "Roster entry not found." });
+      if (!updated.count) return res.status(404).json({ message: "Student list entry not found." });
       return res.json({ entry: await prisma.classRoster.findUnique({ where: { id: req.params.entryId } }) });
     } catch (error) {
-      return res.status(error.code === "P2002" ? 409 : 500).json({ message: error.code === "P2002" ? "That student ID is already in this roster." : "Unable to update the roster entry." });
+      return res.status(error.code === "P2002" ? 409 : 500).json({ message: error.code === "P2002" ? "That student ID is already in this student list." : "Unable to update the student list entry." });
     }
   },
 );
@@ -594,10 +601,10 @@ app.delete(
     try {
       if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
       const deleted = await prisma.classRoster.deleteMany({ where: { id: req.params.entryId, classId: req.params.id } });
-      if (!deleted.count) return res.status(404).json({ message: "Roster entry not found." });
+      if (!deleted.count) return res.status(404).json({ message: "Student list entry not found." });
       return res.status(204).end();
     } catch (error) {
-      return res.status(500).json({ message: "Unable to remove the roster entry." });
+      return res.status(500).json({ message: "Unable to remove the student list entry." });
     }
   },
 );
