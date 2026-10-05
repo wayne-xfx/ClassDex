@@ -14,7 +14,7 @@ const DETAIL_STATUS_LABELS = {
   ABSENT: "Absent",
 };
 
-export function ModuleTabs({ active, onChange }) {
+export function ModuleTabs({ active, onChange, studentListCount = 0 }) {
   const tabRefs = useRef([]);
   const tabs = [
     { id: "attendance", label: "Attendance", icon: "check" },
@@ -22,6 +22,7 @@ export function ModuleTabs({ active, onChange }) {
     { id: "activities", label: "Activities", icon: "book" },
     { id: "projects", label: "Projects", icon: "book" },
     { id: "quiz", label: "Quiz", icon: "book", disabled: true },
+    { id: "student-list", label: `Student List (${studentListCount})`, icon: "users" },
   ];
 
   function handleTabKeyDown(event, index) {
