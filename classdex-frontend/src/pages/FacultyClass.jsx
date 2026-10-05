@@ -296,7 +296,7 @@ export default function FacultyClass() {
               <div className="classroom-title">
                 <span className="eyebrow"><Icon name="book" /> Your classroom</span>
                 <h1>{classRecord.sectionName}</h1>
-                <p>{classRecord.description || "Your class roster, organized like a deck of index cards."}</p>
+                <p>{classRecord.description || "Your student list, organized like a deck of index cards."}</p>
               </div>
               <div className="classroom-meta">
                 <span className="class-code-pill"><span>CLASS CODE</span><strong>{classRecord.classCode}</strong></span>
