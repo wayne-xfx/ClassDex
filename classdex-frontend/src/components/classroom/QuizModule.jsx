@@ -1,49 +1,26 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Icon from "../Icon";
 import { api } from "../../api";
 
 export default function QuizModule({ classId, students = [] }) {
-  const [title, setTitle] = useState("");
-  const [totalItems, setTotalItems] = useState(10);
-  const [scores, setScores] = useState({});
-  const [absentIds, setAbsentIds] = useState(new Set());
-  const [sessionId, setSessionId] = useState(null);
-  const [sessionOpen, setSessionOpen] = useState(false);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let active = true;
-    api.quizSessions(classId).then(({ sessions }) => {
-      const latest = sessions[0];
-      if (active && latest) {
-        setSessionId(latest.id); setTitle(latest.title); setTotalItems(latest.totalItems); setSessionOpen(true);
-        setScores(Object.fromEntries(latest.scores.map((item) => [item.studentId, item.score ?? ""])));
-        setAbsentIds(new Set(latest.scores.filter((item) => item.isAbsent).map((item) => item.studentId)));
-      }
-    }).catch((loadError) => { if (active) setError(loadError.message); });
-    return () => { active = false; };
-  }, [classId]);
-
-  function openSession(event) {
-    event.preventDefault();
-    const total = Number(totalItems);
-    if (!title.trim() || !Number.isInteger(total) || total < 1) { setError("Enter a quiz title and a positive whole-number item total."); return; }
-    api.createQuizSession(classId, { title: title.trim(), totalItems: total }).then(({ session }) => { setSessionId(session.id); setSessionOpen(true); }).catch((saveError) => setError(saveError.message));
+  const [sessions, setSessions] = useState([]); const [selected, setSelected] = useState(null); const [view, setView] = useState("list");
+  const [title, setTitle] = useState(""); const [totalItems, setTotalItems] = useState(10); const [scores, setScores] = useState({});
+  const [loading, setLoading] = useState(true); const [saved, setSaved] = useState(true); const [message, setMessage] = useState(""); const [error, setError] = useState("");
+  const loadSessions = useCallback(() => api.quizSessions(classId).then(({ sessions: result }) => setSessions(result)).catch((loadError) => setError(loadError.message)).finally(() => setLoading(false)), [classId]);
+  useEffect(() => { loadSessions(); }, [loadSessions]);
+  function openQuiz(session) { setSelected(session); setTitle(session.title); setTotalItems(session.totalItems); setScores(Object.fromEntries(session.scores.map((item) => [item.studentId, item.score ?? ""]))); setSaved(true); setMessage(""); setView("editor"); }
+  function newQuiz() { setSelected(null); setTitle(""); setTotalItems(10); setScores({}); setSaved(false); setMessage(""); setView("editor"); }
+  function backToList() { if (!saved && !window.confirm("You have unsaved changes. Leave without saving?")) return; setView("list"); setError(""); }
+  function updateScore(studentId, value) { if (value === "") { setScores((current) => ({ ...current, [studentId]: "" })); setSaved(false); return; } const score = Number(value); if (!Number.isInteger(score) || score < 0 || score > Number(totalItems)) { setError(`Scores must be whole numbers from 0 to ${totalItems}.`); return; } setError(""); setScores((current) => ({ ...current, [studentId]: score })); setSaved(false); }
+  async function saveQuiz() {
+    const total = Number(totalItems); if (!title.trim() || !Number.isInteger(total) || total < 1) { setError("Enter a title and positive whole-number total."); return; }
+    const conflicts = Object.entries(scores).filter(([, score]) => score !== "" && Number(score) > total); if (conflicts.length) { setError(`These scores exceed the new total: ${conflicts.map(([studentId]) => students.find((student) => student.id === studentId)?.name || studentId).join(", ")}.`); return; }
+    try { let session = selected; if (session) { ({ session } = await api.updateQuizSession(session.id, { title: title.trim(), totalItems: total })); } else { ({ session } = await api.createQuizSession(classId, { title: title.trim(), totalItems: total })); setSelected(session); }
+      await Promise.all(Object.entries(scores).filter(([, score]) => score !== "").map(([studentId, score]) => api.setQuizScore(session.id, studentId, Number(score)))); await loadSessions(); setSaved(true); setMessage("All changes saved.");
+    } catch (saveError) { setError(saveError.message); }
   }
-
-  function updateScore(studentId, value) {
-    if (absentIds.has(studentId)) return;
-    if (value === "") { setScores((current) => ({ ...current, [studentId]: "" })); return; }
-    const score = Number(value);
-    if (!Number.isInteger(score) || score < 0 || score > Number(totalItems)) { setError(`Scores must be whole numbers from 0 to ${totalItems}.`); return; }
-    setError(""); setScores((current) => ({ ...current, [studentId]: score }));
-    api.setQuizScore(sessionId, studentId, score).catch((saveError) => setError(saveError.message));
-  }
-
-  return <div className="quiz-module">
-    <div className="quiz-heading"><div><span className="eyebrow"><Icon name="book" /> Quick scoring</span><h2>Quiz scores</h2><p>Open a session, then score every approved student.</p></div>{sessionOpen ? <span className="quiz-session-pill">{title} /{totalItems}</span> : null}</div>
-    {!sessionOpen ? <form className="panel quiz-session-form" onSubmit={openSession}><label className="field"><span>Quiz title or label</span><input className="input" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Quiz 1 - Reading check" /></label><label className="field"><span>Total items</span><input className="input" type="number" min="1" step="1" value={totalItems} onChange={(event) => setTotalItems(event.target.value)} /></label><button className="button button-primary" type="submit">Open quiz session <Icon name="arrow" /></button></form> : <div className="quiz-card-grid">{students.map((student) => { const absent = student.attendanceStatus === "ABSENT" || absentIds.has(student.id); return <article className={`quiz-student-card${absent ? " quiz-student-absent" : ""}`} key={student.id}><div className="quiz-student-photo">{student.photo ? <img src={student.photo} alt="" /> : <Icon name="user" />}</div><div className="quiz-student-copy"><strong>{student.name}</strong><span>ID {student.studentId}</span></div>{absent ? <span className="quiz-absent-flag"><Icon name="lock" /> Absent</span> : <label className="quiz-score-field"><span className="sr-only">Score for {student.name}</span><input className="input" type="number" min="0" max={totalItems} step="1" value={scores[student.id] ?? ""} onChange={(event) => updateScore(student.id, event.target.value)} placeholder="-" /><b>/ {totalItems}</b></label>}</article>; })}</div>}
-    {error ? <p className="notice notice-error" role="alert">{error}</p> : null}
-    {sessionOpen && !students.length ? <div className="empty-state"><Icon name="users" /><strong>No approved students yet</strong><span>Approved class members will appear here.</span></div> : null}
-  </div>;
+  async function deleteQuiz() { if (!selected || !window.confirm("Delete this quiz? This cannot be undone.")) return; try { await api.deleteQuizSession(selected.id); setSelected(null); setView("list"); await loadSessions(); } catch (deleteError) { setError(deleteError.message); } }
+  if (loading) return <div className="loading-card" aria-label="Loading quizzes">Loading quizzes…</div>;
+  if (view === "list") return <div className="quiz-module"><div className="quiz-heading"><div><span className="eyebrow"><Icon name="brain" /> Quiz module</span><h2>Quizzes</h2><p>Browse saved quiz sessions or open a new one.</p></div><button type="button" className="button button-primary" onClick={newQuiz}><Icon name="plus" /> New Quiz</button></div>{sessions.length ? <div className="quiz-list">{sessions.map((session) => <button type="button" className="quiz-list-row" key={session.id} onClick={() => openQuiz(session)}><span className="quiz-list-icon"><Icon name="brain" /></span><span><strong>{session.title}</strong><small>{new Date(session.date).toLocaleDateString()} · /{session.totalItems}</small></span><span className="quiz-list-meta">{session.scores.filter((item) => item.score !== null).length} scored · Saved</span><Icon name="chevron" /></button>)}</div> : <div className="empty-state"><Icon name="brain" /><strong>No quizzes yet</strong><span>Open a new quiz session to start scoring.</span></div>}{error ? <p className="notice notice-error" role="alert">{error}</p> : null}</div>;
+  return <div className="quiz-module"><div className="quiz-editor-toolbar"><button type="button" className="button button-quiet" onClick={backToList}>← Back to Quizzes</button><span className={saved ? "quiz-saved" : "quiz-unsaved"}>{saved ? "All changes saved" : "Unsaved changes"}</span>{selected ? <button type="button" className="button button-quiet pending-decline" onClick={deleteQuiz}><Icon name="trash" /> Delete quiz</button> : null}</div><div className="quiz-heading"><div><span className="eyebrow"><Icon name="brain" /> Quiz editor</span><h2>{selected?.title || "New quiz"}</h2><p>Scores are held as a draft until Save.</p></div></div><div className="panel quiz-editor-fields"><label className="field"><span>Quiz title or label</span><input className="input" value={title} onChange={(event) => { setTitle(event.target.value); setSaved(false); }} placeholder="Quiz 1 - Reading check" /></label><label className="field"><span>Total items</span><input className="input" type="number" min="1" step="1" value={totalItems} onChange={(event) => { setTotalItems(event.target.value); setSaved(false); }} /></label></div><div className="quiz-card-grid">{students.map((student) => <article className="quiz-student-card" key={student.id}><div className="quiz-student-photo">{student.photo ? <img src={student.photo} alt="" /> : <Icon name="user" />}</div><div className="quiz-student-copy"><strong>{student.name}</strong><span>ID {student.studentId}</span></div><label className="quiz-score-field"><span className="sr-only">Score for {student.name}</span><input className="input" type="number" min="0" max={totalItems} step="1" value={scores[student.id] ?? ""} onChange={(event) => updateScore(student.id, event.target.value)} placeholder="-" /><b>/ {totalItems}</b></label></article>)}</div>{error ? <p className="notice notice-error" role="alert">{error}</p> : null}{message ? <p className="notice notice-success" role="status">{message}</p> : null}<div className="quiz-editor-actions"><button type="button" className="button button-primary" onClick={saveQuiz}><Icon name="check" /> Save</button></div></div>;
 }
