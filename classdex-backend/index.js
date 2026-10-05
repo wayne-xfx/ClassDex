@@ -602,6 +602,25 @@ app.delete(
   },
 );
 
+app.get("/api/classes/:id/pending", requireAuth, requireRole("FACULTY"), async (req, res) => {
+  try {
+    if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
+    const pending = await prisma.classEnrollment.findMany({ where: { classId: req.params.id, status: "PENDING" }, include: { studentProfile: { select: { id: true, name: true, studentId: true, program: true, section: true, photo: true } } }, orderBy: { joinedAt: "asc" } });
+    return res.json({ pending });
+  } catch (error) { return res.status(500).json({ message: "Unable to load pending requests." }); }
+});
+
+app.patch("/api/classes/:id/pending/:enrollmentId", requireAuth, requireRole("FACULTY"), async (req, res) => {
+  const status = String(req.body?.status || "").toUpperCase();
+  if (!["APPROVED", "DECLINED"].includes(status)) return res.status(400).json({ message: "Status must be APPROVED or DECLINED." });
+  try {
+    if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
+    const updated = await prisma.classEnrollment.updateMany({ where: { id: req.params.enrollmentId, classId: req.params.id, status: "PENDING" }, data: { status } });
+    if (!updated.count) return res.status(404).json({ message: "Pending request not found." });
+    return res.json({ enrollment: await prisma.classEnrollment.findUnique({ where: { id: req.params.enrollmentId }, include: { studentProfile: true, class: true } }) });
+  } catch (error) { return res.status(500).json({ message: "Unable to update pending request." }); }
+});
+
 app.get(
   "/api/classes/:id",
   requireAuth,

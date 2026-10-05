@@ -47,6 +47,7 @@ export default function FacultyClass() {
   const [activeModule, setActiveModule] = useState("deck");
   const [showRosterManager, setShowRosterManager] = useState(false);
   const [showPending, setShowPending] = useState(false);
+  const [pendingBusyId, setPendingBusyId] = useState(null);
   const [search, setSearch] = useState("");
   const [layout, setLayout] = useState("grid");
   const [attendanceOverrides, setAttendanceOverrides] = useState({});
@@ -220,6 +221,15 @@ export default function FacultyClass() {
     }
   }
 
+  async function updatePending(enrollmentId, status) {
+    setPendingBusyId(enrollmentId);
+    try {
+      const { enrollment } = await api.updatePendingEnrollment(id, enrollmentId, status);
+      setClassRecord((current) => ({ ...current, enrollments: (current.enrollments || []).map((item) => item.id === enrollmentId ? enrollment : item) }));
+      showToast(status === "APPROVED" ? "Student approved." : "Request declined.");
+    } catch (updateError) { showToast(updateError.message, "error"); } finally { setPendingBusyId(null); }
+  }
+
   async function shuffleRecitation(skipCurrent = false, animate = recitationAnimationEnabled) {
       if (!classRecord?.session?.id || !eligibleStudents.length) return;
       setRecitationBusy(true);
@@ -321,7 +331,7 @@ export default function FacultyClass() {
             </div>
             {showRosterManager ? <RosterManager classId={id} onClose={() => setShowRosterManager(false)} /> : null}
             <div className="classroom-pending-action"><button type="button" className="button button-quiet" onClick={() => setShowPending((current) => !current)}><Icon name="users" size={16} /> Pending validation {classRecord.enrollments?.filter((item) => item.status === "PENDING").length ? <span className="notification-badge">{classRecord.enrollments.filter((item) => item.status === "PENDING").length}</span> : null}</button></div>
-            {showPending ? <PendingValidationList enrollments={(classRecord.enrollments || []).filter((item) => item.status === "PENDING")} onApprove={() => {}} onDecline={() => {}} /> : null}
+            {showPending ? <PendingValidationList enrollments={(classRecord.enrollments || []).filter((item) => item.status === "PENDING")} onApprove={(enrollmentId) => updatePending(enrollmentId, "APPROVED")} onDecline={(enrollmentId) => updatePending(enrollmentId, "DECLINED")} busyId={pendingBusyId} /> : null}
             <ModuleTabs active={activeModule} onChange={setActiveModule} />
             <Toast
               message={notice}
