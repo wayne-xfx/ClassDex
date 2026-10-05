@@ -76,6 +76,7 @@ model StudentProfile {
   recitations RecitationLog[]
   activityScores ActivityScore[]
   projectScores  ProjectScore[]
+  quizScores     QuizScore[]
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
 }
@@ -94,6 +95,7 @@ model Class {
   activities         Activity[]
   projects           Project[]
   roster             ClassRoster[]
+  quizSessions       QuizSession[]
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 }
@@ -121,6 +123,34 @@ model ClassRoster {
 
   @@unique([classId, studentId])
   @@index([classId])
+}
+
+model QuizSession {
+  id         String      @id @default(cuid())
+  classId    String
+  title      String
+  totalItems Int
+  date       DateTime    @default(now())
+  class      Class       @relation(fields: [classId], references: [id], onDelete: Cascade)
+  scores     QuizScore[]
+  createdAt  DateTime    @default(now())
+
+  @@index([classId, date])
+}
+
+model QuizScore {
+  id         String         @id @default(cuid())
+  sessionId  String
+  studentId  String
+  score      Int?
+  isAbsent   Boolean        @default(false)
+  session    QuizSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  studentProfile StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@unique([sessionId, studentId])
+  @@index([studentId])
 }
 
 model ClassSession {

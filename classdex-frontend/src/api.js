@@ -72,6 +72,9 @@ export const api = {
   deleteClassRosterEntry: (classId, entryId) => request(`/classes/${encodeURIComponent(classId)}/roster/${encodeURIComponent(entryId)}`, { method: "DELETE" }),
   pendingEnrollments: (classId) => request(`/classes/${encodeURIComponent(classId)}/pending`),
   updatePendingEnrollment: (classId, enrollmentId, status) => request(`/classes/${encodeURIComponent(classId)}/pending/${encodeURIComponent(enrollmentId)}`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  quizSessions: (classId) => request(`/classes/${encodeURIComponent(classId)}/quizzes`),
+  createQuizSession: (classId, payload) => request(`/classes/${encodeURIComponent(classId)}/quizzes`, { method: "POST", body: JSON.stringify(payload) }),
+  setQuizScore: (sessionId, studentId, score) => request(`/quizzes/${encodeURIComponent(sessionId)}/scores/${encodeURIComponent(studentId)}`, { method: "PUT", body: JSON.stringify({ score }) }),
   studentClassRecords: (classId, studentId) =>
     request(`/classes/${encodeURIComponent(classId)}/students/${encodeURIComponent(studentId)}/records`),
   todaySession: (id) =>

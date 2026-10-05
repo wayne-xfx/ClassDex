@@ -621,6 +621,39 @@ app.patch("/api/classes/:id/pending/:enrollmentId", requireAuth, requireRole("FA
   } catch (error) { return res.status(500).json({ message: "Unable to update pending request." }); }
 });
 
+app.get("/api/classes/:id/quizzes", requireAuth, requireRole("FACULTY"), async (req, res) => {
+  try {
+    if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
+    const sessions = await prisma.quizSession.findMany({ where: { classId: req.params.id }, include: { scores: true }, orderBy: { date: "desc" } });
+    return res.json({ sessions });
+  } catch (error) { return res.status(500).json({ message: "Unable to load quiz sessions." }); }
+});
+
+app.post("/api/classes/:id/quizzes", requireAuth, requireRole("FACULTY"), async (req, res) => {
+  const title = String(req.body?.title || "").trim();
+  const totalItems = Number(req.body?.totalItems);
+  if (!title || !Number.isInteger(totalItems) || totalItems < 1) return res.status(400).json({ message: "Quiz title and a positive whole-number total are required." });
+  try {
+    if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
+    const session = await prisma.quizSession.create({ data: { classId: req.params.id, title, totalItems } });
+    return res.status(201).json({ session });
+  } catch (error) { return res.status(500).json({ message: "Unable to create quiz session." }); }
+});
+
+app.put("/api/quizzes/:sessionId/scores/:studentId", requireAuth, requireRole("FACULTY"), async (req, res) => {
+  const score = Number(req.body?.score);
+  if (!Number.isInteger(score) || score < 0) return res.status(400).json({ message: "Score must be a non-negative whole number." });
+  try {
+    const session = await prisma.quizSession.findFirst({ where: { id: req.params.sessionId, class: { is: { facultyId: req.session.userId } } } });
+    if (!session) return res.status(404).json({ message: "Quiz session not found." });
+    if (score > session.totalItems) return res.status(400).json({ message: `Score cannot be higher than ${session.totalItems}.` });
+    const enrollment = await prisma.classEnrollment.findFirst({ where: { classId: session.classId, studentProfileId: req.params.studentId, status: "APPROVED" } });
+    if (!enrollment) return res.status(404).json({ message: "Student is not approved for this class." });
+    const saved = await prisma.quizScore.upsert({ where: { sessionId_studentId: { sessionId: session.id, studentId: req.params.studentId } }, create: { sessionId: session.id, studentId: req.params.studentId, score }, update: { score, isAbsent: false } });
+    return res.json({ score: saved });
+  } catch (error) { return res.status(500).json({ message: "Unable to save quiz score." }); }
+});
+
 app.get(
   "/api/classes/:id",
   requireAuth,

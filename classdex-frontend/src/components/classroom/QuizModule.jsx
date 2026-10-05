@@ -1,24 +1,30 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Icon from "../Icon";
+import { api } from "../../api";
 
-export default function QuizModule({ students = [], onCreateSession, onSaveScore }) {
+export default function QuizModule({ classId, students = [] }) {
   const [title, setTitle] = useState("");
   const [totalItems, setTotalItems] = useState(10);
   const [scores, setScores] = useState({});
   const [sessionOpen, setSessionOpen] = useState(false);
   const [error, setError] = useState("");
+  const [sessionId, setSessionId] = useState(null);
+
+  useEffect(() => { let active = true; api.quizSessions(classId).then(({ sessions }) => { const latest = sessions[0]; if (active && latest) { setSessionId(latest.id); setTitle(latest.title); setTotalItems(latest.totalItems); setScores(Object.fromEntries(latest.scores.map((item) => [item.studentId, item.score ?? ""]))); setSessionOpen(true); } }).catch((loadError) => { if (active) setError(loadError.message); }); return () => { active = false; }; }, [classId]);
 
   function openSession(event) {
     event.preventDefault();
     if (!title.trim() || !Number.isInteger(Number(totalItems)) || Number(totalItems) < 1) { setError("Enter a quiz title and a positive whole-number item total."); return; }
-    setError(""); setSessionOpen(true); onCreateSession?.({ title: title.trim(), totalItems: Number(totalItems) });
+    setError("");
+    api.createQuizSession(classId, { title: title.trim(), totalItems: Number(totalItems) }).then(({ session }) => { setSessionId(session.id); setSessionOpen(true); }).catch((createError) => setError(createError.message));
   }
 
   function updateScore(studentId, value) {
     if (value === "") { setScores((current) => ({ ...current, [studentId]: "" })); return; }
     const next = Number(value);
     if (!Number.isInteger(next) || next < 0 || next > Number(totalItems)) { setError(`Scores must be whole numbers from 0 to ${totalItems}.`); return; }
-    setError(""); setScores((current) => ({ ...current, [studentId]: next })); onSaveScore?.(studentId, next);
+    setError(""); setScores((current) => ({ ...current, [studentId]: next }));
+    if (sessionId) api.setQuizScore(sessionId, studentId, next).catch((saveError) => setError(saveError.message));
   }
 
   return <div className="quiz-module">
