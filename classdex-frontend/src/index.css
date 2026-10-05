@@ -44,6 +44,17 @@
   --shadow-soft: 0 18px 50px rgba(0, 0, 0, 0.25);
 }
 
+:root {
+  --surface-card: var(--card);
+  --surface-muted: color-mix(in srgb, var(--paper) 72%, var(--card));
+  --border-color: var(--line);
+  --text-primary: var(--ink);
+  --text-muted: var(--muted);
+  --success: var(--accent-present);
+  --danger: var(--accent-red);
+  --accent-blue: var(--royal);
+}
+
 @theme {
   --color-navy: var(--navy);
   --color-royal: var(--royal);
@@ -5366,6 +5377,9 @@ textarea {
 .roster-row-error { color: var(--danger, #b42318); font-size: .82rem; }
 .roster-row-valid { color: var(--success, #16794b); font-size: .82rem; }
 .roster-empty { margin-top: .75rem; min-height: 12rem; }
+.pending-drawer { color: var(--text-primary); background: var(--surface-card); border-left: 1px solid var(--border-color); }
+.pending-drawer .pending-heading { color: var(--text-primary); background: var(--surface-card); border-bottom: 1px solid var(--border-color); }
+.quiz-attendance-prompt { align-content: center; }
 @media (max-width: 800px) { .roster-input-grid, .roster-entry-form { grid-template-columns: 1fr; } .roster-manager-heading { flex-direction: column; } }
 .student-list-manager { margin: 1.5rem 0 2rem; padding: 1.5rem; }
 .student-list-manager-heading, .student-list-preview-heading { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
