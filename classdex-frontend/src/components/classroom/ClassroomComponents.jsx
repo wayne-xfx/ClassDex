@@ -17,11 +17,11 @@ const DETAIL_STATUS_LABELS = {
 export function ModuleTabs({ active, onChange }) {
   const tabRefs = useRef([]);
   const tabs = [
-    { id: "attendance", label: "Attendance", icon: "check" },
-    { id: "recitation", label: "Recitation", icon: "user" },
-    { id: "activities", label: "Activities", icon: "book" },
-    { id: "projects", label: "Projects", icon: "book" },
-    { id: "quiz", label: "Quiz", icon: "book" },
+    { id: "attendance", label: "Attendance", icon: "clipboardCheck" },
+    { id: "recitation", label: "Recitation", icon: "mic" },
+    { id: "activities", label: "Activities", icon: "listChecks" },
+    { id: "projects", label: "Projects", icon: "folderKanban" },
+    { id: "quiz", label: "Quiz", icon: "brain" },
   ];
 
   function handleTabKeyDown(event, index) {
