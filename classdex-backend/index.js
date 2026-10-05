@@ -95,14 +95,14 @@ function normalizeClassCode(value) {
   return String(value || "").trim().toUpperCase();
 }
 
-const STUDENT_ID_PATTERN = /^\d{6}$/;
+const STUDENT_ID_PATTERN = /^\d{7}$/;
 
 function validateRosterEntry(entry) {
   const studentName = String(entry?.studentName ?? entry?.name ?? "").trim();
   const studentId = String(entry?.studentId ?? "").trim();
   const errors = [];
   if (!studentName) errors.push("Missing name");
-  if (!STUDENT_ID_PATTERN.test(studentId)) errors.push("Student ID must be exactly 6 digits");
+  if (!STUDENT_ID_PATTERN.test(studentId)) errors.push("Student ID must be exactly 7 digits");
   return { studentName, studentId, errors };
 }
 
@@ -362,10 +362,10 @@ app.put(
     if (!name) {
       return res.status(400).json({ message: "Full name is required." });
     }
-    if (!/^\d{6}$/.test(studentId)) {
+    if (!/^\d{7}$/.test(studentId)) {
       return res
         .status(400)
-        .json({ message: "Student ID must be exactly 6 digits." });
+        .json({ message: "Student ID must be exactly 7 digits." });
     }
     if (!isValidPhoto(photo)) {
       return res.status(400).json({
