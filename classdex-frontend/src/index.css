@@ -44,6 +44,17 @@
   --shadow-soft: 0 18px 50px rgba(0, 0, 0, 0.25);
 }
 
+:root {
+  --surface-card: var(--card);
+  --surface-muted: color-mix(in srgb, var(--paper) 72%, var(--card));
+  --border-color: var(--line);
+  --text-primary: var(--ink);
+  --text-muted: var(--muted);
+  --success: var(--accent-present);
+  --danger: var(--accent-red);
+  --accent-blue: var(--royal);
+}
+
 @theme {
   --color-navy: var(--navy);
   --color-royal: var(--royal);
