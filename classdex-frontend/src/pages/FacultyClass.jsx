@@ -47,6 +47,8 @@ export default function FacultyClass() {
   const [notice, setNotice] = useState("");
   const [activeModule, setActiveModule] = useState("deck");
   const [showPending, setShowPending] = useState(false);
+  const [pendingEnrollments, setPendingEnrollments] = useState([]);
+  const [pendingBusyId, setPendingBusyId] = useState(null);
   const [studentListCount, setStudentListCount] = useState(0);
   const [search, setSearch] = useState("");
   const [layout, setLayout] = useState("grid");
@@ -94,6 +96,8 @@ export default function FacultyClass() {
   }, [id]);
 
   useEffect(() => { let cancelled = false; api.classRoster(id).then(({ roster }) => { if (!cancelled) setStudentListCount(roster.length); }).catch(() => {}); return () => { cancelled = true; }; }, [id]);
+  const refreshPending = useCallback(() => api.pendingEnrollments(id).then(({ pending }) => setPendingEnrollments(pending)).catch(() => {}), [id]);
+  useEffect(() => { refreshPending(); const interval = window.setInterval(refreshPending, 30000); window.addEventListener("focus", refreshPending); return () => { window.clearInterval(interval); window.removeEventListener("focus", refreshPending); }; }, [refreshPending]);
 
   const dismissToast = useCallback(() => {
     setNotice("");
@@ -107,6 +111,7 @@ export default function FacultyClass() {
     setToastActionLabel(actionLabel);
     setToastAction(() => action);
   }
+  async function updatePending(enrollmentId, status) { setPendingBusyId(enrollmentId); try { await api.updatePendingEnrollment(id, enrollmentId, status); setPendingEnrollments((current) => current.filter((item) => item.id !== enrollmentId)); showToast(status === "APPROVED" ? "Student approved." : "Request declined."); } catch (error) { showToast(error.message, "error"); } finally { setPendingBusyId(null); } }
   const students = useMemo(
     () => (classRecord?.students || classRecord?.enrollments?.map(({ id: enrollmentId, studentProfile }) => ({
       ...studentProfile,
@@ -317,8 +322,8 @@ export default function FacultyClass() {
             </header>
 
             <div className="classroom-date"><Icon name="clock" size={16} /> {today}</div>
-            <div className="classroom-pending-action"><button type="button" className="button button-quiet" onClick={() => setShowPending((current) => !current)}><Icon name="users" size={16} /> Pending validation {classRecord.enrollments?.filter((item) => item.status === "PENDING").length ? <span className="notification-badge">{classRecord.enrollments.filter((item) => item.status === "PENDING").length}</span> : null}</button></div>
-            {showPending ? <PendingValidationList enrollments={(classRecord.enrollments || []).filter((item) => item.status === "PENDING")} onApprove={() => {}} onDecline={() => {}} /> : null}
+            <div className="classroom-pending-action"><button type="button" className="button button-quiet" onClick={() => setShowPending(true)}><Icon name="users" size={16} /> Pending {pendingEnrollments.length ? <span className="notification-badge">{pendingEnrollments.length}</span> : null}</button></div>
+            {showPending ? <PendingValidationList enrollments={pendingEnrollments} onApprove={(enrollmentId) => updatePending(enrollmentId, "APPROVED")} onDecline={(enrollmentId) => updatePending(enrollmentId, "DECLINED")} onClose={() => setShowPending(false)} busyId={pendingBusyId} /> : null}
             <ModuleTabs active={activeModule} onChange={setActiveModule} studentListCount={studentListCount} />
             <Toast
               message={notice}

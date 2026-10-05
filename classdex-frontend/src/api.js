@@ -70,6 +70,8 @@ export const api = {
   saveClassRoster: (id, entries) => request(`/classes/${encodeURIComponent(id)}/roster`, { method: "POST", body: JSON.stringify({ entries }) }),
   updateClassRosterEntry: (classId, entryId, payload) => request(`/classes/${encodeURIComponent(classId)}/roster/${encodeURIComponent(entryId)}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteClassRosterEntry: (classId, entryId) => request(`/classes/${encodeURIComponent(classId)}/roster/${encodeURIComponent(entryId)}`, { method: "DELETE" }),
+  pendingEnrollments: (classId) => request(`/classes/${encodeURIComponent(classId)}/pending`),
+  updatePendingEnrollment: (classId, enrollmentId, status) => request(`/classes/${encodeURIComponent(classId)}/pending/${encodeURIComponent(enrollmentId)}`, { method: "PATCH", body: JSON.stringify({ status }) }),
   studentClassRecords: (classId, studentId) =>
     request(`/classes/${encodeURIComponent(classId)}/students/${encodeURIComponent(studentId)}/records`),
   todaySession: (id) =>
