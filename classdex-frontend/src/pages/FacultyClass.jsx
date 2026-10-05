@@ -202,6 +202,13 @@ export default function FacultyClass() {
 
   async function copyInvite() {
     if (!classRecord) return;
+    try {
+      const { roster } = await api.classRoster(id);
+      if (!roster.length && !window.confirm("This class has no official roster. Unmatched submissions may be harder to validate. Share the invite anyway?")) return;
+    } catch (rosterError) {
+      showToast(rosterError.message, "error");
+      return;
+    }
     const link = `${window.location.origin}/join/${classRecord.classCode}`;
     try {
       await navigator.clipboard.writeText(link);
@@ -310,7 +317,7 @@ export default function FacultyClass() {
                 <Icon name="users" size={16} /> {showRosterManager ? "Hide official roster" : "Manage official roster"}
               </button>
             </div>
-            {showRosterManager ? <RosterManager onClose={() => setShowRosterManager(false)} /> : null}
+            {showRosterManager ? <RosterManager classId={id} onClose={() => setShowRosterManager(false)} /> : null}
             <ModuleTabs active={activeModule} onChange={setActiveModule} />
             <Toast
               message={notice}

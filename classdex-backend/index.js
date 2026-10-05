@@ -95,6 +95,31 @@ function normalizeClassCode(value) {
   return String(value || "").trim().toUpperCase();
 }
 
+const STUDENT_ID_PATTERN = /^\d{6}$/;
+
+function validateRosterEntry(entry) {
+  const studentName = String(entry?.studentName ?? entry?.name ?? "").trim();
+  const studentId = String(entry?.studentId ?? "").trim();
+  const errors = [];
+  if (!studentName) errors.push("Missing name");
+  if (!STUDENT_ID_PATTERN.test(studentId)) errors.push("Student ID must be exactly 6 digits");
+  return { studentName, studentId, errors };
+}
+
+function parseRosterText(text) {
+  return String(text || "").split(/\r?\n/).map((line, index) => {
+    const trimmed = line.trim();
+    if (!trimmed) return null;
+    const columns = trimmed.includes(",") ? trimmed.split(",") : trimmed.split(/\t|\s+-\s+/);
+    const entry = validateRosterEntry({ name: columns[0], studentId: columns[1] });
+    return { ...entry, line: index + 1 };
+  }).filter(Boolean);
+}
+
+async function findOwnedClass(classId, facultyId) {
+  return prisma.class.findFirst({ where: { id: classId, facultyId }, select: { id: true } });
+}
+
 function manilaDate(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Manila",
@@ -337,10 +362,10 @@ app.put(
     if (!name) {
       return res.status(400).json({ message: "Full name is required." });
     }
-    if (!/^\d{7}$/.test(studentId)) {
+    if (!/^\d{6}$/.test(studentId)) {
       return res
         .status(400)
-        .json({ message: "Student ID must be exactly 7 digits." });
+        .json({ message: "Student ID must be exactly 6 digits." });
     }
     if (!isValidPhoto(photo)) {
       return res.status(400).json({
@@ -493,6 +518,86 @@ app.post(
       }
       console.error("Class creation failed:", error);
       return res.status(500).json({ message: "Unable to create class." });
+    }
+  },
+);
+
+app.get(
+  "/api/classes/:id/roster",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
+      const roster = await prisma.classRoster.findMany({ where: { classId: req.params.id }, orderBy: [{ studentName: "asc" }, { studentId: "asc" }] });
+      return res.json({ roster });
+    } catch (error) {
+      console.error("Roster lookup failed:", error);
+      return res.status(500).json({ message: "Unable to load the official roster." });
+    }
+  },
+);
+
+app.post(
+  "/api/classes/:id/roster",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
+      const incoming = Array.isArray(req.body?.entries) ? req.body.entries.map(validateRosterEntry) : parseRosterText(req.body?.text);
+      const seen = new Set();
+      const invalid = incoming.map((entry, index) => {
+        const errors = [...entry.errors];
+        if (seen.has(entry.studentId)) errors.push("Duplicate student ID in upload");
+        if (entry.studentId) seen.add(entry.studentId);
+        return { ...entry, row: index + 1, errors };
+      }).filter((entry) => entry.errors.length);
+      if (!incoming.length) return res.status(400).json({ message: "Add at least one roster row." });
+      if (invalid.length) return res.status(400).json({ message: "Fix the invalid roster rows before saving.", invalidRows: invalid });
+      const roster = await prisma.$transaction(incoming.map((entry) => prisma.classRoster.upsert({
+        where: { classId_studentId: { classId: req.params.id, studentId: entry.studentId } },
+        create: { classId: req.params.id, studentName: entry.studentName, studentId: entry.studentId },
+        update: { studentName: entry.studentName },
+      })));
+      return res.status(201).json({ roster });
+    } catch (error) {
+      console.error("Roster save failed:", error);
+      return res.status(error.code === "P2002" ? 409 : 500).json({ message: error.code === "P2002" ? "That student ID is already in this roster." : "Unable to save the official roster." });
+    }
+  },
+);
+
+app.patch(
+  "/api/classes/:id/roster/:entryId",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    const entry = validateRosterEntry(req.body);
+    if (entry.errors.length) return res.status(400).json({ message: entry.errors.join("; ") });
+    try {
+      if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
+      const updated = await prisma.classRoster.updateMany({ where: { id: req.params.entryId, classId: req.params.id }, data: { studentName: entry.studentName, studentId: entry.studentId } });
+      if (!updated.count) return res.status(404).json({ message: "Roster entry not found." });
+      return res.json({ entry: await prisma.classRoster.findUnique({ where: { id: req.params.entryId } }) });
+    } catch (error) {
+      return res.status(error.code === "P2002" ? 409 : 500).json({ message: error.code === "P2002" ? "That student ID is already in this roster." : "Unable to update the roster entry." });
+    }
+  },
+);
+
+app.delete(
+  "/api/classes/:id/roster/:entryId",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
+      const deleted = await prisma.classRoster.deleteMany({ where: { id: req.params.entryId, classId: req.params.id } });
+      if (!deleted.count) return res.status(404).json({ message: "Roster entry not found." });
+      return res.status(204).end();
+    } catch (error) {
+      return res.status(500).json({ message: "Unable to remove the roster entry." });
     }
   },
 );

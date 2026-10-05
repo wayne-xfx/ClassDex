@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Icon from "../Icon";
+import { api } from "../../api";
 
 const ID_PATTERN = /^\d{6}$/;
 
@@ -22,12 +23,20 @@ function parseLines(value) {
   }).filter((row) => row.name || row.studentId);
 }
 
-export default function RosterManager({ onClose }) {
+export default function RosterManager({ classId, onClose }) {
   const [rows, setRows] = useState([]);
   const [name, setName] = useState("");
   const [studentId, setStudentId] = useState("");
   const [pasteValue, setPasteValue] = useState("");
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    api.classRoster(classId).then(({ roster }) => { if (active) setRows(roster.map((entry) => ({ id: entry.id, name: entry.studentName, studentId: entry.studentId }))); }).catch((error) => { if (active) setMessage(error.message); }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [classId]);
 
   const checkedRows = useMemo(() => validateRows(rows), [rows]);
   const invalidCount = checkedRows.filter((row) => row.errors.length).length;
@@ -48,6 +57,22 @@ export default function RosterManager({ onClose }) {
 
   function updateRow(index, field, value) {
     setRows((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: value } : row));
+  }
+
+  async function saveRoster() {
+    setSaving(true);
+    try {
+      await api.saveClassRoster(classId, checkedRows.map((row) => ({ studentName: row.name, studentId: row.studentId })));
+      setMessage("Official roster saved.");
+    } catch (error) { setMessage(error.message); } finally { setSaving(false); }
+  }
+
+  async function removeRow(index) {
+    const row = rows[index];
+    if (row.id) {
+      try { await api.deleteClassRosterEntry(classId, row.id); } catch (error) { setMessage(error.message); return; }
+    }
+    setRows((current) => current.filter((_, rowIndex) => rowIndex !== index));
   }
 
   function handleFile(event) {
@@ -90,8 +115,9 @@ export default function RosterManager({ onClose }) {
       </div>
 
       {message ? <p className="notice notice-info" role="status">{message}</p> : null}
-      <div className="roster-preview-heading"><div><h3>Roster preview</h3><span>{rows.length} {rows.length === 1 ? "row" : "rows"}{invalidCount ? ` · ${invalidCount} need${invalidCount === 1 ? "s" : ""} attention` : ""}</span></div><button type="button" className="button button-primary" disabled={!rows.length || invalidCount}>Save official roster</button></div>
-      {rows.length ? <div className="roster-table-wrap"><table className="roster-table"><thead><tr><th scope="col">Name</th><th scope="col">Student ID</th><th scope="col">Validation</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>{checkedRows.map((row, index) => <tr key={`${index}-${row.studentId}`}><td><input className="input" value={row.name} onChange={(event) => updateRow(index, "name", event.target.value)} /></td><td><input className="input" inputMode="numeric" maxLength={6} value={row.studentId} onChange={(event) => updateRow(index, "studentId", event.target.value.replace(/\D/g, "").slice(0, 6))} /></td><td>{row.errors.length ? <span className="roster-row-error">{row.errors.join(" · ")}</span> : <span className="roster-row-valid">Ready to save</span>}</td><td><button type="button" className="icon-button" aria-label={`Remove ${row.name || "row"}`} onClick={() => setRows((current) => current.filter((_, rowIndex) => rowIndex !== index))}>×</button></td></tr>)}</tbody></table></div> : <div className="empty-state roster-empty"><Icon name="users" /><strong>Your official roster is empty</strong><span>Add students above or paste a class list to begin.</span></div>}
+      {loading ? <div className="empty-state roster-empty" aria-label="Loading roster">Loading official roster…</div> : null}
+      <div className="roster-preview-heading"><div><h3>Roster preview</h3><span>{rows.length} {rows.length === 1 ? "row" : "rows"}{invalidCount ? ` · ${invalidCount} need${invalidCount === 1 ? "s" : ""} attention` : ""}</span></div><button type="button" className="button button-primary" onClick={saveRoster} disabled={saving || !rows.length || invalidCount}>{saving ? "Saving…" : "Save official roster"}</button></div>
+      {rows.length ? <div className="roster-table-wrap"><table className="roster-table"><thead><tr><th scope="col">Name</th><th scope="col">Student ID</th><th scope="col">Validation</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>{checkedRows.map((row, index) => <tr key={`${index}-${row.studentId}`}><td><input className="input" value={row.name} onChange={(event) => updateRow(index, "name", event.target.value)} /></td><td><input className="input" inputMode="numeric" maxLength={6} value={row.studentId} onChange={(event) => updateRow(index, "studentId", event.target.value.replace(/\D/g, "").slice(0, 6))} /></td><td>{row.errors.length ? <span className="roster-row-error">{row.errors.join(" · ")}</span> : <span className="roster-row-valid">Ready to save</span>}</td><td><button type="button" className="icon-button" aria-label={`Remove ${row.name || "row"}`} onClick={() => removeRow(index)}>×</button></td></tr>)}</tbody></table></div> : <div className="empty-state roster-empty"><Icon name="users" /><strong>Your official roster is empty</strong><span>Add students above or paste a class list to begin.</span></div>}
     </section>
   );
 }

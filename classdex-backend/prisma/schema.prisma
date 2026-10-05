@@ -87,6 +87,7 @@ model Class {
   sessions           ClassSession[]
   activities         Activity[]
   projects           Project[]
+  roster             ClassRoster[]
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 }
@@ -100,6 +101,19 @@ model ClassEnrollment {
   joinedAt         DateTime       @default(now())
 
   @@unique([studentProfileId, classId])
+}
+
+model ClassRoster {
+  id          String   @id @default(cuid())
+  classId     String
+  studentName String
+  studentId   String
+  class       Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([classId, studentId])
+  @@index([classId])
 }
 
 model ClassSession {
