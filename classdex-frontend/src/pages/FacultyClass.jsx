@@ -14,8 +14,8 @@ import { compareStudentsByLastName } from "../components/classroom/studentNames"
 import AttendanceModule from "../components/classroom/AttendanceModule";
 import RecitationModule from "../components/classroom/RecitationModule";
 import { ActivitiesModule, ProjectsModule } from "../components/classroom/ScoringModules";
-import RosterManager from "../components/classroom/RosterManager";
 import PendingValidationList from "../components/classroom/PendingValidationList";
+import StudentListManager from "../components/classroom/StudentListManager";
 import { api } from "../api";
 
 const MODULE_LABELS = {
@@ -25,6 +25,7 @@ const MODULE_LABELS = {
   activities: "Activities",
   projects: "Projects",
   quiz: "Quiz",
+  "student-list": "Student List",
 };
 
 function toRecitationCall(log) {
@@ -45,9 +46,10 @@ export default function FacultyClass() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [activeModule, setActiveModule] = useState("deck");
-  const [showRosterManager, setShowRosterManager] = useState(false);
   const [showPending, setShowPending] = useState(false);
+  const [pendingEnrollments, setPendingEnrollments] = useState([]);
   const [pendingBusyId, setPendingBusyId] = useState(null);
+  const [studentListCount, setStudentListCount] = useState(0);
   const [search, setSearch] = useState("");
   const [layout, setLayout] = useState("grid");
   const [attendanceOverrides, setAttendanceOverrides] = useState({});
@@ -93,6 +95,10 @@ export default function FacultyClass() {
     };
   }, [id]);
 
+  useEffect(() => { let cancelled = false; api.classRoster(id).then(({ roster }) => { if (!cancelled) setStudentListCount(roster.length); }).catch(() => {}); return () => { cancelled = true; }; }, [id]);
+  const refreshPending = useCallback(() => api.pendingEnrollments(id).then(({ pending }) => setPendingEnrollments(pending)).catch(() => {}), [id]);
+  useEffect(() => { refreshPending(); const interval = window.setInterval(refreshPending, 30000); window.addEventListener("focus", refreshPending); return () => { window.clearInterval(interval); window.removeEventListener("focus", refreshPending); }; }, [refreshPending]);
+
   const dismissToast = useCallback(() => {
     setNotice("");
     setToastAction(null);
@@ -105,6 +111,7 @@ export default function FacultyClass() {
     setToastActionLabel(actionLabel);
     setToastAction(() => action);
   }
+  async function updatePending(enrollmentId, status) { setPendingBusyId(enrollmentId); try { await api.updatePendingEnrollment(id, enrollmentId, status); setPendingEnrollments((current) => current.filter((item) => item.id !== enrollmentId)); showToast(status === "APPROVED" ? "Student approved." : "Request declined."); } catch (error) { showToast(error.message, "error"); } finally { setPendingBusyId(null); } }
   const students = useMemo(
     () => (classRecord?.students || classRecord?.enrollments?.map(({ id: enrollmentId, studentProfile }) => ({
       ...studentProfile,
@@ -207,7 +214,7 @@ export default function FacultyClass() {
     if (!classRecord) return;
     try {
       const { roster } = await api.classRoster(id);
-      if (!roster.length && !window.confirm("This class has no official roster. Unmatched submissions may be harder to validate. Share the invite anyway?")) return;
+        if (!roster.length && !window.confirm("You haven't added a student list yet. Join requests that don't match a list entry will need your manual approval. Share the invite anyway?")) return;
     } catch (rosterError) {
       showToast(rosterError.message, "error");
       return;
@@ -219,15 +226,6 @@ export default function FacultyClass() {
     } catch {
       showToast(`Copy unavailable — share code ${classRecord.classCode} or link ${link}`, "error");
     }
-  }
-
-  async function updatePending(enrollmentId, status) {
-    setPendingBusyId(enrollmentId);
-    try {
-      const { enrollment } = await api.updatePendingEnrollment(id, enrollmentId, status);
-      setClassRecord((current) => ({ ...current, enrollments: (current.enrollments || []).map((item) => item.id === enrollmentId ? enrollment : item) }));
-      showToast(status === "APPROVED" ? "Student approved." : "Request declined.");
-    } catch (updateError) { showToast(updateError.message, "error"); } finally { setPendingBusyId(null); }
   }
 
   async function shuffleRecitation(skipCurrent = false, animate = recitationAnimationEnabled) {
@@ -315,7 +313,7 @@ export default function FacultyClass() {
               <div className="classroom-title">
                 <span className="eyebrow"><Icon name="book" /> Your classroom</span>
                 <h1>{classRecord.sectionName}</h1>
-                <p>{classRecord.description || "Your class roster, organized like a deck of index cards."}</p>
+                <p>{classRecord.description || "Your student list, organized like a deck of index cards."}</p>
               </div>
               <div className="classroom-meta">
                 <span className="class-code-pill"><span>CLASS CODE</span><strong>{classRecord.classCode}</strong></span>
@@ -324,15 +322,9 @@ export default function FacultyClass() {
             </header>
 
             <div className="classroom-date"><Icon name="clock" size={16} /> {today}</div>
-            <div className="classroom-roster-action">
-              <button type="button" className="button button-secondary" onClick={() => setShowRosterManager((current) => !current)}>
-                <Icon name="users" size={16} /> {showRosterManager ? "Hide official roster" : "Manage official roster"}
-              </button>
-            </div>
-            {showRosterManager ? <RosterManager classId={id} onClose={() => setShowRosterManager(false)} /> : null}
-            <div className="classroom-pending-action"><button type="button" className="button button-quiet" onClick={() => setShowPending((current) => !current)}><Icon name="users" size={16} /> Pending validation {classRecord.enrollments?.filter((item) => item.status === "PENDING").length ? <span className="notification-badge">{classRecord.enrollments.filter((item) => item.status === "PENDING").length}</span> : null}</button></div>
-            {showPending ? <PendingValidationList enrollments={(classRecord.enrollments || []).filter((item) => item.status === "PENDING")} onApprove={(enrollmentId) => updatePending(enrollmentId, "APPROVED")} onDecline={(enrollmentId) => updatePending(enrollmentId, "DECLINED")} busyId={pendingBusyId} /> : null}
-            <ModuleTabs active={activeModule} onChange={setActiveModule} />
+            <div className="classroom-pending-action"><button type="button" className="button button-quiet" onClick={() => setShowPending(true)}><Icon name="users" size={16} /> Pending {pendingEnrollments.length ? <span className="notification-badge">{pendingEnrollments.length}</span> : null}</button></div>
+            {showPending ? <PendingValidationList enrollments={pendingEnrollments} onApprove={(enrollmentId) => updatePending(enrollmentId, "APPROVED")} onDecline={(enrollmentId) => updatePending(enrollmentId, "DECLINED")} onClose={() => setShowPending(false)} busyId={pendingBusyId} /> : null}
+            <ModuleTabs active={activeModule} onChange={setActiveModule} studentListCount={studentListCount} />
             <Toast
               message={notice}
               type={toastType}
@@ -347,7 +339,7 @@ export default function FacultyClass() {
               aria-labelledby={activeModule === "deck" ? "module-deck-link" : `module-tab-${activeModule}`}
               className="classroom-module"
             >
-              {activeModule === "deck" ? (
+              {activeModule === "student-list" ? <StudentListManager classId={id} onCountChange={setStudentListCount} onClose={() => setActiveModule("deck")} /> : activeModule === "deck" ? (
                 <>
                   <div className="deck-toolbar">
                     <div className="deck-title">

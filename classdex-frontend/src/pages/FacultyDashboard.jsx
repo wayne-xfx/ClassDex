@@ -52,7 +52,7 @@ export default function FacultyDashboard() {
           eyebrow="Faculty workspace"
           icon="book"
           title={`Welcome back, ${profile?.name || user?.name?.split(" ")[0]}`}
-          description="All your classes, rosters, and invitations in one place."
+          description="All your classes, student lists, and invitations in one place."
           action={<Link to="/faculty/classes/new" className="button button-primary"><Icon name="plus" /> Create a class</Link>}
         />
 
@@ -102,7 +102,7 @@ export default function FacultyDashboard() {
           <section className="empty-state">
             <div className="empty-art"><Icon name="book" size={28} /></div>
             <h3>No classes yet</h3>
-            <p>Create your first class to start building your classroom roster.</p>
+            <p>Create your first class to start building your classroom student list.</p>
             <Link to="/faculty/classes/new" className="button button-primary"><Icon name="plus" /> Create your first class</Link>
           </section>
         ) : null}
