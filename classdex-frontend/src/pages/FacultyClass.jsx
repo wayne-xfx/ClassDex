@@ -15,6 +15,7 @@ import AttendanceModule from "../components/classroom/AttendanceModule";
 import RecitationModule from "../components/classroom/RecitationModule";
 import { ActivitiesModule, ProjectsModule } from "../components/classroom/ScoringModules";
 import RosterManager from "../components/classroom/RosterManager";
+import PendingValidationList from "../components/classroom/PendingValidationList";
 import { api } from "../api";
 
 const MODULE_LABELS = {
@@ -45,6 +46,7 @@ export default function FacultyClass() {
   const [notice, setNotice] = useState("");
   const [activeModule, setActiveModule] = useState("deck");
   const [showRosterManager, setShowRosterManager] = useState(false);
+  const [showPending, setShowPending] = useState(false);
   const [search, setSearch] = useState("");
   const [layout, setLayout] = useState("grid");
   const [attendanceOverrides, setAttendanceOverrides] = useState({});
@@ -318,6 +320,8 @@ export default function FacultyClass() {
               </button>
             </div>
             {showRosterManager ? <RosterManager classId={id} onClose={() => setShowRosterManager(false)} /> : null}
+            <div className="classroom-pending-action"><button type="button" className="button button-quiet" onClick={() => setShowPending((current) => !current)}><Icon name="users" size={16} /> Pending validation {classRecord.enrollments?.filter((item) => item.status === "PENDING").length ? <span className="notification-badge">{classRecord.enrollments.filter((item) => item.status === "PENDING").length}</span> : null}</button></div>
+            {showPending ? <PendingValidationList enrollments={(classRecord.enrollments || []).filter((item) => item.status === "PENDING")} onApprove={() => {}} onDecline={() => {}} /> : null}
             <ModuleTabs active={activeModule} onChange={setActiveModule} />
             <Toast
               message={notice}
