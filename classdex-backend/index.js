@@ -625,7 +625,12 @@ app.get("/api/classes/:id/quizzes", requireAuth, requireRole("FACULTY"), async (
   try {
     if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
     const sessions = await prisma.quizSession.findMany({ where: { classId: req.params.id }, include: { scores: true }, orderBy: { date: "desc" } });
-    return res.json({ sessions });
+    const enriched = await Promise.all(sessions.map(async (session) => {
+      const attendanceSession = await prisma.classSession.findUnique({ where: { classId_date: { classId: req.params.id, date: new Date(new Date(session.date).toISOString().slice(0, 10)) } }, select: { attendance: { select: { studentId: true, status: true } } } });
+      const absentIds = new Set((attendanceSession?.attendance || []).filter((record) => record.status === "ABSENT").map((record) => record.studentId));
+      return { ...session, scores: session.scores.map((score) => ({ ...score, isAbsent: score.isAbsent || absentIds.has(score.studentId), score: absentIds.has(score.studentId) ? null : score.score })) };
+    }));
+    return res.json({ sessions: enriched });
   } catch (error) { return res.status(500).json({ message: "Unable to load quiz sessions." }); }
 });
 
@@ -649,6 +654,11 @@ app.put("/api/quizzes/:sessionId/scores/:studentId", requireAuth, requireRole("F
     if (score > session.totalItems) return res.status(400).json({ message: `Score cannot be higher than ${session.totalItems}.` });
     const enrollment = await prisma.classEnrollment.findFirst({ where: { classId: session.classId, studentProfileId: req.params.studentId, status: "APPROVED" } });
     if (!enrollment) return res.status(404).json({ message: "Student is not approved for this class." });
+    const attendanceSession = await prisma.classSession.findUnique({ where: { classId_date: { classId: session.classId, date: new Date(new Date(session.date).toISOString().slice(0, 10)) } }, select: { attendance: { where: { studentId: req.params.studentId }, select: { status: true } } } });
+    if (attendanceSession?.attendance[0]?.status === "ABSENT") {
+      await prisma.quizScore.upsert({ where: { sessionId_studentId: { sessionId: session.id, studentId: req.params.studentId } }, create: { sessionId: session.id, studentId: req.params.studentId, score: null, isAbsent: true }, update: { score: null, isAbsent: true } });
+      return res.status(409).json({ message: "This student is absent and cannot be scored." });
+    }
     const saved = await prisma.quizScore.upsert({ where: { sessionId_studentId: { sessionId: session.id, studentId: req.params.studentId } }, create: { sessionId: session.id, studentId: req.params.studentId, score }, update: { score, isAbsent: false } });
     return res.json({ score: saved });
   } catch (error) { return res.status(500).json({ message: "Unable to save quiz score." }); }
