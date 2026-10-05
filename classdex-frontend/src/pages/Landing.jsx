@@ -14,7 +14,7 @@ const FEATURES = [
     number: "02",
     icon: "check",
     title: "Attendance that keeps moving.",
-    description: "Mark students one by one or update the full roster with clear, editable records.",
+    description: "Mark students one by one or update the full student list with clear, editable records.",
   },
   {
     number: "03",
@@ -45,7 +45,7 @@ export default function Landing() {
             <span className="landing-kicker"><span /> Made for Leyte Normal University</span>
             <h1>Make every student <span>count.</span></h1>
             <p className="landing-lead">
-              Your classroom, your roster, your call. ClassDex turns the familiar index card into a better way to manage class and bring every voice into the room.
+              Your classroom, your student list, your call. ClassDex turns the familiar index card into a better way to manage class and bring every voice into the room.
             </p>
             <div className="landing-ctas">
               <Link to="/register" className="button button-primary landing-cta-primary">

@@ -134,7 +134,7 @@ export default function AttendanceModule({
               <strong>{students.length - counts.UNMARKED} of {students.length} students marked</strong>
             </div>
             <button type="button" className="button button-secondary" onClick={() => setTakingAttendance(false)}>
-              Back to roster
+              Back to student list
             </button>
           </div>
           {currentStudent ? (
@@ -177,10 +177,10 @@ export default function AttendanceModule({
               <span><Icon name="check" size={27} /></span>
               <h3>{students.length ? "Attendance complete" : "No students in this class yet"}</h3>
               <p>{students.length
-                ? "Every student has an attendance status. You can still change any status from the roster."
+                ? "Every student has an attendance status. You can still change any status from the student list."
                 : "Students will appear here when they join the class."}</p>
               <button type="button" className="button button-primary" onClick={() => setTakingAttendance(false)}>
-                Return to roster
+                Return to student list
               </button>
             </div>
           )}
@@ -191,7 +191,7 @@ export default function AttendanceModule({
             <div className="deck-actions attendance-roster-actions">
               <label className="deck-search">
                 <Icon name="search" size={17} />
-                <span className="sr-only">Search attendance by name or student ID</span>
+                        <span className="sr-only">Search student list by name or student ID</span>
                 <input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
@@ -199,7 +199,7 @@ export default function AttendanceModule({
                   type="search"
                 />
               </label>
-              <div className="layout-toggle" role="group" aria-label="Attendance roster layout">
+                        <div className="layout-toggle" role="group" aria-label="Attendance student list layout">
                 <button
                   type="button"
                   className={layout === "grid" ? "is-active" : ""}

@@ -207,7 +207,7 @@ export default function FacultyClass() {
     if (!classRecord) return;
     try {
       const { roster } = await api.classRoster(id);
-      if (!roster.length && !window.confirm("This class has no official roster. Unmatched submissions may be harder to validate. Share the invite anyway?")) return;
+        if (!roster.length && !window.confirm("You haven't added a student list yet. Join requests that don't match a list entry will need your manual approval. Share the invite anyway?")) return;
     } catch (rosterError) {
       showToast(rosterError.message, "error");
       return;
@@ -306,7 +306,7 @@ export default function FacultyClass() {
               <div className="classroom-title">
                 <span className="eyebrow"><Icon name="book" /> Your classroom</span>
                 <h1>{classRecord.sectionName}</h1>
-                <p>{classRecord.description || "Your class roster, organized like a deck of index cards."}</p>
+                <p>{classRecord.description || "Your student list, organized like a deck of index cards."}</p>
               </div>
               <div className="classroom-meta">
                 <span className="class-code-pill"><span>CLASS CODE</span><strong>{classRecord.classCode}</strong></span>
