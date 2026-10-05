@@ -5362,6 +5362,11 @@ textarea {
 .pending-actions { display: flex; gap: .5rem; }
 .pending-decline { color: var(--danger, #b42318); }
 .pending-empty { min-height: 12rem; margin-top: 1rem; }
+.student-class-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: .4rem; margin-top: 1rem; padding-top: .85rem; border-top: 1px solid var(--border-color); }
+.student-class-summary span { display: grid; gap: .15rem; color: var(--text-muted); font-size: .68rem; text-transform: capitalize; }
+.student-class-summary b { color: var(--text-primary); font-size: 1rem; }
+.enrolled-pill-pending { background: var(--accent-amber); color: #5e3900; }
+@media (max-width: 620px) { .student-class-summary { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 700px) { .classroom-pending-action { margin: 0 0 1rem; padding: 0; } .pending-row { align-items: flex-start; flex-wrap: wrap; } .pending-actions { width: 100%; } }
 .roster-manager { margin: 1.5rem 0 2rem; padding: 1.5rem; }
 .roster-manager-heading, .roster-preview-heading { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }

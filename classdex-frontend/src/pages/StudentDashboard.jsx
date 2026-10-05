@@ -6,6 +6,9 @@ import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { PageHeader } from "../components/DesignSystem";
 
+// Placeholder presentation data for SCRUM-39. Replace with dashboard aggregates in a later sprint.
+const MOCK_RECORD_SUMMARY = { attendance: "—", recitation: "—", activity: "—", project: "—" };
+
 export default function StudentDashboard() {
   const { user } = useAuth();
   const location = useLocation();
@@ -106,13 +109,16 @@ export default function StudentDashboard() {
                 <div className="code-chip">Code <b>{classRecord.classCode}</b></div>
                 <p className="class-schedule"><Icon name="clock" /> {classRecord.schedule || "Schedule not set"}</p>
                 <p className="faculty-byline"><Icon name="user" /> {classRecord.faculty?.name || "Faculty"}</p>
+                <div className="student-class-summary" aria-label="Class record summary">
+                  {Object.entries(MOCK_RECORD_SUMMARY).map(([label, value]) => <span key={label}><b>{value}</b>{label}</span>)}
+                </div>
               </article>
             ))}
           </div>
         ) : !loading && profile ? (
           <section className="empty-state">
             <div className="empty-art"><Icon name="users" size={28} /></div>
-            <h3>No classes joined yet</h3>
+            <h3>You haven’t joined any class yet</h3>
             <p>Enter an invite code above, or open the class link your faculty shared.</p>
           </section>
         ) : null}
