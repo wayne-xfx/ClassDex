@@ -5346,3 +5346,24 @@ textarea {
     padding: 4px;
   }
 }
+.classroom-roster-action { display: flex; justify-content: flex-end; margin: 1rem 0; }
+.roster-manager { margin: 1.5rem 0 2rem; padding: 1.5rem; }
+.roster-manager-heading, .roster-preview-heading { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
+.roster-manager-heading h2, .roster-preview-heading h3 { margin: .35rem 0; }
+.roster-manager-heading p { max-width: 46rem; margin: 0; color: var(--text-muted); }
+.roster-warning { display: flex; gap: .55rem; align-items: flex-start; margin: 1.25rem 0; }
+.roster-input-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; }
+.roster-entry-form { display: grid; grid-template-columns: 1fr 1fr auto; gap: .75rem; align-items: end; }
+.roster-entry-form .button { height: 2.75rem; }
+.roster-import-box { padding: 1rem; border: 1px dashed var(--border-color); border-radius: 1rem; }
+.roster-import-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.roster-preview-heading { align-items: center; margin-top: 1.5rem; }
+.roster-preview-heading span { color: var(--text-muted); font-size: .85rem; }
+.roster-table-wrap { overflow-x: auto; margin-top: .75rem; }
+.roster-table { width: 100%; border-collapse: collapse; }
+.roster-table th, .roster-table td { text-align: left; padding: .75rem; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
+.roster-table th { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
+.roster-row-error { color: var(--danger, #b42318); font-size: .82rem; }
+.roster-row-valid { color: var(--success, #16794b); font-size: .82rem; }
+.roster-empty { margin-top: .75rem; min-height: 12rem; }
+@media (max-width: 800px) { .roster-input-grid, .roster-entry-form { grid-template-columns: 1fr; } .roster-manager-heading { flex-direction: column; } }

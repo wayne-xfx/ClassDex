@@ -14,6 +14,7 @@ import { compareStudentsByLastName } from "../components/classroom/studentNames"
 import AttendanceModule from "../components/classroom/AttendanceModule";
 import RecitationModule from "../components/classroom/RecitationModule";
 import { ActivitiesModule, ProjectsModule } from "../components/classroom/ScoringModules";
+import RosterManager from "../components/classroom/RosterManager";
 import { api } from "../api";
 
 const MODULE_LABELS = {
@@ -43,6 +44,7 @@ export default function FacultyClass() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [activeModule, setActiveModule] = useState("deck");
+  const [showRosterManager, setShowRosterManager] = useState(false);
   const [search, setSearch] = useState("");
   const [layout, setLayout] = useState("grid");
   const [attendanceOverrides, setAttendanceOverrides] = useState({});
@@ -303,6 +305,12 @@ export default function FacultyClass() {
             </header>
 
             <div className="classroom-date"><Icon name="clock" size={16} /> {today}</div>
+            <div className="classroom-roster-action">
+              <button type="button" className="button button-secondary" onClick={() => setShowRosterManager((current) => !current)}>
+                <Icon name="users" size={16} /> {showRosterManager ? "Hide official roster" : "Manage official roster"}
+              </button>
+            </div>
+            {showRosterManager ? <RosterManager onClose={() => setShowRosterManager(false)} /> : null}
             <ModuleTabs active={activeModule} onChange={setActiveModule} />
             <Toast
               message={notice}
