@@ -5417,4 +5417,7 @@ textarea {
 .roster-row-error { color: var(--danger, #b42318); font-size: .82rem; }
 .roster-row-valid { color: var(--success, #16794b); font-size: .82rem; }
 .roster-empty { margin-top: .75rem; min-height: 12rem; }
+.pending-drawer { color: var(--text-primary); background: var(--surface-card); border-left: 1px solid var(--border-color); }
+.pending-drawer .pending-heading { color: var(--text-primary); background: var(--surface-card); border-bottom: 1px solid var(--border-color); }
+.quiz-attendance-prompt { align-content: center; }
 @media (max-width: 800px) { .roster-input-grid, .roster-entry-form { grid-template-columns: 1fr; } .roster-manager-heading { flex-direction: column; } }
