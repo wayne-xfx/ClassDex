@@ -28,6 +28,12 @@ enum ProjectType {
   FINALS
 }
 
+enum EnrollmentStatus {
+  APPROVED
+  PENDING
+  DECLINED
+}
+
 model User {
   id             String          @id @default(cuid())
   name           String
@@ -99,6 +105,7 @@ model ClassEnrollment {
   studentProfile   StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
   class            Class          @relation(fields: [classId], references: [id], onDelete: Cascade)
   joinedAt         DateTime       @default(now())
+  status           EnrollmentStatus @default(APPROVED)
 
   @@unique([studentProfileId, classId])
 }

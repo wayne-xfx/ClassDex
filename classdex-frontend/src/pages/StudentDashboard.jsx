@@ -42,13 +42,15 @@ export default function StudentDashboard() {
     setError("");
     setJoining(true);
     try {
-      await api.joinClass(classCode);
+      const joinResult = await api.joinClass(classCode);
       setNotice("You’ve joined the class. Welcome aboard!");
+      setNotice(joinResult.status === "PENDING" ? joinResult.message || "Waiting for instructor approval." : "You joined the class. Welcome aboard!");
       setClassCode("");
       const result = await api.studentClasses();
       setClasses(result.classes);
     } catch (joinError) {
-      setError(joinError.message);
+      if (joinError.status === "PENDING" || joinError.status === "APPROVED") setNotice(joinError.message);
+      else setError(joinError.message);
     } finally {
       setJoining(false);
     }
@@ -98,7 +100,7 @@ export default function StudentDashboard() {
           <div className="class-grid student-class-grid">
             {classes.map((classRecord, index) => (
               <article className="class-card" key={classRecord.id} style={{ "--card-accent": index % 2 ? "var(--accent-teal)" : "var(--accent-amber)" }}>
-                <div className="class-card-top"><span className="class-icon"><Icon name="book" /></span><span className="enrolled-pill">Enrolled</span></div>
+                <div className="class-card-top"><span className="class-icon"><Icon name="book" /></span><span className={`enrolled-pill ${classRecord.enrollmentStatus !== "APPROVED" ? "enrolled-pill-pending" : ""}`}>{classRecord.enrollmentStatus === "PENDING" ? "Pending approval" : classRecord.enrollmentStatus === "DECLINED" ? "Declined" : "Enrolled"}</span></div>
                 <p className="class-label">Section</p>
                 <h3>{classRecord.sectionName}</h3>
                 <div className="code-chip">Code <b>{classRecord.classCode}</b></div>

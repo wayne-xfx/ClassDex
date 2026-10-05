@@ -638,6 +638,7 @@ app.get(
         where: { id: req.params.id, facultyId: req.session.userId },
         include: {
           enrollments: {
+            where: { status: "APPROVED" },
             include: {
               studentProfile: {
                 select: {
@@ -739,6 +740,7 @@ app.get(
         where: {
           classId: classRecord.id,
           studentProfileId: req.params.studentId,
+          status: "APPROVED",
         },
         select: {
           studentProfile: {
@@ -1049,7 +1051,7 @@ app.get(
         return res.status(404).json({ message: "Activity not found." });
       }
       const enrollments = await prisma.classEnrollment.findMany({
-        where: { classId: activity.classId },
+        where: { classId: activity.classId, status: "APPROVED" },
         select: {
           studentProfile: {
             select: {
@@ -1286,7 +1288,7 @@ app.get(
         return res.status(404).json({ message: "Project not found." });
       }
       const enrollments = await prisma.classEnrollment.findMany({
-        where: { classId: project.classId },
+        where: { classId: project.classId, status: "APPROVED" },
         select: {
           studentProfile: {
             select: {
@@ -1699,7 +1701,7 @@ app.get(
           },
         },
       });
-      return res.json({ classes: profile?.enrollments.map((item) => item.class) || [] });
+      return res.json({ classes: profile?.enrollments.map((item) => ({ ...item.class, enrollmentStatus: item.status, joinedAt: item.joinedAt })) || [] });
     } catch (error) {
       console.error("Student classes lookup failed:", error);
       return res.status(500).json({ message: "Unable to load your classes." });
@@ -1742,17 +1744,24 @@ app.post(
         },
       });
       if (existingEnrollment) {
-        return res.status(409).json({ message: "You have already joined this class." });
+        if (existingEnrollment.status === "DECLINED") {
+          const resubmitted = await prisma.classEnrollment.update({ where: { id: existingEnrollment.id }, data: { status: "PENDING", joinedAt: new Date() }, include: { class: true } });
+          return res.status(201).json({ enrollment: resubmitted, status: "PENDING", message: "Your request was resubmitted for instructor approval." });
+        }
+        return res.status(409).json({ message: existingEnrollment.status === "PENDING" ? "Waiting for instructor approval." : "You have already joined this class.", enrollment: existingEnrollment, status: existingEnrollment.status });
       }
+
+      const rosterMatch = await prisma.classRoster.findUnique({ where: { classId_studentId: { classId: classRecord.id, studentId: profile.studentId } } });
 
       const enrollment = await prisma.classEnrollment.create({
         data: {
           studentProfileId: profile.id,
           classId: classRecord.id,
+          status: rosterMatch ? "APPROVED" : "PENDING",
         },
         include: { class: true },
       });
-      return res.status(201).json({ enrollment });
+      return res.status(201).json({ enrollment, status: enrollment.status, message: rosterMatch ? "You joined the class." : "Waiting for instructor approval." });
     } catch (error) {
       if (error.code === "P2002") {
         return res.status(409).json({ message: "You have already joined this class." });

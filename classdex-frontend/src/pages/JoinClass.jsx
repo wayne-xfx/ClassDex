@@ -17,10 +17,14 @@ export default function JoinClass() {
     setError("");
     setJoining(true);
     try {
-      const { enrollment } = await api.joinClass(classCode);
-      navigate("/student", { state: { notice: `You joined ${enrollment.class.sectionName}.` } });
+      const { enrollment, status, message } = await api.joinClass(classCode);
+      navigate("/student", { state: { notice: status === "PENDING" ? message || "Waiting for instructor approval." : `You joined ${enrollment.class.sectionName}.`, enrollmentStatus: status } });
     } catch (joinError) {
-      setError(joinError.message);
+      if (joinError.status === "PENDING" || joinError.status === "APPROVED") {
+        navigate("/student", { state: { notice: joinError.message, enrollmentStatus: joinError.status } });
+      } else {
+        setError(joinError.message);
+      }
     } finally {
       setJoining(false);
     }
