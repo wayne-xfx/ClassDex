@@ -5421,3 +5421,34 @@ textarea {
 .pending-drawer .pending-heading { color: var(--text-primary); background: var(--surface-card); border-bottom: 1px solid var(--border-color); }
 .quiz-attendance-prompt { align-content: center; }
 @media (max-width: 800px) { .roster-input-grid, .roster-entry-form { grid-template-columns: 1fr; } .roster-manager-heading { flex-direction: column; } }
+
+@media (max-width: 760px) {
+  .student-list-manager { min-width: 0; padding: 1rem; }
+  .student-list-manager-heading,
+  .student-list-preview-heading { flex-direction: column; align-items: stretch; }
+  .student-list-manager-heading .button,
+  .student-list-preview-heading .button { width: 100%; }
+  .student-list-input-grid,
+  .student-list-entry-form { grid-template-columns: minmax(0, 1fr); }
+  .student-list-entry-form .button { width: 100%; }
+  .student-list-import-box { min-width: 0; }
+  .student-list-import-actions { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .student-list-import-actions .button { width: 100%; justify-content: center; }
+  .student-list-table-wrap { margin-inline: -0.25rem; }
+}
+.student-list-manager { margin: 1.5rem 0 2rem; padding: 1.5rem; }
+.student-list-manager-heading, .student-list-preview-heading { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
+.student-list-manager-heading h2, .student-list-preview-heading h3 { margin: .35rem 0; }
+.student-list-manager-heading p { max-width: 46rem; margin: 0; color: var(--text-muted); }
+.student-list-warning { display: flex; gap: .55rem; align-items: flex-start; margin: 1.25rem 0; }
+.student-list-input-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; }
+.student-list-entry-form { display: grid; grid-template-columns: 1fr 1fr auto; gap: .75rem; align-items: end; }
+.student-list-import-box { padding: 1rem; border: 1px dashed var(--border-color); border-radius: 1rem; }
+.student-list-import-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.student-list-preview-heading { align-items: center; margin-top: 1.5rem; }
+.student-list-preview-heading span { color: var(--text-muted); font-size: .85rem; }
+.student-list-table-wrap { overflow-x: auto; margin-top: .75rem; }
+.student-list-table { width: 100%; border-collapse: collapse; }
+.student-list-table th, .student-list-table td { text-align: left; padding: .75rem; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
+.student-list-row-error { color: var(--danger, #b42318); font-size: .82rem; }.student-list-row-valid { color: var(--success, #16794b); font-size: .82rem; }.student-list-empty { margin-top: .75rem; min-height: 12rem; }
+@media (max-width: 800px) { .student-list-input-grid, .student-list-entry-form { grid-template-columns: 1fr; } .student-list-manager-heading { flex-direction: column; } }
