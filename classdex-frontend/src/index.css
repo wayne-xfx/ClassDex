@@ -5395,6 +5395,14 @@ textarea {
 .quiz-list { display: grid; gap: .65rem; }.quiz-list-row { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: .8rem; width: 100%; padding: 1rem; border: 1px solid var(--border-color); border-radius: .9rem; background: var(--surface-card); text-align: left; color: inherit; cursor: pointer; }.quiz-list-row:hover { border-color: var(--accent-blue, #3978d4); }.quiz-list-row span:nth-child(2) { display: grid; gap: .2rem; }.quiz-list-row small, .quiz-list-meta { color: var(--text-muted); font-size: .8rem; }.quiz-list-icon { display: grid; place-items: center; width: 2.5rem; height: 2.5rem; border-radius: .7rem; background: rgb(57 120 212 / 12%); color: var(--accent-blue, #3978d4); }.quiz-editor-toolbar, .quiz-editor-actions { display: flex; align-items: center; gap: .75rem; }.quiz-editor-toolbar { justify-content: space-between; }.quiz-saved { color: var(--success, #16794b); font-size: .85rem; }.quiz-unsaved { color: var(--accent-amber, #9a6700); font-size: .85rem; }.quiz-editor-fields { display: grid; grid-template-columns: 2fr 1fr; gap: .8rem; }.quiz-editor-actions { justify-content: flex-end; }.module-tabs { overflow-x: auto; scrollbar-width: thin; }
 @media (max-width: 700px) { .quiz-session-form { grid-template-columns: 1fr; } .quiz-heading { flex-direction: column; } }
 @media (max-width: 620px) { .quiz-list-row { grid-template-columns: auto 1fr auto; }.quiz-list-meta { display: none; }.quiz-editor-fields { grid-template-columns: 1fr; } }
+
+@media (max-width: 760px) {
+  .quiz-editor-toolbar { flex-wrap: wrap; }
+  .quiz-editor-toolbar > :first-child { flex: 1 1 100%; }
+  .quiz-editor-fields { grid-template-columns: minmax(0, 1fr); }
+  .quiz-card-grid { grid-template-columns: minmax(0, 1fr); }
+  .quiz-student-card { min-width: 0; }
+}
 .enrolled-pill-pending { background: var(--accent-amber); color: #5e3900; }
 @media (max-width: 620px) { .student-class-summary { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 700px) { .classroom-pending-action { margin: 0 0 1rem; padding: 0; } .pending-row { align-items: flex-start; flex-wrap: wrap; } .pending-actions { width: 100%; } }
