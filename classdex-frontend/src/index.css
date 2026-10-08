@@ -5401,6 +5401,21 @@ textarea {
 .pending-drawer .pending-heading { color: var(--text-primary); background: var(--surface-card); border-bottom: 1px solid var(--border-color); }
 .quiz-attendance-prompt { align-content: center; }
 @media (max-width: 800px) { .roster-input-grid, .roster-entry-form { grid-template-columns: 1fr; } .roster-manager-heading { flex-direction: column; } }
+
+@media (max-width: 760px) {
+  .student-list-manager { min-width: 0; padding: 1rem; }
+  .student-list-manager-heading,
+  .student-list-preview-heading { flex-direction: column; align-items: stretch; }
+  .student-list-manager-heading .button,
+  .student-list-preview-heading .button { width: 100%; }
+  .student-list-input-grid,
+  .student-list-entry-form { grid-template-columns: minmax(0, 1fr); }
+  .student-list-entry-form .button { width: 100%; }
+  .student-list-import-box { min-width: 0; }
+  .student-list-import-actions { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .student-list-import-actions .button { width: 100%; justify-content: center; }
+  .student-list-table-wrap { margin-inline: -0.25rem; }
+}
 .student-list-manager { margin: 1.5rem 0 2rem; padding: 1.5rem; }
 .student-list-manager-heading, .student-list-preview-heading { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
 .student-list-manager-heading h2, .student-list-preview-heading h3 { margin: .35rem 0; }
