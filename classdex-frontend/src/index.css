@@ -5406,6 +5406,19 @@ textarea {
 .enrolled-pill-pending { background: var(--accent-amber); color: #5e3900; }
 @media (max-width: 620px) { .student-class-summary { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 700px) { .classroom-pending-action { margin: 0 0 1rem; padding: 0; } .pending-row { align-items: flex-start; flex-wrap: wrap; } .pending-actions { width: 100%; } }
+
+/* Final mobile overrides follow the legacy Student List rules so the compact
+   faculty layout cannot be re-expanded by later desktop declarations. */
+@media (max-width: 760px) {
+  .student-list-manager-heading,
+  .student-list-preview-heading { flex-direction: column; align-items: stretch; }
+  .student-list-input-grid,
+  .student-list-entry-form { grid-template-columns: minmax(0, 1fr); }
+  .student-list-import-actions { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .student-list-import-actions .button,
+  .student-list-entry-form .button,
+  .student-list-preview-heading .button { width: 100%; justify-content: center; }
+}
 .roster-manager { margin: 1.5rem 0 2rem; padding: 1.5rem; }
 .roster-manager-heading, .roster-preview-heading { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
 .roster-manager-heading h2, .roster-preview-heading h3 { margin: .35rem 0; }
