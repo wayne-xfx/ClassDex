@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import Icon from "../components/Icon";
+import RecaptchaWidget from "../components/RecaptchaWidget";
 import { api } from "../api";
 import { PageHeader } from "../components/DesignSystem";
 
@@ -11,13 +12,18 @@ export default function JoinClass() {
   const [classCode, setClassCode] = useState(inviteCode.toUpperCase());
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState("");
+  const [recaptchaToken, setRecaptchaToken] = useState("");
 
   async function handleSubmit(event) {
     event.preventDefault();
     setError("");
+    if (!recaptchaToken) {
+      setError("Please complete the security check.");
+      return;
+    }
     setJoining(true);
     try {
-      const { enrollment, status, message } = await api.joinClass(classCode);
+      const { enrollment, status, message } = await api.joinClass(classCode, recaptchaToken);
       navigate("/student", { state: { notice: status === "PENDING" ? message || "Waiting for instructor approval." : `You joined ${enrollment.class.sectionName}.`, enrollmentStatus: status } });
     } catch (joinError) {
       if (joinError.status === "PENDING" || joinError.status === "APPROVED") {
@@ -44,6 +50,7 @@ export default function JoinClass() {
             <span>Class invite code <b>*</b></span>
             <input className="input code-input" autoFocus required value={classCode} onChange={(event) => setClassCode(event.target.value.toUpperCase())} placeholder="Enter class code" />
           </label>
+          <RecaptchaWidget onToken={setRecaptchaToken} />
           {error ? <p className="notice notice-error" role="alert">{error}</p> : null}
           <div className="form-actions">
             <Link to="/student" className="button button-quiet">Back to dashboard</Link>

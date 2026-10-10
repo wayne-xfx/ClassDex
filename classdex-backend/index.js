@@ -7,6 +7,7 @@ const { randomBytes } = require("node:crypto");
 const { prisma } = require("./db");
 const { applyGracePeriod } = require("./attendance");
 const { eligibleCandidates, selectRecitationCandidate } = require("./recitation");
+const { verifyRecaptchaToken } = require("./recaptcha");
 const {
   isValidScore,
   syncAttendanceScoreAbsence,
@@ -95,6 +96,15 @@ function normalizeClassCode(value) {
   return String(value || "").trim().toUpperCase();
 }
 
+async function requireRecaptcha(req, res) {
+  const verified = await verifyRecaptchaToken(req.body?.recaptchaToken, req.ip);
+  if (!verified) {
+    res.status(400).json({ message: "Please complete the security check and try again." });
+    return false;
+  }
+  return true;
+}
+
 const STUDENT_ID_PATTERN = /^\d{7}$/;
 
 function validateRosterEntry(entry) {
@@ -152,6 +162,9 @@ app.get("/api/status", (_req, res) => {
 
 app.post("/api/auth/register", async (req, res) => {
   try {
+    if (!(await requireRecaptcha(req, res))) {
+      return;
+    }
     const name = String(req.body?.name || "").trim();
     const email = String(req.body?.email || "").trim().toLowerCase();
     const password = String(req.body?.password || "");
@@ -1806,6 +1819,9 @@ app.post(
   requireAuth,
   requireRole("STUDENT"),
   async (req, res) => {
+    if (!(await requireRecaptcha(req, res))) {
+      return;
+    }
     const classCode = normalizeClassCode(req.body?.classCode);
     if (!classCode) {
       return res.status(400).json({ message: "Enter a class code or open an invite link." });
