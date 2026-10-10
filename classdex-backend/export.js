@@ -140,8 +140,119 @@ function buildExcelWorkbook(classRecord) {
   return XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
 }
 
+function csvEscape(value) {
+  const sanitized = sanitizeExportValue(value);
+  const text = sanitized === null || sanitized === undefined ? "" : String(sanitized);
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function rowsToCsv(headers, rows) {
+  const lines = [headers.map(csvEscape).join(",")];
+  for (const row of rows) {
+    lines.push(headers.map((header) => csvEscape(row[header] ?? "")).join(","));
+  }
+  return `${lines.join("\r\n")}\r\n`;
+}
+
+function buildCsvExport(classRecord) {
+  const rows = [];
+  rows.push({
+    recordType: "Overview",
+    field: "Class name",
+    value: classRecord.sectionName,
+  });
+  rows.push({
+    recordType: "Overview",
+    field: "Class code",
+    value: classRecord.classCode,
+  });
+  rows.push({
+    recordType: "Overview",
+    field: "Faculty",
+    value: classRecord.faculty?.name || "",
+  });
+
+  for (const student of buildStudentListRows(classRecord.enrollments)) {
+    rows.push({
+      recordType: "Student List",
+      name: student.name,
+      studentId: student.studentId,
+      email: student.email,
+      program: student.program,
+      section: student.section,
+      status: student.status,
+      date: student.joinedAt,
+    });
+  }
+
+  for (const attendance of buildAttendanceRows(classRecord.sessions)) {
+    rows.push({
+      recordType: "Attendance",
+      date: attendance.date,
+      name: attendance.studentName,
+      studentId: attendance.studentId,
+      status: attendance.status,
+      score: "",
+      notes: attendance.markedAt,
+    });
+  }
+
+  for (const recitation of buildRecitationRows(classRecord.sessions)) {
+    rows.push({
+      recordType: "Recitation",
+      date: recitation.date,
+      name: recitation.studentName,
+      studentId: recitation.studentId,
+      status: recitation.method,
+      score: recitation.score,
+      notes: recitation.calledAt,
+    });
+  }
+
+  for (const activity of buildActivityRows(classRecord.activities)) {
+    rows.push({
+      recordType: "Activities",
+      date: activity.date,
+      title: activity.title,
+      name: activity.studentName,
+      studentId: activity.studentId,
+      score: activity.score,
+      maxScore: activity.maxScore,
+    });
+  }
+
+  for (const project of buildProjectRows(classRecord.projects)) {
+    rows.push({
+      recordType: "Projects",
+      type: project.type,
+      name: project.studentName,
+      studentId: project.studentId,
+      score: project.score,
+      maxScore: project.maxScore,
+    });
+  }
+
+  for (const quiz of buildQuizRows(classRecord.quizSessions)) {
+    rows.push({
+      recordType: "Quizzes",
+      date: quiz.date,
+      title: quiz.title,
+      name: quiz.studentName,
+      studentId: quiz.studentId,
+      score: quiz.score,
+      maxScore: quiz.totalItems,
+    });
+  }
+
+  return rowsToCsv(
+    ["recordType", "field", "value", "name", "studentId", "email", "program", "section", "status", "date", "title", "type", "score", "maxScore", "notes"],
+    rows,
+  );
+}
+
 module.exports = {
   buildExcelWorkbook,
+  buildCsvExport,
   sanitizeExportValue,
   buildStudentListRows,
   buildAttendanceRows,
