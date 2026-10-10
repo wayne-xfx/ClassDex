@@ -116,6 +116,9 @@ export default function StudentDashboard() {
                 <div className="student-class-summary" aria-label="Class record summary">
                   <span><b>Open</b> record</span>
                 </div>
+                <Link to={`/student/classes/${classRecord.id}`} className="button button-secondary student-class-action">
+                  View class record <Icon name="arrow" />
+                </Link>
               </article>
             ))}
           </div>

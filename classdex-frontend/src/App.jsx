@@ -8,6 +8,7 @@ import JoinClass from "./pages/JoinClass";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import StudentClassRecord from "./pages/StudentClassRecord";
 import StudentDashboard from "./pages/StudentDashboard";
 import StudentProfile from "./pages/StudentProfile";
 
@@ -27,6 +28,7 @@ export default function App() {
       </Route>
       <Route element={<ProtectedRoute role="STUDENT" />}>
         <Route path="/student" element={<StudentDashboard />} />
+        <Route path="/student/classes/:id" element={<StudentClassRecord />} />
         <Route path="/student/profile" element={<StudentProfile />} />
         <Route path="/join" element={<JoinClass />} />
         <Route path="/join/:classCode" element={<JoinClass />} />

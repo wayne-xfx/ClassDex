@@ -5451,6 +5451,29 @@ textarea {
 .student-class-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: .4rem; margin-top: 1rem; padding-top: .85rem; border-top: 1px solid var(--border-color); }
 .student-class-summary span { display: grid; gap: .15rem; color: var(--text-muted); font-size: .68rem; text-transform: capitalize; }
 .student-class-summary b { color: var(--text-primary); font-size: 1rem; }
+.student-class-action { margin-top: 1rem; width: 100%; }
+.student-record-loading { display: grid; gap: 1rem; }
+.student-record-skeleton { height: 7rem; }
+.student-record-error { display: grid; gap: .85rem; padding: 1.5rem; }
+.student-record-hero { display: grid; gap: .8rem; margin-bottom: 1rem; padding: 1.25rem; }
+.student-record-meta { display: flex; gap: .5rem; flex-wrap: wrap; }
+.student-record-copy { margin: 0; color: var(--text-muted); max-width: 56rem; }
+.student-record-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .9rem; margin: 1rem 0 1.25rem; }
+.student-record-summary-card { display: grid; gap: .3rem; padding: 1rem; }
+.student-record-summary-card strong { font-size: 1.5rem; color: var(--navy); }
+.student-record-summary-card span:last-child { color: var(--text-muted); font-size: .84rem; }
+.student-record-summary-tone { width: 2.5rem; height: .32rem; border-radius: 999px; background: var(--accent-amber); }
+.student-record-summary-tone-present { background: var(--accent-present); }
+.student-record-summary-tone-late { background: var(--accent-amber); }
+.student-record-summary-tone-neutral { background: var(--royal); }
+.student-record-sections { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.student-record-section { display: grid; gap: 1rem; padding: 1rem; }
+.student-record-section-heading { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
+.student-record-section-heading h2 { margin: .35rem 0 0; color: var(--navy); font-size: 1.08rem; }
+.student-record-list { display: grid; gap: .65rem; }
+.student-record-item { display: grid; gap: .15rem; padding: .8rem .9rem; border: 1px solid var(--border-color); border-radius: .9rem; background: var(--surface-muted); }
+.student-record-item time { color: var(--text-muted); font-size: .78rem; }
+.student-record-item span { color: var(--text-muted); font-size: .82rem; }
 .module-tabs { overflow-x: auto; scrollbar-width: thin; }
 .student-list-manager { margin: 1.5rem 0 2rem; padding: 1.5rem; }.student-list-manager-heading, .student-list-preview-heading { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }.student-list-manager-heading h2, .student-list-preview-heading h3 { margin: .35rem 0; }.student-list-manager-heading p { color: var(--text-muted); }.student-list-warning { display: flex; gap: .55rem; margin: 1.25rem 0; }.student-list-input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }.student-list-entry-form { display: grid; grid-template-columns: 1fr 1fr auto; gap: .75rem; align-items: end; }.student-list-import-box { padding: 1rem; border: 1px dashed var(--border-color); border-radius: 1rem; }.student-list-import-actions { display: flex; gap: .5rem; flex-wrap: wrap; }.student-list-preview-heading { align-items: center; margin-top: 1.5rem; }.student-list-table-wrap { overflow-x: auto; }.student-list-table { width: 100%; border-collapse: collapse; }.student-list-table th, .student-list-table td { text-align: left; padding: .75rem; border-bottom: 1px solid var(--border-color); }.student-list-row-error { color: var(--danger, #b42318); }.student-list-row-valid { color: var(--success, #16794b); }
 .pending-overlay { position: fixed; inset: 0; z-index: 50; display: flex; justify-content: flex-end; background: rgb(10 24 48 / 48%); }.pending-drawer { width: min(38rem, 100%); height: 100%; overflow-y: auto; padding: 1.5rem; background: var(--surface-card, #fff); box-shadow: -1rem 0 3rem rgb(10 24 48 / 18%); }.pending-drawer .pending-heading { position: sticky; top: 0; padding-bottom: 1rem; background: var(--surface-card, #fff); z-index: 1; }
@@ -5480,6 +5503,18 @@ textarea {
 }
 .enrolled-pill-pending { background: var(--accent-amber); color: #5e3900; }
 @media (max-width: 620px) { .student-class-summary { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 900px) {
+  .student-record-summary-grid,
+  .student-record-sections {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 680px) {
+  .student-record-summary-grid,
+  .student-record-sections {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 @media (max-width: 700px) { .classroom-pending-action { margin: 0 0 1rem; padding: 0; } .pending-row { align-items: flex-start; flex-wrap: wrap; } .pending-actions { width: 100%; } }
 @media (max-width: 760px) {
   .class-share-panel {
