@@ -94,6 +94,8 @@ export const api = {
     request(`/student/classes/${encodeURIComponent(classId)}/records`),
   exportClassExcel: (classId) =>
     requestBlob(`/classes/${encodeURIComponent(classId)}/export/excel`),
+  exportClassCsv: (classId) =>
+    requestBlob(`/classes/${encodeURIComponent(classId)}/export/csv`),
   studentClassRecords: (classId, studentId) =>
     request(`/classes/${encodeURIComponent(classId)}/students/${encodeURIComponent(studentId)}/records`),
   todaySession: (id) =>

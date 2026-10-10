@@ -8,7 +8,7 @@ const { prisma } = require("./db");
 const { applyGracePeriod } = require("./attendance");
 const { eligibleCandidates, selectRecitationCandidate } = require("./recitation");
 const { verifyRecaptchaToken } = require("./recaptcha");
-const { buildExcelWorkbook, sanitizeExportValue, buildStudentListRows, buildAttendanceRows, buildRecitationRows, buildActivityRows, buildProjectRows, buildQuizRows } = require("./export");
+const { buildExcelWorkbook, buildCsvExport } = require("./export");
 const {
   buildVerificationEmail,
   buildJoinEmail,
@@ -2149,13 +2149,125 @@ app.get(
       }
 
       const workbookBuffer = buildExcelWorkbook(classRecord);
-      const safeSectionName = classRecord.sectionName.replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "") || "class";
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const safeCode = (classRecord.classCode || "").replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "") || "class";
+      const safeSection = (classRecord.sectionName || "").replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "") || "section";
+      const xlsxFilename = `${safeCode}_${safeSection}_${dateStr}.xlsx`;
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", `attachment; filename="${safeSectionName}-export.xlsx"`);
+      res.setHeader("Content-Disposition", `attachment; filename="${xlsxFilename}"`);
       return res.send(workbookBuffer);
     } catch (error) {
       console.error("Excel export failed:", error);
       return res.status(500).json({ message: "Unable to export this class as Excel." });
+    }
+  },
+);
+
+app.get(
+  "/api/classes/:id/export/csv",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      const classRecord = await prisma.class.findFirst({
+        where: { id: req.params.id, facultyId: req.session.userId },
+        include: {
+          faculty: { select: { name: true } },
+          enrollments: {
+            include: {
+              studentProfile: {
+                select: {
+                  name: true,
+                  studentId: true,
+                  email: true,
+                  program: true,
+                  section: true,
+                },
+              },
+            },
+            orderBy: { joinedAt: "asc" },
+          },
+          sessions: {
+            include: {
+              attendance: {
+                include: {
+                  studentProfile: {
+                    select: { name: true, studentId: true },
+                  },
+                },
+                orderBy: { markedAt: "asc" },
+              },
+              recitations: {
+                include: {
+                  studentProfile: {
+                    select: { name: true, studentId: true },
+                  },
+                },
+                orderBy: { calledAt: "asc" },
+              },
+            },
+            orderBy: { date: "asc" },
+          },
+          activities: {
+            include: {
+              session: { select: { date: true } },
+              scores: {
+                include: {
+                  studentProfile: {
+                    select: { name: true, studentId: true },
+                  },
+                },
+                orderBy: { updatedAt: "asc" },
+              },
+            },
+            orderBy: { createdAt: "asc" },
+          },
+          projects: {
+            include: {
+              scores: {
+                include: {
+                  studentProfile: {
+                    select: { name: true, studentId: true },
+                  },
+                },
+                orderBy: { updatedAt: "asc" },
+              },
+            },
+            orderBy: { createdAt: "asc" },
+          },
+          quizSessions: {
+            include: {
+              scores: {
+                include: {
+                  studentProfile: {
+                    select: { name: true, studentId: true },
+                  },
+                },
+                orderBy: { updatedAt: "asc" },
+              },
+            },
+            orderBy: { date: "asc" },
+          },
+        },
+      });
+
+      if (!classRecord) {
+        return res.status(404).json({ message: "Class not found." });
+      }
+
+      const csv = buildCsvExport(classRecord);
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const safeCode = (classRecord.classCode || "").replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "") || "class";
+      const safeSection = (classRecord.sectionName || "").replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "") || "section";
+      const csvFilename = `${safeCode}_${safeSection}_${dateStr}.csv`;
+      const bom = Buffer.from("\uFEFF", "utf8");
+      const csvBuffer = Buffer.concat([bom, Buffer.from(csv, "utf8")]);
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${csvFilename}"`);
+      return res.send(csvBuffer);
+    } catch (error) {
+      console.error("CSV export failed:", error);
+      return res.status(500).json({ message: "Unable to export this class as CSV." });
     }
   },
 );

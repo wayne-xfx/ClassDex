@@ -22,7 +22,7 @@ function ExportOption({ icon, title, description, bullets, disabled = false, onA
   );
 }
 
-export default function ExportModule({ classRecord, students = [], pendingEnrollments = [], onExcel }) {
+export default function ExportModule({ classRecord, students = [], pendingEnrollments = [], onExcel, onCsv }) {
   return (
     <div className="export-module">
       <PageHeader
@@ -65,11 +65,12 @@ export default function ExportModule({ classRecord, students = [], pendingEnroll
           title="CSV bundle"
           description="Flat CSV exports for spreadsheets, filters, and quick sharing."
           bullets={[
-            "One CSV per record type",
+            "Single CSV with labeled sections per record type",
             "Formula-safe output with sanitized cells",
-            "Ready for the next export ticket",
+            "UTF-8 with BOM, quoted fields",
           ]}
-          disabled
+          disabled={!onCsv}
+          onAction={onCsv}
         />
       </div>
     </div>

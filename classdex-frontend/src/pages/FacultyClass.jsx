@@ -273,12 +273,35 @@ export default function FacultyClass() {
       const url = window.URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `${classRecord?.sectionName || "class"}-export.xlsx`.replace(/[^\w.-]+/g, "-");
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const code = (classRecord?.classCode || "class").replace(/[^\w.-]+/g, "_");
+      const section = (classRecord?.sectionName || "section").replace(/[^\w.-]+/g, "_");
+      anchor.download = `${code}_${section}_${dateStr}.xlsx`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
       window.URL.revokeObjectURL(url);
       showToast("Excel export downloaded.");
+    } catch (exportError) {
+      showToast(exportError.message, "error");
+    }
+  }
+
+  async function downloadCsvExport() {
+    try {
+      const blob = await api.exportClassCsv(id);
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const code = (classRecord?.classCode || "class").replace(/[^\w.-]+/g, "_");
+      const section = (classRecord?.sectionName || "section").replace(/[^\w.-]+/g, "_");
+      anchor.download = `${code}_${section}_${dateStr}.csv`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+      showToast("CSV export downloaded.");
     } catch (exportError) {
       showToast(exportError.message, "error");
     }
@@ -531,7 +554,7 @@ export default function FacultyClass() {
               ) : activeModule === "projects" ? (
                 <ProjectsModule key={id} classId={id} sessionId={classRecord.session.id} students={sortedStudents} />
               ) : activeModule === "export" ? (
-                <ExportModule classRecord={classRecord} students={sortedStudents} pendingEnrollments={pendingEnrollments} onExcel={downloadExcelExport} />
+                <ExportModule classRecord={classRecord} students={sortedStudents} pendingEnrollments={pendingEnrollments} onExcel={downloadExcelExport} onCsv={downloadCsvExport} />
               ) : activeModule === "quiz" ? (
                 <QuizModule classId={id} students={sortedStudents} attendanceTaken={students.some((student) => student.status !== "UNMARKED")} onTakeAttendance={() => setActiveModule("attendance")} />
               ) : null}
