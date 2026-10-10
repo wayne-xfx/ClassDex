@@ -136,9 +136,9 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ score, sessionId }),
     }),
-  joinClass: (classCode) =>
+  joinClass: (classCode, recaptchaToken) =>
     request("/classes/join", {
       method: "POST",
-      body: JSON.stringify({ classCode }),
+      body: JSON.stringify({ classCode, recaptchaToken }),
     }),
 };

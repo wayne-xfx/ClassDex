@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { AuthLayout } from "../components/AuthLayout";
+import RecaptchaWidget from "../components/RecaptchaWidget";
 import PasswordField from "../components/PasswordField";
 import { useAuth } from "../context/AuthContext";
 
@@ -30,6 +31,7 @@ export default function Register() {
   });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [recaptchaToken, setRecaptchaToken] = useState("");
 
   function update(field) {
     return (event) => setForm((prev) => ({ ...prev, [field]: event.target.value }));
@@ -38,9 +40,13 @@ export default function Register() {
   async function handleSubmit(event) {
     event.preventDefault();
     setError("");
+    if (!recaptchaToken) {
+      setError("Please complete the security check.");
+      return;
+    }
     setSubmitting(true);
     try {
-      const user = await register(form);
+      const user = await register({ ...form, recaptchaToken });
       const requestedPath = location.state?.from?.pathname;
       const safeRequestedPath =
         user.role === "STUDENT" && requestedPath?.startsWith("/join/")
@@ -154,6 +160,8 @@ export default function Register() {
             {error}
           </p>
         ) : null}
+
+        <RecaptchaWidget onToken={setRecaptchaToken} />
 
         <button
           type="submit"
