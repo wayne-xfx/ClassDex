@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import QRCode from "qrcode";
 import AppShell from "../components/AppShell";
 import Icon from "../components/Icon";
 import {
@@ -69,6 +70,8 @@ export default function FacultyClass() {
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [studentRecords, setStudentRecords] = useState(null);
   const [studentRecordsError, setStudentRecordsError] = useState("");
+  const [inviteQr, setInviteQr] = useState("");
+  const [inviteQrError, setInviteQrError] = useState("");
   const studentRecordsLoading = Boolean(selectedStudent && !studentRecords && !studentRecordsError);
 
   useEffect(() => {
@@ -95,6 +98,41 @@ export default function FacultyClass() {
       cancelled = true;
     };
   }, [id]);
+
+  const inviteLink = useMemo(
+    () => (classRecord ? `${window.location.origin}/join/${classRecord.classCode}` : ""),
+    [classRecord],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!inviteLink) {
+      setInviteQr("");
+      setInviteQrError("");
+      return () => {};
+    }
+    QRCode.toDataURL(inviteLink, {
+      errorCorrectionLevel: "M",
+      margin: 1,
+      width: 208,
+      color: { dark: "#0f172a", light: "#ffffff" },
+    })
+      .then((dataUrl) => {
+        if (!cancelled) {
+          setInviteQr(dataUrl);
+          setInviteQrError("");
+        }
+      })
+      .catch((qrError) => {
+        if (!cancelled) {
+          setInviteQr("");
+          setInviteQrError(qrError.message);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [inviteLink]);
 
   useEffect(() => { let cancelled = false; api.classRoster(id).then(({ roster }) => { if (!cancelled) setStudentListCount(roster.length); }).catch(() => {}); return () => { cancelled = true; }; }, [id]);
   const refreshPending = useCallback(() => api.pendingEnrollments(id).then(({ pending }) => setPendingEnrollments(pending)).catch(() => {}), [id]);
@@ -219,12 +257,11 @@ export default function FacultyClass() {
       showToast(rosterError.message, "error");
       return;
     }
-    const link = `${window.location.origin}/join/${classRecord.classCode}`;
     try {
-      await navigator.clipboard.writeText(link);
+      await navigator.clipboard.writeText(inviteLink);
       showToast("Invite link copied. Share it with your students.");
     } catch {
-      showToast(`Copy unavailable — share code ${classRecord.classCode} or link ${link}`, "error");
+      showToast(`Copy unavailable — share code ${classRecord.classCode} or link ${inviteLink}`, "error");
     }
   }
 
@@ -331,6 +368,24 @@ export default function FacultyClass() {
             </header>
 
             <div className="classroom-date"><Icon name="clock" size={16} /> {today}</div>
+            <section className="panel class-share-panel" aria-labelledby="class-share-title">
+              <div className="class-share-copy">
+                <span className="eyebrow"><Icon name="copy" /> Share class invite</span>
+                <h2 id="class-share-title">Invite students with a link or QR code</h2>
+                <p>Students can scan the QR code or use the invite link to join this class.</p>
+                <div className="class-share-actions">
+                  <button type="button" className="button button-primary" onClick={copyInvite}>
+                    <Icon name="copy" /> Copy invite link
+                  </button>
+                  <span className="class-share-code">Class code <strong>{classRecord.classCode}</strong></span>
+                </div>
+                <p className="class-share-link">{inviteLink}</p>
+              </div>
+              <div className="class-share-qr">
+                {inviteQr ? <img src={inviteQr} alt={`QR code for joining ${classRecord.sectionName}`} /> : <div className="class-share-qr-placeholder">Generating QR…</div>}
+                {inviteQrError ? <span className="class-share-error">{inviteQrError}</span> : null}
+              </div>
+            </section>
             <div className="classroom-pending-action"><button type="button" className="button button-quiet" onClick={() => setShowPending(true)}><Icon name="bell" size={16} /> Pending {pendingEnrollments.length ? <span className="notification-badge">{pendingEnrollments.length}</span> : null}</button></div>
             {showPending ? <PendingValidationList enrollments={pendingEnrollments} onApprove={(enrollmentId) => updatePending(enrollmentId, "APPROVED")} onDecline={(enrollmentId) => updatePending(enrollmentId, "DECLINED")} onClose={() => setShowPending(false)} busyId={pendingBusyId} /> : null}
             <ModuleTabs active={activeModule} onChange={setActiveModule} studentListCount={studentListCount} />
