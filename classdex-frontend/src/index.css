@@ -1943,6 +1943,81 @@ textarea {
   font-weight: 650;
 }
 
+.class-share-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin: 0 0 1rem;
+  padding: 1.25rem;
+}
+
+.class-share-copy h2 {
+  margin: .35rem 0 .5rem;
+  color: var(--navy);
+  font-size: 1.05rem;
+}
+
+.class-share-copy p {
+  max-width: 48rem;
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.class-share-actions {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+
+.class-share-code {
+  color: var(--text-muted);
+  font-size: .92rem;
+}
+
+.class-share-link {
+  margin-top: .6rem;
+  word-break: break-all;
+  color: var(--text-muted);
+  font-size: .78rem;
+}
+
+.class-share-qr {
+  display: grid;
+  justify-items: center;
+  gap: .5rem;
+  min-width: 12rem;
+}
+
+.class-share-qr img {
+  width: 208px;
+  height: 208px;
+  padding: .5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 1rem;
+  background: #fff;
+}
+
+.class-share-qr-placeholder {
+  display: grid;
+  place-items: center;
+  width: 208px;
+  height: 208px;
+  border: 1px dashed var(--border-color);
+  border-radius: 1rem;
+  color: var(--text-muted);
+}
+
+.class-share-error {
+  max-width: 208px;
+  color: var(--danger, #b42318);
+  font-size: .82rem;
+  text-align: center;
+}
+
 .module-tabs {
   display: flex;
   gap: 4px;
@@ -5406,6 +5481,22 @@ textarea {
 .enrolled-pill-pending { background: var(--accent-amber); color: #5e3900; }
 @media (max-width: 620px) { .student-class-summary { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 700px) { .classroom-pending-action { margin: 0 0 1rem; padding: 0; } .pending-row { align-items: flex-start; flex-wrap: wrap; } .pending-actions { width: 100%; } }
+@media (max-width: 760px) {
+  .class-share-panel {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .class-share-qr {
+    justify-items: flex-start;
+  }
+
+  .class-share-qr img,
+  .class-share-qr-placeholder {
+    width: 100%;
+    max-width: 208px;
+  }
+}
 
 /* Final mobile overrides follow the legacy Student List rules so the compact
    faculty layout cannot be re-expanded by later desktop declarations. */
