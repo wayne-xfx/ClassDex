@@ -9,6 +9,13 @@ const { applyGracePeriod } = require("./attendance");
 const { eligibleCandidates, selectRecitationCandidate } = require("./recitation");
 const { verifyRecaptchaToken } = require("./recaptcha");
 const {
+  buildVerificationEmail,
+  buildJoinEmail,
+  buildFacultyJoinEmail,
+  buildDecisionEmail,
+  queueEmail,
+} = require("./email");
+const {
   isValidScore,
   syncAttendanceScoreAbsence,
   createAbsentActivityScores,
@@ -210,6 +217,7 @@ app.post("/api/auth/register", async (req, res) => {
 
     req.session.userId = user.id;
     req.session.role = user.role;
+    queueEmail(buildVerificationEmail(user), "registration verification");
     return res.status(201).json({ user: publicUser(user) });
   } catch (error) {
     console.error("Register failed:", error);
@@ -634,10 +642,35 @@ app.patch("/api/classes/:id/pending/:enrollmentId", requireAuth, requireRole("FA
   const status = String(req.body?.status || "").toUpperCase();
   if (!["APPROVED", "DECLINED"].includes(status)) return res.status(400).json({ message: "Status must be APPROVED or DECLINED." });
   try {
-    if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
+    const classRecord = await prisma.class.findFirst({
+      where: { id: req.params.id, facultyId: req.session.userId },
+      select: {
+        id: true,
+        sectionName: true,
+        classCode: true,
+        faculty: { select: { name: true, email: true } },
+      },
+    });
+    if (!classRecord) return res.status(404).json({ message: "Class not found." });
     const updated = await prisma.classEnrollment.updateMany({ where: { id: req.params.enrollmentId, classId: req.params.id, status: "PENDING" }, data: { status } });
     if (!updated.count) return res.status(404).json({ message: "Pending request not found." });
-    return res.json({ enrollment: await prisma.classEnrollment.findUnique({ where: { id: req.params.enrollmentId }, include: { studentProfile: true, class: true } }) });
+    const enrollment = await prisma.classEnrollment.findUnique({
+      where: { id: req.params.enrollmentId },
+      include: { studentProfile: true, class: true },
+    });
+    if (enrollment?.studentProfile?.email) {
+      queueEmail(
+        buildDecisionEmail({
+          studentName: enrollment.studentProfile.name,
+          studentEmail: enrollment.studentProfile.email,
+          classSectionName: classRecord.sectionName,
+          decision: status,
+          facultyName: classRecord.faculty?.name,
+        }),
+        `join ${status.toLowerCase()}`,
+      );
+    }
+    return res.json({ enrollment });
   } catch (error) { return res.status(500).json({ message: "Unable to update pending request." }); }
 });
 
@@ -1832,7 +1865,10 @@ app.post(
         prisma.studentProfile.findUnique({
           where: { userId: req.session.userId },
         }),
-        prisma.class.findUnique({ where: { classCode } }),
+        prisma.class.findUnique({
+          where: { classCode },
+          include: { faculty: { select: { name: true, email: true } } },
+        }),
       ]);
       if (!classRecord) {
         return res.status(404).json({ message: "No class matches that invite code." });
@@ -1869,6 +1905,30 @@ app.post(
         },
         include: { class: true },
       });
+      queueEmail(
+        buildJoinEmail({
+          studentName: profile.name,
+          studentEmail: profile.email,
+          classSectionName: classRecord.sectionName,
+          classCode: classRecord.classCode,
+          status: enrollment.status,
+          facultyName: classRecord.faculty?.name,
+        }),
+        "join confirmation",
+      );
+      if (classRecord.faculty?.email) {
+        queueEmail(
+          buildFacultyJoinEmail({
+            facultyEmail: classRecord.faculty.email,
+            facultyName: classRecord.faculty.name,
+            studentName: profile.name,
+            classSectionName: classRecord.sectionName,
+            classCode: classRecord.classCode,
+            status: enrollment.status,
+          }),
+          "faculty join notice",
+        );
+      }
       return res.status(201).json({ enrollment, status: enrollment.status, message: rosterMatch ? "You joined the class." : "Waiting for instructor approval." });
     } catch (error) {
       if (error.code === "P2002") {
