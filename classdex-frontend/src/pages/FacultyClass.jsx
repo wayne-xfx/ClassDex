@@ -19,6 +19,7 @@ import { ActivitiesModule, ProjectsModule } from "../components/classroom/Scorin
 import StudentListManager from "../components/classroom/StudentListManager";
 import PendingValidationList from "../components/classroom/PendingValidationList";
 import QuizModule from "../components/classroom/QuizModule";
+import { Modal } from "../components/DesignSystem";
 import { api } from "../api";
 
 const MODULE_LABELS = {
@@ -74,6 +75,7 @@ export default function FacultyClass() {
   const [studentRecordsError, setStudentRecordsError] = useState("");
   const [inviteQr, setInviteQr] = useState("");
   const [inviteQrError, setInviteQrError] = useState("");
+  const [showLargeQr, setShowLargeQr] = useState(false);
   const studentRecordsLoading = Boolean(selectedStudent && !studentRecords && !studentRecordsError);
 
   useEffect(() => {
@@ -424,10 +426,38 @@ export default function FacultyClass() {
                 <p className="class-share-link">{inviteLink}</p>
               </div>
               <div className="class-share-qr">
-                {inviteQr ? <img src={inviteQr} alt={`QR code for joining ${classRecord.sectionName}`} /> : <div className="class-share-qr-placeholder">Generating QR…</div>}
+                {inviteQr ? (
+                  <>
+                    <img src={inviteQr} alt={`QR code for joining ${classRecord.sectionName}`} />
+                    <div className="class-share-qr-actions" style={{ display: "flex", gap: "0.4rem", marginTop: "0.4rem", flexWrap: "wrap", justifyContent: "center" }}>
+                      <button type="button" className="button button-quiet" style={{ fontSize: "0.75rem", padding: "0.2rem 0.5rem" }} onClick={() => setShowLargeQr(true)}>Show larger</button>
+                      <a href={inviteQr} download={`${classRecord.classCode || "class"}-qr.png`} className="button button-quiet" style={{ fontSize: "0.75rem", padding: "0.2rem 0.5rem" }}>Download QR</a>
+                    </div>
+                  </>
+                ) : (
+                  <div className="class-share-qr-placeholder">Generating QR…</div>
+                )}
                 {inviteQrError ? <span className="class-share-error">{inviteQrError}</span> : null}
               </div>
             </section>
+            {showLargeQr && inviteQr ? (
+              <Modal
+                title="Class join QR code"
+                description={`Scan with any mobile camera or QR reader to join ${classRecord.sectionName}.`}
+                onClose={() => setShowLargeQr(false)}
+                footer={
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem" }}>
+                    <button type="button" className="button button-secondary" onClick={() => setShowLargeQr(false)}>Close</button>
+                    <a href={inviteQr} download={`${classRecord.classCode || "class"}-qr.png`} className="button button-primary">Download QR</a>
+                  </div>
+                }
+              >
+                <div style={{ display: "grid", placeItems: "center", padding: "1.25rem", textAlign: "center" }}>
+                  <img src={inviteQr} alt={`Large QR code for ${classRecord.sectionName}`} style={{ width: "260px", height: "260px", borderRadius: "12px", border: "1px solid var(--border-color, #e2e8f0)" }} />
+                  <p style={{ marginTop: "0.75rem", fontWeight: "bold" }}>Class code: {classRecord.classCode}</p>
+                </div>
+              </Modal>
+            ) : null}
             <div className="classroom-pending-action"><button type="button" className="button button-quiet" onClick={() => setShowPending(true)}><Icon name="bell" size={16} /> Pending {pendingEnrollments.length ? <span className="notification-badge">{pendingEnrollments.length}</span> : null}</button></div>
             {showPending ? <PendingValidationList enrollments={pendingEnrollments} onApprove={(enrollmentId) => updatePending(enrollmentId, "APPROVED")} onDecline={(enrollmentId) => updatePending(enrollmentId, "DECLINED")} onClose={() => setShowPending(false)} busyId={pendingBusyId} /> : null}
             <ModuleTabs active={activeModule} onChange={setActiveModule} studentListCount={studentListCount} />
