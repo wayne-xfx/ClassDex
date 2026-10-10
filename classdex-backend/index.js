@@ -155,6 +155,51 @@ async function findOwnedSession(sessionId, facultyId) {
   });
 }
 
+function formatPercentSummary(numerator, denominator) {
+  if (!denominator) return "—";
+  return `${Math.round((numerator / denominator) * 100)}%`;
+}
+
+function formatAverageSummary(totalScore, count, suffix = "") {
+  if (!count) return "—";
+  return `${(totalScore / count).toFixed(1)}${suffix}`;
+}
+
+function summarizeWeightedScores(rows, totalKey) {
+  let scored = 0;
+  let possible = 0;
+  for (const row of rows) {
+    if (row.score === null || row.score === undefined) continue;
+    const total = Number(row[totalKey]);
+    const score = Number(row.score);
+    if (!Number.isFinite(score) || score < 0) continue;
+    scored += score;
+    if (Number.isFinite(total) && total > 0) {
+      possible += total;
+    } else {
+      possible += 100;
+    }
+  }
+  return possible ? `${Math.round((scored / possible) * 100)}%` : "—";
+}
+
+function summarizeStudentClass(summaryRows) {
+  const attendanceRows = summaryRows.attendance || [];
+  const attendedCount = attendanceRows.filter((row) => ["PRESENT", "LATE"].includes(row.status)).length;
+  const recitationRows = summaryRows.recitations || [];
+  const quizRows = summaryRows.quizzes || [];
+  const activityRows = summaryRows.activities || [];
+  const recitationScoreTotal = recitationRows.reduce((sum, row) => sum + (row.score ?? 0), 0);
+  const recitationCount = recitationRows.filter((row) => row.score !== null && row.score !== undefined).length;
+
+  return {
+    attendance: formatPercentSummary(attendedCount, attendanceRows.length),
+    recitation: formatAverageSummary(recitationScoreTotal, recitationCount, " / 5"),
+    activities: summarizeWeightedScores(activityRows, "maxScore"),
+    quiz: summarizeWeightedScores(quizRows, "totalItems"),
+  };
+}
+
 function isDatabaseUnavailable(error) {
   if (["P1001", "P2024"].includes(error?.code)) return true;
   const message = `${error?.message || ""} ${error?.cause?.message || ""}`;
@@ -1839,10 +1884,173 @@ app.get(
           },
         },
       });
-      return res.json({ classes: profile?.enrollments.map((item) => ({ ...item.class, enrollmentStatus: item.status, joinedAt: item.joinedAt })) || [] });
+      if (!profile) {
+        return res.status(409).json({ message: "Create your student profile before joining a class." });
+      }
+      const enrolledClasses = profile.enrollments.map((item) => ({
+        ...item.class,
+        enrollmentStatus: item.status,
+        joinedAt: item.joinedAt,
+      }));
+      const summaries = await Promise.all(
+        enrolledClasses.map(async (classItem) => {
+          const [attendance, recitations, activities, quizzes] = await Promise.all([
+            prisma.attendanceRecord.findMany({
+              where: {
+                studentId: profile.id,
+                session: { is: { classId: classItem.id } },
+              },
+              select: { status: true },
+            }),
+            prisma.recitationLog.findMany({
+              where: {
+                studentId: profile.id,
+                session: { is: { classId: classItem.id } },
+              },
+              select: { score: true },
+            }),
+            prisma.activityScore.findMany({
+              where: {
+                studentId: profile.id,
+                activity: { is: { classId: classItem.id } },
+              },
+              select: { score: true, activity: { select: { maxScore: true } } },
+            }),
+            prisma.quizScore.findMany({
+              where: {
+                studentId: profile.id,
+                session: { is: { classId: classItem.id } },
+              },
+              select: { score: true, session: { select: { totalItems: true } } },
+            }),
+          ]);
+          return {
+            ...classItem,
+            recordSummary: summarizeStudentClass({
+              attendance,
+              recitations,
+              activities: activities.map((item) => ({ score: item.score, maxScore: item.activity.maxScore })),
+              quizzes: quizzes.map((item) => ({ score: item.score, totalItems: item.session.totalItems })),
+            }),
+          };
+        }),
+      );
+      return res.json({ classes: summaries });
     } catch (error) {
       console.error("Student classes lookup failed:", error);
       return res.status(500).json({ message: "Unable to load your classes." });
+    }
+  },
+);
+
+app.get(
+  "/api/student/classes/:classId/records",
+  requireAuth,
+  requireRole("STUDENT"),
+  async (req, res) => {
+    try {
+      const profile = await prisma.studentProfile.findUnique({
+        where: { userId: req.session.userId },
+        select: { id: true, name: true, studentId: true, email: true, photo: true, program: true, section: true },
+      });
+      if (!profile) {
+        return res.status(409).json({ message: "Create your student profile before joining a class." });
+      }
+
+      const classRecord = await prisma.class.findFirst({
+        where: {
+          id: req.params.classId,
+          enrollments: {
+            some: {
+              studentProfileId: profile.id,
+              status: { in: ["APPROVED", "PENDING"] },
+            },
+          },
+        },
+        include: { faculty: { select: { name: true } } },
+      });
+      if (!classRecord) {
+        return res.status(404).json({ message: "Class not found." });
+      }
+
+      const [attendance, recitations, activities, quizzes] = await Promise.all([
+        prisma.attendanceRecord.findMany({
+          where: {
+            studentId: profile.id,
+            session: { is: { classId: classRecord.id } },
+          },
+          select: {
+            id: true,
+            status: true,
+            markedAt: true,
+            session: { select: { id: true, date: true } },
+          },
+          orderBy: { markedAt: "desc" },
+        }),
+        prisma.recitationLog.findMany({
+          where: {
+            studentId: profile.id,
+            session: { is: { classId: classRecord.id } },
+          },
+          select: {
+            id: true,
+            method: true,
+            calledAt: true,
+            score: true,
+            session: { select: { id: true, date: true } },
+          },
+          orderBy: { calledAt: "desc" },
+        }),
+        prisma.activityScore.findMany({
+          where: {
+            studentId: profile.id,
+            activity: { is: { classId: classRecord.id } },
+          },
+          select: {
+            id: true,
+            score: true,
+            isAbsent: true,
+            createdAt: true,
+            activity: { select: { id: true, title: true, maxScore: true } },
+            session: { select: { id: true, date: true } },
+          },
+          orderBy: { updatedAt: "desc" },
+        }),
+        prisma.quizScore.findMany({
+          where: {
+            studentId: profile.id,
+            session: { is: { classId: classRecord.id } },
+          },
+          select: {
+            id: true,
+            score: true,
+            isAbsent: true,
+            createdAt: true,
+            session: { select: { id: true, date: true, title: true, totalItems: true } },
+          },
+          orderBy: { updatedAt: "desc" },
+        }),
+      ]);
+
+      return res.json({
+        student: profile,
+        class: {
+          ...classRecord,
+          recordSummary: summarizeStudentClass({
+            attendance,
+            recitations,
+            activities: activities.map((item) => ({ score: item.score, maxScore: item.activity.maxScore })),
+            quizzes: quizzes.map((item) => ({ score: item.score, totalItems: item.session.totalItems })),
+          }),
+        },
+        attendance,
+        recitations,
+        activities,
+        quizzes,
+      });
+    } catch (error) {
+      console.error("Student class records lookup failed:", error);
+      return res.status(500).json({ message: "Unable to load this class record." });
     }
   },
 );
