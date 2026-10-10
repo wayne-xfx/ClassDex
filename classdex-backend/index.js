@@ -2148,7 +2148,7 @@ app.get(
         return res.status(404).json({ message: "Class not found." });
       }
 
-      const workbookBuffer = buildExcelWorkbook(classRecord);
+      const workbookBuffer = buildExcelWorkbook(classRecord, req.query.types);
       const dateStr = new Date().toISOString().slice(0, 10);
       const safeCode = (classRecord.classCode || "").replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "") || "class";
       const safeSection = (classRecord.sectionName || "").replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "") || "section";
@@ -2255,7 +2255,7 @@ app.get(
         return res.status(404).json({ message: "Class not found." });
       }
 
-      const csv = buildCsvExport(classRecord);
+      const csv = buildCsvExport(classRecord, req.query.types);
       const dateStr = new Date().toISOString().slice(0, 10);
       const safeCode = (classRecord.classCode || "").replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "") || "class";
       const safeSection = (classRecord.sectionName || "").replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "") || "section";

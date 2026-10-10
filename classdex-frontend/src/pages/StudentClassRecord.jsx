@@ -192,7 +192,7 @@ export default function StudentClassRecord() {
                     <article key={item.id} className="student-record-item">
                       <strong>{item.session.title}</strong>
                       <time dateTime={item.session.date}>{new Date(item.session.date).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Manila" })}</time>
-                      <span>{item.score === null ? "No score" : `Score ${item.score}${item.session.totalItems ? ` / ${item.session.totalItems}` : ""}`}</span>
+                      <span>{item.isAbsent ? "Absent" : item.score === null || item.score === undefined ? "Not yet scored" : `Score ${item.score}${item.session.totalItems ? ` / ${item.session.totalItems}` : ""}`}</span>
                     </article>
                   ))}
                   {!records?.quizzes?.length ? <p className="student-record-empty">No quiz records yet.</p> : null}

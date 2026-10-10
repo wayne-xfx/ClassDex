@@ -92,10 +92,14 @@ export const api = {
   setQuizScore: (sessionId, studentId, score) => request(`/quizzes/${encodeURIComponent(sessionId)}/scores/${encodeURIComponent(studentId)}`, { method: "PUT", body: JSON.stringify({ score }) }),
   studentClassRecord: (classId) =>
     request(`/student/classes/${encodeURIComponent(classId)}/records`),
-  exportClassExcel: (classId) =>
-    requestBlob(`/classes/${encodeURIComponent(classId)}/export/excel`),
-  exportClassCsv: (classId) =>
-    requestBlob(`/classes/${encodeURIComponent(classId)}/export/csv`),
+  exportClassExcel: (classId, types) => {
+    const params = types?.length ? `?types=${types.map(encodeURIComponent).join(",")}` : "";
+    return requestBlob(`/classes/${encodeURIComponent(classId)}/export/excel${params}`);
+  },
+  exportClassCsv: (classId, types) => {
+    const params = types?.length ? `?types=${types.map(encodeURIComponent).join(",")}` : "";
+    return requestBlob(`/classes/${encodeURIComponent(classId)}/export/csv${params}`);
+  },
   studentClassRecords: (classId, studentId) =>
     request(`/classes/${encodeURIComponent(classId)}/students/${encodeURIComponent(studentId)}/records`),
   todaySession: (id) =>
