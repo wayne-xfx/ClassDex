@@ -1,7 +1,7 @@
 import Icon from "../Icon";
 import { Badge, Button, Card, PageHeader } from "../DesignSystem";
 
-function ExportOption({ icon, title, description, bullets, disabled = false }) {
+function ExportOption({ icon, title, description, bullets, disabled = false, onAction, actionLabel = "Download" }) {
   return (
     <Card className="export-option-card">
       <div className="export-option-heading">
@@ -15,14 +15,14 @@ function ExportOption({ icon, title, description, bullets, disabled = false }) {
         {bullets.map((bullet) => <li key={bullet}>{bullet}</li>)}
       </ul>
       <div className="export-option-actions">
-        <Button disabled={disabled} variant="secondary">{disabled ? "Coming next" : "Download"}</Button>
+        <Button disabled={disabled} variant="secondary" onClick={onAction}>{disabled ? "Coming next" : actionLabel}</Button>
         <Badge tone="neutral">{disabled ? "Preview only" : "Ready"}</Badge>
       </div>
     </Card>
   );
 }
 
-export default function ExportModule({ classRecord, students = [], pendingEnrollments = [] }) {
+export default function ExportModule({ classRecord, students = [], pendingEnrollments = [], onExcel }) {
   return (
     <div className="export-module">
       <PageHeader
@@ -55,9 +55,10 @@ export default function ExportModule({ classRecord, students = [], pendingEnroll
           bullets={[
             "Student list sheet with contact-safe data",
             "Attendance, recitation, activity, project, and quiz tabs",
-            "Ready for the next export ticket",
+            "Built from sanitized export data",
           ]}
-          disabled
+          disabled={!onExcel}
+          onAction={onExcel}
         />
         <ExportOption
           icon="listChecks"

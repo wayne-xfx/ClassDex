@@ -21,7 +21,8 @@
     "dotenv": "^18.0.2",
     "express": "^5.2.1",
     "express-session": "^1.19.0",
-    "pg": "^8.23.0"
+    "pg": "^8.23.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "prisma": "^7.10.0",

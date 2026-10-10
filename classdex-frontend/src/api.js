@@ -33,6 +33,18 @@ async function request(path, options = {}) {
   return data;
 }
 
+async function requestBlob(path, options = {}) {
+  const response = await fetch(`${API_BASE}${path}`, {
+    credentials: "include",
+    ...options,
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.message || "Something went wrong.");
+  }
+  return response.blob();
+}
+
 export const api = {
   register: (payload) =>
     request("/auth/register", {
@@ -80,6 +92,8 @@ export const api = {
   setQuizScore: (sessionId, studentId, score) => request(`/quizzes/${encodeURIComponent(sessionId)}/scores/${encodeURIComponent(studentId)}`, { method: "PUT", body: JSON.stringify({ score }) }),
   studentClassRecord: (classId) =>
     request(`/student/classes/${encodeURIComponent(classId)}/records`),
+  exportClassExcel: (classId) =>
+    requestBlob(`/classes/${encodeURIComponent(classId)}/export/excel`),
   studentClassRecords: (classId, studentId) =>
     request(`/classes/${encodeURIComponent(classId)}/students/${encodeURIComponent(studentId)}/records`),
   todaySession: (id) =>
