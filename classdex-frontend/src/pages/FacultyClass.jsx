@@ -259,6 +259,23 @@ export default function FacultyClass() {
       showToast(rosterError.message, "error");
       return;
     }
+
+    async function downloadExcelExport() {
+      try {
+        const blob = await api.exportClassExcel(id);
+        const url = window.URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `${classRecord?.sectionName || "class"}-export.xlsx`.replace(/[^\w.-]+/g, "-");
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.URL.revokeObjectURL(url);
+        showToast("Excel export downloaded.");
+      } catch (exportError) {
+        showToast(exportError.message, "error");
+      }
+    }
     try {
       await navigator.clipboard.writeText(inviteLink);
       showToast("Invite link copied. Share it with your students.");
@@ -515,7 +532,7 @@ export default function FacultyClass() {
               ) : activeModule === "projects" ? (
                 <ProjectsModule key={id} classId={id} sessionId={classRecord.session.id} students={sortedStudents} />
               ) : activeModule === "export" ? (
-                <ExportModule classRecord={classRecord} students={sortedStudents} pendingEnrollments={pendingEnrollments} />
+                <ExportModule classRecord={classRecord} students={sortedStudents} pendingEnrollments={pendingEnrollments} onExcel={downloadExcelExport} />
               ) : activeModule === "quiz" ? (
                 <QuizModule classId={id} students={sortedStudents} attendanceTaken={students.some((student) => student.status !== "UNMARKED")} onTakeAttendance={() => setActiveModule("attendance")} />
               ) : null}

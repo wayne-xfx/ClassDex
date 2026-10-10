@@ -8,6 +8,7 @@ const { prisma } = require("./db");
 const { applyGracePeriod } = require("./attendance");
 const { eligibleCandidates, selectRecitationCandidate } = require("./recitation");
 const { verifyRecaptchaToken } = require("./recaptcha");
+const { buildExcelWorkbook, sanitizeExportValue, buildStudentListRows, buildAttendanceRows, buildRecitationRows, buildActivityRows, buildProjectRows, buildQuizRows } = require("./export");
 const {
   isValidScore,
   syncAttendanceScoreAbsence,
@@ -1814,7 +1815,109 @@ app.get(
   },
 );
 
-app.post(
+app.get(
+  "/api/classes/:id/export/excel",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      const classRecord = await prisma.class.findFirst({
+        where: { id: req.params.id, facultyId: req.session.userId },
+        include: {
+          faculty: { select: { name: true } },
+          enrollments: {
+            include: {
+              studentProfile: {
+                select: {
+                  name: true,
+                  studentId: true,
+                  email: true,
+                  program: true,
+                  section: true,
+                },
+              },
+            },
+            orderBy: { joinedAt: "asc" },
+          },
+          sessions: {
+            include: {
+              attendance: {
+                include: {
+                  studentProfile: {
+                    select: { name: true, studentId: true },
+                  },
+                },
+                orderBy: { markedAt: "asc" },
+              },
+              recitations: {
+                include: {
+                  studentProfile: {
+                    select: { name: true, studentId: true },
+                  },
+                },
+                orderBy: { calledAt: "asc" },
+              },
+            },
+            orderBy: { date: "asc" },
+          },
+          activities: {
+            include: {
+              session: { select: { date: true } },
+              scores: {
+                include: {
+                  studentProfile: {
+                    select: { name: true, studentId: true },
+                  },
+                },
+                orderBy: { updatedAt: "asc" },
+              },
+            },
+            orderBy: { createdAt: "asc" },
+          },
+          projects: {
+            include: {
+              scores: {
+                include: {
+                  studentProfile: {
+                    select: { name: true, studentId: true },
+                  },
+                },
+                orderBy: { updatedAt: "asc" },
+              },
+            },
+            orderBy: { createdAt: "asc" },
+          },
+          quizSessions: {
+            include: {
+              scores: {
+                include: {
+                  studentProfile: {
+                    select: { name: true, studentId: true },
+                  },
+                },
+                orderBy: { updatedAt: "asc" },
+              },
+            },
+            orderBy: { date: "asc" },
+          },
+        },
+      });
+
+      if (!classRecord) {
+        return res.status(404).json({ message: "Class not found." });
+      }
+
+      const workbookBuffer = buildExcelWorkbook(classRecord);
+      const safeSectionName = classRecord.sectionName.replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "") || "class";
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${safeSectionName}-export.xlsx"`);
+      return res.send(workbookBuffer);
+    } catch (error) {
+      console.error("Excel export failed:", error);
+      return res.status(500).json({ message: "Unable to export this class as Excel." });
+    }
+  },
+);app.post(
   "/api/classes/join",
   requireAuth,
   requireRole("STUDENT"),
