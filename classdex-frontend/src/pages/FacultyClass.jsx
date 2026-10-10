@@ -13,6 +13,7 @@ import {
 } from "../components/classroom/ClassroomComponents";
 import { compareStudentsByLastName } from "../components/classroom/studentNames";
 import AttendanceModule from "../components/classroom/AttendanceModule";
+import ExportModule from "../components/classroom/ExportModule";
 import RecitationModule from "../components/classroom/RecitationModule";
 import { ActivitiesModule, ProjectsModule } from "../components/classroom/ScoringModules";
 import StudentListManager from "../components/classroom/StudentListManager";
@@ -26,6 +27,7 @@ const MODULE_LABELS = {
   recitation: "Recitation",
   activities: "Activities",
   projects: "Projects",
+  export: "Data export",
   quiz: "Quiz",
   "student-list": "Student List",
 };
@@ -511,6 +513,8 @@ export default function FacultyClass() {
                 <ActivitiesModule key={classRecord.session.id} sessionId={classRecord.session.id} students={sortedStudents} />
               ) : activeModule === "projects" ? (
                 <ProjectsModule key={id} classId={id} sessionId={classRecord.session.id} students={sortedStudents} />
+              ) : activeModule === "export" ? (
+                <ExportModule classRecord={classRecord} students={sortedStudents} pendingEnrollments={pendingEnrollments} />
               ) : activeModule === "quiz" ? (
                 <QuizModule classId={id} students={sortedStudents} attendanceTaken={students.some((student) => student.status !== "UNMARKED")} onTakeAttendance={() => setActiveModule("attendance")} />
               ) : null}
