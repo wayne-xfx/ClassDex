@@ -50,7 +50,9 @@ const RecaptchaWidget = forwardRef(function RecaptchaWidget({ onChange, label = 
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [compact, setCompact] = useState(() => window.matchMedia("(max-width: 380px)").matches);
-  onChangeRef.current = onChange;
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   useImperativeHandle(ref, () => ({
     reset() {
@@ -68,12 +70,12 @@ const RecaptchaWidget = forwardRef(function RecaptchaWidget({ onChange, label = 
 
   useEffect(() => {
     let cancelled = false;
-    setStatus("loading");
+    const container = containerRef.current;
     loadRecaptchaScript().then((grecaptcha) => {
-      if (cancelled || !containerRef.current) return;
+      if (cancelled || !container) return;
       if (typeof grecaptcha.render !== "function") throw new Error("Security check is unavailable. Retry.");
-      containerRef.current.replaceChildren();
-      widgetIdRef.current = grecaptcha.render(containerRef.current, {
+      container.replaceChildren();
+      widgetIdRef.current = grecaptcha.render(container, {
         sitekey: SITE_KEY,
         theme,
         size: compact ? "compact" : "normal",
@@ -91,7 +93,7 @@ const RecaptchaWidget = forwardRef(function RecaptchaWidget({ onChange, label = 
         try { window.grecaptcha.reset(widgetIdRef.current); } catch { /* Google may already have torn down the frame. */ }
       }
       widgetIdRef.current = null;
-      containerRef.current?.replaceChildren();
+      container?.replaceChildren();
       onChangeRef.current?.("");
     };
   }, [attempt, compact, theme]);
@@ -101,7 +103,7 @@ const RecaptchaWidget = forwardRef(function RecaptchaWidget({ onChange, label = 
       <span className="field-hint">{label}</span>
       <div className="recaptcha-frame" ref={containerRef} aria-label={label} />
       {status === "loading" ? <span className="field-hint">Loading security check…</span> : null}
-      {status === "error" ? <div className="recaptcha-retry"><span className="field-hint" role="status">{error}</span><button type="button" className="button button-quiet" onClick={() => setAttempt((value) => value + 1)}>Retry</button></div> : null}
+      {status === "error" ? <div className="recaptcha-retry"><span className="field-hint" role="status">{error}</span><button type="button" className="button button-quiet" onClick={() => { setStatus("loading"); setError(""); setAttempt((value) => value + 1); }}>Retry</button></div> : null}
     </div>
   );
 });
