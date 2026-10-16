@@ -21,7 +21,7 @@ export function ModuleTabs({ active, onChange, studentListCount = 0 }) {
     { id: "recitation", label: "Recitation", icon: "mic" },
     { id: "activities", label: "Activities", icon: "listChecks" },
     { id: "projects", label: "Projects", icon: "folderKanban" },
-    { id: "export", label: "Data export", icon: "folderKanban" },
+    { id: "export", label: "Data export", icon: "download" },
     { id: "quiz", label: "Quiz", icon: "brain" },
     { id: "student-list", label: `Student List (${studentListCount})`, icon: "users" },
   ];

@@ -27,7 +27,7 @@ export default function ExportModule({ classRecord, students = [], pendingEnroll
     <div className="export-module">
       <PageHeader
         eyebrow="Data export"
-        icon="folderKanban"
+        icon="spreadsheet"
         title="Export class data"
         description="Prepare a workbook or CSV bundle with the student list, attendance, recitation, activity, project, and quiz records."
       />
