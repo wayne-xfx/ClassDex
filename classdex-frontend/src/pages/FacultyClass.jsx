@@ -370,7 +370,7 @@ export default function FacultyClass() {
             <div className="classroom-date"><Icon name="clock" size={16} /> {today}</div>
             <section className="panel class-share-panel" aria-labelledby="class-share-title">
               <div className="class-share-copy">
-                <span className="eyebrow"><Icon name="copy" /> Share class invite</span>
+                <span className="eyebrow"><Icon name="share" /> Share class invite</span>
                 <h2 id="class-share-title">Invite students with a link or QR code</h2>
                 <p>Students can scan the QR code or use the invite link to join this class.</p>
                 <div className="class-share-actions">
@@ -378,15 +378,14 @@ export default function FacultyClass() {
                     <Icon name="copy" /> Copy invite link
                   </button>
                   <span className="class-share-code">Class code <strong>{classRecord.classCode}</strong></span>
+                  <button type="button" className="button button-quiet" onClick={() => setShowPending(true)}><Icon name="bell" size={16} /> Pending {pendingEnrollments.length ? <span className="notification-badge">{pendingEnrollments.length}</span> : null}</button>
                 </div>
-                <p className="class-share-link">{inviteLink}</p>
               </div>
               <div className="class-share-qr">
                 {inviteQr ? <img src={inviteQr} alt={`QR code for joining ${classRecord.sectionName}`} /> : <div className="class-share-qr-placeholder">Generating QR…</div>}
                 {inviteQrError ? <span className="class-share-error">{inviteQrError}</span> : null}
               </div>
             </section>
-            <div className="classroom-pending-action"><button type="button" className="button button-quiet" onClick={() => setShowPending(true)}><Icon name="bell" size={16} /> Pending {pendingEnrollments.length ? <span className="notification-badge">{pendingEnrollments.length}</span> : null}</button></div>
             {showPending ? <PendingValidationList enrollments={pendingEnrollments} onApprove={(enrollmentId) => updatePending(enrollmentId, "APPROVED")} onDecline={(enrollmentId) => updatePending(enrollmentId, "DECLINED")} onClose={() => setShowPending(false)} busyId={pendingBusyId} /> : null}
             <ModuleTabs active={activeModule} onChange={setActiveModule} studentListCount={studentListCount} />
             <Toast
