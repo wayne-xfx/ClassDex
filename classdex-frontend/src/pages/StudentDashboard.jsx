@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import Icon from "../components/Icon";
@@ -18,6 +18,7 @@ export default function StudentDashboard() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState(location.state?.notice || "");
   const [recaptchaToken, setRecaptchaToken] = useState("");
+  const captchaRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,6 +56,7 @@ export default function StudentDashboard() {
       const result = await api.studentClasses();
       setClasses(result.classes);
     } catch (joinError) {
+      captchaRef.current?.reset();
       if (joinError.status === "PENDING" || joinError.status === "APPROVED") setNotice(joinError.message);
       else setError(joinError.message);
     } finally {
@@ -94,8 +96,8 @@ export default function StudentDashboard() {
             </div>
             <form onSubmit={handleJoin} className="join-form">
               <input className="input" aria-label="Class code" value={classCode} onChange={(event) => setClassCode(event.target.value.toUpperCase())} placeholder="e.g. ENG3A25" required />
-              <RecaptchaWidget onToken={setRecaptchaToken} />
               <button className="button button-primary" type="submit" disabled={joining}>{joining ? "Joining…" : "Join class"} <Icon name="arrow" /></button>
+              <RecaptchaWidget ref={captchaRef} onChange={setRecaptchaToken} />
             </form>
           </section>
         )}

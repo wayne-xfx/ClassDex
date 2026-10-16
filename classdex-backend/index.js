@@ -98,8 +98,8 @@ function normalizeClassCode(value) {
 
 async function requireRecaptcha(req, res) {
   const verified = await verifyRecaptchaToken(req.body?.recaptchaToken, req.ip);
-  if (!verified) {
-    res.status(400).json({ message: "Please complete the security check and try again." });
+  if (!verified.success) {
+    res.status(400).json({ message: verified.message });
     return false;
   }
   return true;

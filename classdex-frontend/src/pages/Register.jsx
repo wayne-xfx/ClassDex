@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { AuthLayout } from "../components/AuthLayout";
 import RecaptchaWidget from "../components/RecaptchaWidget";
@@ -32,6 +32,7 @@ export default function Register() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [recaptchaToken, setRecaptchaToken] = useState("");
+  const captchaRef = useRef(null);
 
   function update(field) {
     return (event) => setForm((prev) => ({ ...prev, [field]: event.target.value }));
@@ -56,6 +57,7 @@ export default function Register() {
             : null;
       navigate(safeRequestedPath || (user.role === "FACULTY" ? "/faculty" : "/student"), { replace: true });
     } catch (err) {
+      captchaRef.current?.reset();
       setError(err.message);
     } finally {
       setSubmitting(false);
@@ -161,7 +163,7 @@ export default function Register() {
           </p>
         ) : null}
 
-        <RecaptchaWidget onToken={setRecaptchaToken} />
+        <RecaptchaWidget ref={captchaRef} onChange={setRecaptchaToken} />
 
         <button
           type="submit"

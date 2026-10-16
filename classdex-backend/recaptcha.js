@@ -1,15 +1,11 @@
-const TEST_SECRET = "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe";
 const VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify";
 
-function getRecaptchaSecret() {
-  return process.env.RECAPTCHA_SECRET_KEY || TEST_SECRET;
-}
-
 async function verifyRecaptchaToken(token, remoteIp) {
-  const secret = getRecaptchaSecret();
   if (!token || !String(token).trim()) {
-    return false;
+    return { success: false, message: "Captcha token is required." };
   }
+  const secret = process.env.RECAPTCHA_SECRET_KEY;
+  if (!secret) return { success: false, message: "Captcha verification is not configured on the server." };
 
   try {
     const body = new URLSearchParams({
@@ -27,14 +23,15 @@ async function verifyRecaptchaToken(token, remoteIp) {
       },
       body,
     });
-    if (!response.ok) {
-      return false;
-    }
+    if (!response.ok) return { success: false, message: "Captcha verification is temporarily unavailable." };
     const payload = await response.json().catch(() => null);
-    return Boolean(payload?.success);
+    if (!payload?.success) console.error("reCAPTCHA rejected token; Google error-codes:", payload?.["error-codes"] || ["invalid-response"]);
+    return payload?.success
+      ? { success: true }
+      : { success: false, message: "Captcha verification failed. Please complete the security check again.", errorCodes: payload?.["error-codes"] || [] };
   } catch (error) {
-    console.error("reCAPTCHA verification failed:", error);
-    return false;
+    console.error("reCAPTCHA verification request failed:", error?.message || "unknown error");
+    return { success: false, message: "Captcha verification is temporarily unavailable." };
   }
 }
 
