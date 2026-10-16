@@ -49,7 +49,7 @@ const RecaptchaWidget = forwardRef(function RecaptchaWidget({ onChange, label = 
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
-  const [compact, setCompact] = useState(() => window.matchMedia("(max-width: 340px)").matches);
+  const [compact, setCompact] = useState(() => window.matchMedia("(max-width: 380px)").matches);
   onChangeRef.current = onChange;
 
   useImperativeHandle(ref, () => ({
@@ -60,7 +60,7 @@ const RecaptchaWidget = forwardRef(function RecaptchaWidget({ onChange, label = 
   }), []);
 
   useEffect(() => {
-    const query = window.matchMedia("(max-width: 340px)");
+    const query = window.matchMedia("(max-width: 380px)");
     const update = () => setCompact(query.matches);
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
