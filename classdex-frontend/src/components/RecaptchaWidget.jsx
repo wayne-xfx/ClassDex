@@ -21,6 +21,10 @@ function loadRecaptchaScript() {
         else fail();
       };
       if (existing) {
+        existing.addEventListener("load", () => {
+          if (window.grecaptcha?.render) resolve(window.grecaptcha);
+          else fail();
+        }, { once: true });
         existing.addEventListener("error", fail, { once: true });
         if (window.grecaptcha?.render) resolve(window.grecaptcha);
         return;
