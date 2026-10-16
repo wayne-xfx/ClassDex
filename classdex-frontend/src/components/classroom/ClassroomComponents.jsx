@@ -20,7 +20,7 @@ export function ModuleTabs({ active, onChange }) {
     { id: "attendance", label: "Attendance", icon: "clipboardCheck" },
     { id: "recitation", label: "Recitation", icon: "mic" },
     { id: "activities", label: "Activities", icon: "listChecks" },
-    { id: "projects", label: "Projects", icon: "folderKanban" },
+    { id: "projects", label: "Projects", icon: "folder" },
     { id: "quiz", label: "Quiz", icon: "brain" },
   ];
 

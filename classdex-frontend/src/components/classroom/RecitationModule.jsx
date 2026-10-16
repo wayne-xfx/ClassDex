@@ -33,7 +33,7 @@ export default function RecitationModule({
     <div className="recitation-module">
       <div className="recitation-heading">
         <div>
-          <span className="eyebrow"><Icon name="shuffle" /> Recitation</span>
+          <span className="eyebrow"><Icon name="mic" /> Recitation</span>
           <h2>Who’s up next?</h2>
           <p>Students marked Present or Late today can be called.</p>
         </div>
