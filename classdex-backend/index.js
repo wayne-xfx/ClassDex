@@ -1719,8 +1719,10 @@ app.post(
       return res.status(400).json({ message: "Enter a class code or open an invite link." });
     }
 
+    let profile;
+    let classRecord;
     try {
-      const [profile, classRecord] = await Promise.all([
+      [profile, classRecord] = await Promise.all([
         prisma.studentProfile.findUnique({
           where: { userId: req.session.userId },
         }),
@@ -1735,36 +1737,59 @@ app.post(
         });
       }
 
-      const existingEnrollment = await prisma.classEnrollment.findUnique({
-        where: {
-          studentProfileId_classId: {
-            studentProfileId: profile.id,
-            classId: classRecord.id,
-          },
-        },
-      });
-      if (existingEnrollment) {
-        if (existingEnrollment.status === "DECLINED") {
-          const resubmitted = await prisma.classEnrollment.update({ where: { id: existingEnrollment.id }, data: { status: "PENDING", joinedAt: new Date() }, include: { class: true } });
-          return res.status(201).json({ enrollment: resubmitted, status: "PENDING", message: "Your request was resubmitted for instructor approval." });
+      const joinResult = await prisma.$transaction(async (tx) => {
+        const existingEnrollment = await tx.classEnrollment.findUnique({
+          where: { studentProfileId_classId: { studentProfileId: profile.id, classId: classRecord.id } },
+          include: { class: true },
+        });
+        if (existingEnrollment?.status === "APPROVED") {
+          return { kind: "existing", enrollment: existingEnrollment, status: "APPROVED", message: "You have already joined this class." };
         }
-        return res.status(409).json({ message: existingEnrollment.status === "PENDING" ? "Waiting for instructor approval." : "You have already joined this class.", enrollment: existingEnrollment, status: existingEnrollment.status });
-      }
+        if (existingEnrollment?.status === "PENDING") {
+          return { kind: "existing", enrollment: existingEnrollment, status: "PENDING", message: "Your request is already waiting for instructor approval." };
+        }
 
-      const rosterMatch = await prisma.classRoster.findUnique({ where: { classId_studentId: { classId: classRecord.id, studentId: profile.studentId } } });
-
-      const enrollment = await prisma.classEnrollment.create({
-        data: {
-          studentProfileId: profile.id,
-          classId: classRecord.id,
-          status: rosterMatch ? "APPROVED" : "PENDING",
-        },
-        include: { class: true },
+        const studentId = String(profile.studentId ?? "").trim();
+        const roster = await tx.classRoster.findMany({ where: { classId: classRecord.id }, select: { studentId: true } });
+        const matchesRoster = roster.some((entry) => String(entry.studentId ?? "").trim() === studentId);
+        const enrollment = existingEnrollment
+          ? await tx.classEnrollment.update({
+              where: { id: existingEnrollment.id },
+              data: { status: "PENDING", joinedAt: new Date() },
+              include: { class: true },
+            })
+          : await tx.classEnrollment.create({
+              data: {
+                studentProfileId: profile.id,
+                classId: classRecord.id,
+                status: matchesRoster ? "APPROVED" : "PENDING",
+              },
+              include: { class: true },
+            });
+        return {
+          kind: existingEnrollment ? "resubmitted" : "created",
+          enrollment,
+          status: enrollment.status,
+          message: existingEnrollment
+            ? "Your request was resubmitted for instructor approval."
+            : matchesRoster ? "You joined the class." : "Waiting for instructor approval.",
+        };
       });
-      return res.status(201).json({ enrollment, status: enrollment.status, message: rosterMatch ? "You joined the class." : "Waiting for instructor approval." });
+      const statusCode = joinResult.kind === "existing" ? 409 : 201;
+      return res.status(statusCode).json(joinResult);
     } catch (error) {
       if (error.code === "P2002") {
-        return res.status(409).json({ message: "You have already joined this class." });
+        const existing = await prisma.classEnrollment.findUnique({
+          where: { studentProfileId_classId: { studentProfileId: profile.id, classId: classRecord.id } },
+          include: { class: true },
+        }).catch(() => null);
+        if (existing) {
+          return res.status(409).json({
+            message: existing.status === "PENDING" ? "Your request is already waiting for instructor approval." : "You have already joined this class.",
+            enrollment: existing,
+            status: existing.status,
+          });
+        }
       }
       console.error("Class join failed:", error);
       return res.status(500).json({ message: "Unable to join that class." });
