@@ -5722,3 +5722,70 @@ textarea {
 .student-list-table th, .student-list-table td { text-align: left; padding: .75rem; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
 .student-list-row-error { color: var(--danger, #b42318); font-size: .82rem; }.student-list-row-valid { color: var(--success, #16794b); font-size: .82rem; }.student-list-empty { margin-top: .75rem; min-height: 12rem; }
 @media (max-width: 800px) { .student-list-input-grid, .student-list-entry-form { grid-template-columns: 1fr; } .student-list-manager-heading { flex-direction: column; } }
+
+/* Structured class schedule controls */
+.schedule-fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.schedule-legend {
+  padding: 0;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--navy);
+}
+
+.schedule-days-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.schedule-day-pill {
+  min-width: 3.1rem;
+  height: 2.35rem;
+  padding: 0 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--line, var(--border-color));
+  background: var(--surface-card, var(--card, #ffffff));
+  color: var(--navy);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.schedule-day-pill:hover {
+  border-color: var(--royal);
+}
+
+.schedule-day-pill.is-selected {
+  border-color: var(--royal);
+  background: var(--royal);
+  color: #ffffff;
+}
+
+.schedule-time-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.schedule-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--royal);
+  font-weight: 600;
+}
+
+@media (max-width: 560px) {
+  .schedule-time-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+

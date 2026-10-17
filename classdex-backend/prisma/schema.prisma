@@ -87,6 +87,9 @@ model Class {
   classCode          String            @unique
   description        String?
   schedule           String?
+  scheduleDays       String[]          @default([])
+  scheduleStartTime  String?
+  scheduleEndTime    String?
   gracePeriodMinutes Int               @default(15)
   facultyId          String
   faculty            User              @relation("FacultyClasses", fields: [facultyId], references: [id], onDelete: Cascade)
