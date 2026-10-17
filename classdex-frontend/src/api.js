@@ -25,7 +25,10 @@ async function request(path, options = {}) {
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.message || "Something went wrong.");
+    const requestError = new Error(data.message || "Something went wrong.");
+    requestError.status = data.status;
+    requestError.enrollment = data.enrollment;
+    throw requestError;
   }
   return data;
 }
@@ -56,6 +59,7 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   facultyClasses: () => request("/faculty/classes"),
+  facultyPendingCounts: () => request("/faculty/classes/pending-counts"),
   studentClasses: () => request("/student/classes"),
   checkClassCode: (code) =>
     request(`/classes/check-code?code=${encodeURIComponent(code)}`),
@@ -63,6 +67,17 @@ export const api = {
     request("/classes", { method: "POST", body: JSON.stringify(payload) }),
   classDetails: (id) => request(`/classes/${encodeURIComponent(id)}`),
   classDeck: (id) => request(`/classes/${encodeURIComponent(id)}/deck`),
+  classRoster: (id) => request(`/classes/${encodeURIComponent(id)}/roster`),
+  saveClassRoster: (id, entries) => request(`/classes/${encodeURIComponent(id)}/roster`, { method: "POST", body: JSON.stringify({ entries }) }),
+  updateClassRosterEntry: (classId, entryId, payload) => request(`/classes/${encodeURIComponent(classId)}/roster/${encodeURIComponent(entryId)}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteClassRosterEntry: (classId, entryId) => request(`/classes/${encodeURIComponent(classId)}/roster/${encodeURIComponent(entryId)}`, { method: "DELETE" }),
+  pendingEnrollments: (classId) => request(`/classes/${encodeURIComponent(classId)}/pending`),
+  updatePendingEnrollment: (classId, enrollmentId, status) => request(`/classes/${encodeURIComponent(classId)}/pending/${encodeURIComponent(enrollmentId)}`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  quizSessions: (classId) => request(`/classes/${encodeURIComponent(classId)}/quizzes`),
+  createQuizSession: (classId, payload) => request(`/classes/${encodeURIComponent(classId)}/quizzes`, { method: "POST", body: JSON.stringify(payload) }),
+  updateQuizSession: (sessionId, payload) => request(`/quizzes/${encodeURIComponent(sessionId)}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteQuizSession: (sessionId) => request(`/quizzes/${encodeURIComponent(sessionId)}`, { method: "DELETE" }),
+  setQuizScore: (sessionId, studentId, score) => request(`/quizzes/${encodeURIComponent(sessionId)}/scores/${encodeURIComponent(studentId)}`, { method: "PUT", body: JSON.stringify({ score }) }),
   studentClassRecords: (classId, studentId) =>
     request(`/classes/${encodeURIComponent(classId)}/students/${encodeURIComponent(studentId)}/records`),
   todaySession: (id) =>

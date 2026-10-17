@@ -28,6 +28,12 @@ enum ProjectType {
   FINALS
 }
 
+enum EnrollmentStatus {
+  APPROVED
+  PENDING
+  DECLINED
+}
+
 model User {
   id             String          @id @default(cuid())
   name           String
@@ -70,6 +76,7 @@ model StudentProfile {
   recitations RecitationLog[]
   activityScores ActivityScore[]
   projectScores  ProjectScore[]
+  quizScores     QuizScore[]
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
 }
@@ -87,6 +94,8 @@ model Class {
   sessions           ClassSession[]
   activities         Activity[]
   projects           Project[]
+  roster             ClassRoster[]
+  quizSessions       QuizSession[]
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 }
@@ -98,8 +107,50 @@ model ClassEnrollment {
   studentProfile   StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
   class            Class          @relation(fields: [classId], references: [id], onDelete: Cascade)
   joinedAt         DateTime       @default(now())
+  status           EnrollmentStatus @default(APPROVED)
 
   @@unique([studentProfileId, classId])
+}
+
+model ClassRoster {
+  id          String   @id @default(cuid())
+  classId     String
+  studentName String
+  studentId   String
+  class       Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([classId, studentId])
+  @@index([classId])
+}
+
+model QuizSession {
+  id         String      @id @default(cuid())
+  classId    String
+  title      String
+  totalItems Int
+  date       DateTime    @default(now())
+  class      Class       @relation(fields: [classId], references: [id], onDelete: Cascade)
+  scores     QuizScore[]
+  createdAt  DateTime    @default(now())
+
+  @@index([classId, date])
+}
+
+model QuizScore {
+  id         String         @id @default(cuid())
+  sessionId  String
+  studentId  String
+  score      Int?
+  isAbsent   Boolean        @default(false)
+  session    QuizSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  studentProfile StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@unique([sessionId, studentId])
+  @@index([studentId])
 }
 
 model ClassSession {

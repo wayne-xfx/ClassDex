@@ -14,6 +14,9 @@ import { compareStudentsByLastName } from "../components/classroom/studentNames"
 import AttendanceModule from "../components/classroom/AttendanceModule";
 import RecitationModule from "../components/classroom/RecitationModule";
 import { ActivitiesModule, ProjectsModule } from "../components/classroom/ScoringModules";
+import StudentListManager from "../components/classroom/StudentListManager";
+import PendingValidationList from "../components/classroom/PendingValidationList";
+import QuizModule from "../components/classroom/QuizModule";
 import { api } from "../api";
 
 const MODULE_LABELS = {
@@ -23,6 +26,7 @@ const MODULE_LABELS = {
   activities: "Activities",
   projects: "Projects",
   quiz: "Quiz",
+  "student-list": "Student List",
 };
 
 function toRecitationCall(log) {
@@ -43,6 +47,10 @@ export default function FacultyClass() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [activeModule, setActiveModule] = useState("deck");
+  const [showPending, setShowPending] = useState(false);
+  const [pendingEnrollments, setPendingEnrollments] = useState([]);
+  const [studentListCount, setStudentListCount] = useState(0);
+  const [pendingBusyId, setPendingBusyId] = useState(null);
   const [search, setSearch] = useState("");
   const [layout, setLayout] = useState("grid");
   const [attendanceOverrides, setAttendanceOverrides] = useState({});
@@ -87,6 +95,10 @@ export default function FacultyClass() {
       cancelled = true;
     };
   }, [id]);
+
+  useEffect(() => { let cancelled = false; api.classRoster(id).then(({ roster }) => { if (!cancelled) setStudentListCount(roster.length); }).catch(() => {}); return () => { cancelled = true; }; }, [id]);
+  const refreshPending = useCallback(() => api.pendingEnrollments(id).then(({ pending }) => setPendingEnrollments(pending)).catch(() => {}), [id]);
+  useEffect(() => { refreshPending(); const interval = window.setInterval(refreshPending, 30000); window.addEventListener("focus", refreshPending); return () => { window.clearInterval(interval); window.removeEventListener("focus", refreshPending); }; }, [refreshPending]);
 
   const dismissToast = useCallback(() => {
     setNotice("");
@@ -200,6 +212,13 @@ export default function FacultyClass() {
 
   async function copyInvite() {
     if (!classRecord) return;
+    try {
+      const { roster } = await api.classRoster(id);
+      if (!roster.length && !window.confirm("You haven't added a student list yet. Join requests that don't match a list entry will need your manual approval. Share the invite anyway?")) return;
+    } catch (rosterError) {
+      showToast(rosterError.message, "error");
+      return;
+    }
     const link = `${window.location.origin}/join/${classRecord.classCode}`;
     try {
       await navigator.clipboard.writeText(link);
@@ -207,6 +226,15 @@ export default function FacultyClass() {
     } catch {
       showToast(`Copy unavailable — share code ${classRecord.classCode} or link ${link}`, "error");
     }
+  }
+
+  async function updatePending(enrollmentId, status) {
+    setPendingBusyId(enrollmentId);
+    try {
+      await api.updatePendingEnrollment(id, enrollmentId, status);
+      setPendingEnrollments((current) => current.filter((item) => item.id !== enrollmentId));
+      showToast(status === "APPROVED" ? "Student approved." : "Request declined.");
+    } catch (updateError) { showToast(updateError.message, "error"); } finally { setPendingBusyId(null); }
   }
 
   async function shuffleRecitation(skipCurrent = false, animate = recitationAnimationEnabled) {
@@ -294,7 +322,7 @@ export default function FacultyClass() {
               <div className="classroom-title">
                 <span className="eyebrow"><Icon name="book" /> Your classroom</span>
                 <h1>{classRecord.sectionName}</h1>
-                <p>{classRecord.description || "Your class roster, organized like a deck of index cards."}</p>
+                <p>{classRecord.description || "Your student list, organized like a deck of index cards."}</p>
               </div>
               <div className="classroom-meta">
                 <span className="class-code-pill"><span>CLASS CODE</span><strong>{classRecord.classCode}</strong></span>
@@ -303,7 +331,9 @@ export default function FacultyClass() {
             </header>
 
             <div className="classroom-date"><Icon name="clock" size={16} /> {today}</div>
-            <ModuleTabs active={activeModule} onChange={setActiveModule} />
+            <div className="classroom-pending-action"><button type="button" className="button button-quiet" onClick={() => setShowPending(true)}><Icon name="bell" size={16} /> Pending {pendingEnrollments.length ? <span className="notification-badge">{pendingEnrollments.length}</span> : null}</button></div>
+            {showPending ? <PendingValidationList enrollments={pendingEnrollments} onApprove={(enrollmentId) => updatePending(enrollmentId, "APPROVED")} onDecline={(enrollmentId) => updatePending(enrollmentId, "DECLINED")} onClose={() => setShowPending(false)} busyId={pendingBusyId} /> : null}
+            <ModuleTabs active={activeModule} onChange={setActiveModule} studentListCount={studentListCount} />
             <Toast
               message={notice}
               type={toastType}
@@ -318,7 +348,7 @@ export default function FacultyClass() {
               aria-labelledby={activeModule === "deck" ? "module-deck-link" : `module-tab-${activeModule}`}
               className="classroom-module"
             >
-              {activeModule === "deck" ? (
+              {activeModule === "student-list" ? <StudentListManager classId={id} onCountChange={setStudentListCount} onClose={() => setActiveModule("deck")} /> : activeModule === "deck" ? (
                 <>
                   <div className="deck-toolbar">
                     <div className="deck-title">
@@ -426,6 +456,8 @@ export default function FacultyClass() {
                 <ActivitiesModule key={classRecord.session.id} sessionId={classRecord.session.id} students={sortedStudents} />
               ) : activeModule === "projects" ? (
                 <ProjectsModule key={id} classId={id} sessionId={classRecord.session.id} students={sortedStudents} />
+              ) : activeModule === "quiz" ? (
+                <QuizModule classId={id} students={sortedStudents} attendanceTaken={students.some((student) => student.status !== "UNMARKED")} onTakeAttendance={() => setActiveModule("attendance")} />
               ) : null}
             </section>
             {selectedStudent ? (
