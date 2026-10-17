@@ -21,8 +21,8 @@ export function ModuleTabs({ active, onChange, studentListCount = 0 }) {
     { id: "recitation", label: "Recitation", icon: "mic" },
     { id: "activities", label: "Activities", icon: "listChecks" },
     { id: "projects", label: "Projects", icon: "folderKanban" },
-    { id: "export", label: "Data export", icon: "folderKanban" },
     { id: "quiz", label: "Quiz", icon: "brain" },
+    { id: "export", label: "Data export", icon: "exportSheet" },
     { id: "student-list", label: `Student List (${studentListCount})`, icon: "users" },
   ];
 
@@ -58,7 +58,12 @@ export function ModuleTabs({ active, onChange, studentListCount = 0 }) {
         <Icon name="book" size={17} /> Class Deck
       </button>
       <div className="module-tabs" role="tablist" aria-label="Class modules">
-        {tabs.map((tab, index) => (
+        {[tabs.slice(0, 5), tabs.slice(5)].map((group, groupIndex) => (
+        <div className={`module-tab-group${groupIndex === 1 ? " module-tab-group-secondary" : ""}`} key={groupIndex}>
+        {groupIndex === 1 ? <span className="module-tab-divider" aria-hidden="true" /> : null}
+        {group.map((tab) => {
+          const index = tabs.indexOf(tab);
+          return (
         <button
           className={`module-tab${active === tab.id ? " is-active" : ""}${tab.disabled ? " module-tab-disabled" : ""}`}
           id={`module-tab-${tab.id}`}
@@ -78,6 +83,9 @@ export function ModuleTabs({ active, onChange, studentListCount = 0 }) {
           {tab.label}
           {tab.disabled ? <span className="coming-soon-badge">Coming soon</span> : null}
         </button>
+          );
+        })}
+        </div>
         ))}
       </div>
     </div>

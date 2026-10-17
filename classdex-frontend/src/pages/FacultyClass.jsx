@@ -76,7 +76,27 @@ export default function FacultyClass() {
   const [inviteQr, setInviteQr] = useState("");
   const [inviteQrError, setInviteQrError] = useState("");
   const [showLargeQr, setShowLargeQr] = useState(false);
+  const [inviteExpanded, setInviteExpanded] = useState(false);
   const studentRecordsLoading = Boolean(selectedStudent && !studentRecords && !studentRecordsError);
+
+  useEffect(() => {
+    if (!classRecord?.id) return;
+    try {
+      setInviteExpanded(window.localStorage.getItem(`classdex:invite-expanded:${classRecord.id}`) === "true");
+    } catch {
+      setInviteExpanded(false);
+    }
+  }, [classRecord?.id]);
+
+  function toggleInviteExpanded() {
+    const nextExpanded = !inviteExpanded;
+    setInviteExpanded(nextExpanded);
+    try {
+      window.localStorage.setItem(`classdex:invite-expanded:${classRecord.id}`, String(nextExpanded));
+    } catch {
+      // Keep the choice for this page session when storage is unavailable.
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -412,33 +432,39 @@ export default function FacultyClass() {
             </header>
 
             <div className="classroom-date"><Icon name="calendar" size={16} /> {today}</div>
-            <section className="panel class-share-panel" aria-labelledby="class-share-title">
-              <div className="class-share-copy">
-                <span className="eyebrow"><Icon name="share" /> Share class invite</span>
-                <h2 id="class-share-title">Invite students with a link or QR code</h2>
-                <p>Students can scan the QR code or use the invite link to join this class.</p>
-                <div className="class-share-actions">
-                  <button type="button" className="button button-primary" onClick={copyInvite}>
-                    <Icon name="copy" /> Copy invite link
-                  </button>
-                  <span className="class-share-code">Class code <strong>{classRecord.classCode}</strong></span>
-                  <button type="button" className="button button-quiet" onClick={() => setShowPending(true)}><Icon name="userCheck" size={16} /> Pending {pendingEnrollments.length ? <span className="notification-badge">{pendingEnrollments.length}</span> : null}</button>
+            <section className={`panel class-share-panel${inviteExpanded ? " is-expanded" : ""}`} aria-labelledby="class-share-title">
+              <div className="class-share-row">
+                <button type="button" className="class-share-toggle" aria-expanded={inviteExpanded} aria-controls="class-share-expanded" onClick={toggleInviteExpanded}>
+                  <Icon name="qrCode" />
+                  <span id="class-share-title">Share class invite</span>
+                  <Icon name="chevron" className={inviteExpanded ? "is-rotated" : ""} />
+                </button>
+                <span className="class-share-code">{classRecord.classCode}</span>
+                <button type="button" className="button button-primary" onClick={copyInvite}>
+                  <Icon name="copy" /> Copy invite link
+                </button>
+                <button type="button" className="button button-quiet class-share-pending" onClick={() => setShowPending(true)}><Icon name="bell" size={16} /> Pending {pendingEnrollments.length ? <span className="notification-badge">{pendingEnrollments.length}</span> : null}</button>
+              </div>
+              {inviteExpanded ? (
+                <div id="class-share-expanded" className="class-share-expanded">
+                  <div className="class-share-copy">
+                    <h2>Invite students with a link or QR code</h2>
+                    <p>Students can scan the QR code or use the invite link to join this class.</p>
+                  </div>
+                  <div className="class-share-qr">
+                    {inviteQr ? (
+                      <>
+                        <img src={inviteQr} alt={`QR code for joining ${classRecord.sectionName}`} />
+                        <div className="class-share-qr-actions">
+                          <button type="button" className="button button-quiet" onClick={() => setShowLargeQr(true)}>Show larger</button>
+                          <a href={inviteQr} download={`${classRecord.classCode || "class"}-qr.png`} className="button button-quiet">Download QR</a>
+                        </div>
+                      </>
+                    ) : <div className="class-share-qr-placeholder">Generating QR…</div>}
+                    {inviteQrError ? <span className="class-share-error">{inviteQrError}</span> : null}
+                  </div>
                 </div>
-              </div>
-              <div className="class-share-qr">
-                {inviteQr ? (
-                  <>
-                    <img src={inviteQr} alt={`QR code for joining ${classRecord.sectionName}`} />
-                    <div className="class-share-qr-actions" style={{ display: "flex", gap: "0.4rem", marginTop: "0.4rem", flexWrap: "wrap", justifyContent: "center" }}>
-                      <button type="button" className="button button-quiet" style={{ fontSize: "0.75rem", padding: "0.2rem 0.5rem" }} onClick={() => setShowLargeQr(true)}>Show larger</button>
-                      <a href={inviteQr} download={`${classRecord.classCode || "class"}-qr.png`} className="button button-quiet" style={{ fontSize: "0.75rem", padding: "0.2rem 0.5rem" }}>Download QR</a>
-                    </div>
-                  </>
-                ) : (
-                  <div className="class-share-qr-placeholder">Generating QR…</div>
-                )}
-                {inviteQrError ? <span className="class-share-error">{inviteQrError}</span> : null}
-              </div>
+              ) : null}
             </section>
 
             {showLargeQr && inviteQr ? (
