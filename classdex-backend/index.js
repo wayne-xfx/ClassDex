@@ -943,8 +943,9 @@ app.post(
         return res.status(404).json({ message: "Class not found." });
       }
 
+      const startNow = req.body?.start === true;
       const today = manilaDate();
-      const session = await prisma.classSession.upsert({
+      let session = await prisma.classSession.upsert({
         where: {
           classId_date: {
             classId: classRecord.id,
@@ -954,13 +955,52 @@ app.post(
         create: {
           classId: classRecord.id,
           date: today,
+          startedAt: startNow ? new Date() : null,
         },
         update: {},
       });
+      if (startNow && !session.startedAt) {
+        session = await prisma.classSession.update({
+          where: { id: session.id },
+          data: { startedAt: new Date() },
+        });
+      }
       return res.json({ session });
     } catch (error) {
       console.error("Today's class session lookup or creation failed:", error);
       return res.status(500).json({ message: "Unable to open today's class session." });
+    }
+  },
+);
+
+app.post(
+  "/api/sessions/:id/start",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      const sessionRecord = await findOwnedSession(req.params.id, req.session.userId);
+      if (!sessionRecord) {
+        return res.status(404).json({ message: "Class session not found." });
+      }
+      const session = sessionRecord.startedAt
+        ? sessionRecord
+        : await prisma.classSession.update({
+            where: { id: sessionRecord.id },
+            data: { startedAt: new Date() },
+          });
+      return res.json({
+        session: {
+          id: session.id,
+          classId: session.classId,
+          date: session.date,
+          startedAt: session.startedAt,
+          endedAt: session.endedAt,
+        },
+      });
+    } catch (error) {
+      console.error("Session start failed:", error);
+      return res.status(500).json({ message: "Unable to start attendance session." });
     }
   },
 );
@@ -1629,10 +1669,27 @@ app.put(
           };
         }
 
+        const now = new Date();
+        let effectiveStartedAt = sessionRecord.startedAt;
+        if (!effectiveStartedAt) {
+          const updatedSession = await transaction.classSession.update({
+            where: { id: sessionRecord.id },
+            data: { startedAt: now },
+            select: { startedAt: true },
+          });
+          effectiveStartedAt = updatedSession.startedAt || now;
+        }
+
+        const gracePeriodMinutes =
+          Number.isInteger(sessionRecord.class?.gracePeriodMinutes) &&
+          sessionRecord.class.gracePeriodMinutes >= 0
+            ? sessionRecord.class.gracePeriodMinutes
+            : 15;
         const { appliedStatus, lateOverride } = applyGracePeriod(
           requestedStatus,
-          sessionRecord.startedAt,
-          sessionRecord.class.gracePeriodMinutes,
+          effectiveStartedAt,
+          gracePeriodMinutes,
+          now.getTime(),
         );
         const attendance = await transaction.attendanceRecord.upsert({
           where: {
@@ -1645,8 +1702,9 @@ app.put(
             sessionId: sessionRecord.id,
             studentId: enrollment.studentProfileId,
             status: appliedStatus,
+            markedAt: now,
           },
-          update: { status: appliedStatus, markedAt: new Date() },
+          update: { status: appliedStatus, markedAt: now },
         });
         await syncAttendanceScoreAbsence(
           transaction,
@@ -1654,7 +1712,12 @@ app.put(
           enrollment.studentProfileId,
           appliedStatus === "ABSENT",
         );
-        return { attendance, appliedStatus, lateOverride };
+        return {
+          attendance,
+          appliedStatus,
+          lateOverride,
+          sessionStartedAt: effectiveStartedAt,
+        };
       });
       return res.json(result);
     } catch (error) {

@@ -102,8 +102,15 @@ export const api = {
   },
   studentClassRecords: (classId, studentId) =>
     request(`/classes/${encodeURIComponent(classId)}/students/${encodeURIComponent(studentId)}/records`),
-  todaySession: (id) =>
-    request(`/classes/${encodeURIComponent(id)}/sessions/today`, { method: "POST" }),
+  todaySession: (id, payload = {}) =>
+    request(`/classes/${encodeURIComponent(id)}/sessions/today`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  startAttendanceSession: (sessionId) =>
+    request(`/sessions/${encodeURIComponent(sessionId)}/start`, {
+      method: "POST",
+    }),
   updateClass: (id, payload) =>
     request(`/classes/${encodeURIComponent(id)}`, {
       method: "PATCH",

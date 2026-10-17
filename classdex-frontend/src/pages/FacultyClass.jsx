@@ -242,16 +242,53 @@ export default function FacultyClass() {
     return () => { cancelled = true; };
   }, [id, selectedStudent]);
 
+  async function startAttendanceSession() {
+    if (!classRecord?.session?.id || classRecord.session.startedAt) {
+      return classRecord?.session || null;
+    }
+    try {
+      const { session } = await api.startAttendanceSession(classRecord.session.id);
+      setClassRecord((current) =>
+        current
+          ? { ...current, session: { ...current.session, ...session } }
+          : current,
+      );
+      return session;
+    } catch (startError) {
+      showToast(startError.message, "error");
+      return null;
+    }
+  }
+
   async function updateAttendance(student, requestedStatus, notify = true) {
     const previousStatus = student.status;
+    const effectiveGraceMinutes =
+      Number.isInteger(gracePeriodMinutes) && gracePeriodMinutes >= 0
+        ? gracePeriodMinutes
+        : 15;
     const startedAt = Date.parse(classRecord?.session?.startedAt || "");
-    const afterGrace = Number.isFinite(startedAt) && Date.now() > startedAt + gracePeriodMinutes * 60_000;
+    const afterGrace =
+      Number.isFinite(startedAt) &&
+      Date.now() > startedAt + effectiveGraceMinutes * 60_000;
     const optimisticStatus = requestedStatus === "PRESENT" && afterGrace ? "LATE" : requestedStatus;
     setAttendanceOverrides((current) => ({ ...current, [student.id]: optimisticStatus }));
     setPendingStudentIds((current) => [...current, student.id]);
     try {
       const result = await api.setAttendance(classRecord.session.id, student.id, requestedStatus);
       const appliedStatus = result.appliedStatus || result.attendance?.status || requestedStatus;
+      if (result.sessionStartedAt) {
+        setClassRecord((current) =>
+          current?.session
+            ? {
+                ...current,
+                session: {
+                  ...current.session,
+                  startedAt: current.session.startedAt || result.sessionStartedAt,
+                },
+              }
+            : current,
+        );
+      }
       setAttendanceOverrides((current) => ({ ...current, [student.id]: appliedStatus }));
       const automaticLate = requestedStatus === "PRESENT" && appliedStatus === "LATE";
       if (automaticLate) {
@@ -605,6 +642,8 @@ export default function FacultyClass() {
                   layout={layout}
                   onLayoutChange={setLayout}
                   gracePeriodMinutes={gracePeriodMinutes}
+                  sessionStartedAt={classRecord.session?.startedAt || null}
+                  onStartAttendance={startAttendanceSession}
                   onStatusChange={updateAttendance}
                   onSaveGracePeriod={saveGracePeriod}
                   pendingStudentIds={pendingStudentIds}
