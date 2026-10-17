@@ -82,6 +82,7 @@ test("Access rule (a & c): student records handler binds to session user and ign
     },
     recitationLog: { findMany: async () => [] },
     activityScore: { findMany: async () => [] },
+    projectScore: { findMany: async () => [] },
     quizScore: { findMany: async () => [] },
   };
 
@@ -106,15 +107,34 @@ test("Access rule (a & c): student records handler binds to session user and ign
   if (!classRecord) {
     res.status(404).json({ message: "Class not found." });
   } else {
-    await mockPrisma.attendanceRecord.findMany({
-      where: { studentId: profile.id, session: { is: { classId: classRecord.id } } },
-    });
-    res.json({ success: true });
+    const [attendance, recitations, activities, projects, quizzes] = await Promise.all([
+      mockPrisma.attendanceRecord.findMany({
+        where: { studentId: profile.id, session: { is: { classId: classRecord.id } } },
+      }),
+      mockPrisma.recitationLog.findMany({
+        where: { studentId: profile.id, session: { is: { classId: classRecord.id } } },
+      }),
+      mockPrisma.activityScore.findMany({
+        where: { studentId: profile.id, activity: { is: { classId: classRecord.id } } },
+      }),
+      mockPrisma.projectScore.findMany({
+        where: { studentId: profile.id, project: { is: { classId: classRecord.id } } },
+      }),
+      mockPrisma.quizScore.findMany({
+        where: { studentId: profile.id, session: { is: { classId: classRecord.id } } },
+      }),
+    ]);
+    res.json({ success: true, attendance, recitations, activities, projects, quizzes });
   }
 
   assert.equal(queriedStudentProfileUserId, "user-student-A");
   assert.equal(queriedAttendanceStudentId, "profile-student-A");
   assert.notEqual(queriedAttendanceStudentId, "victim-student-B");
+  assert.deepEqual(res.body.attendance, []);
+  assert.deepEqual(res.body.recitations, []);
+  assert.deepEqual(res.body.activities, []);
+  assert.deepEqual(res.body.projects, []);
+  assert.deepEqual(res.body.quizzes, []);
 });
 
 test("Access rule (b): student requesting a class they are not admitted to returns 404", async () => {

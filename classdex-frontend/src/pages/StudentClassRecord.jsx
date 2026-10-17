@@ -157,11 +157,36 @@ export default function StudentClassRecord() {
                 <div className="student-record-list">
                   {(records?.activities || []).map((item) => (
                     <article key={item.id} className="student-record-item">
-                      <strong>{item.activity.title}</strong>
-                      <span>{item.score === null ? "No score" : `Score ${item.score}${item.activity.maxScore ? ` / ${item.activity.maxScore}` : ""}`}</span>
+                      <strong>{item.activity?.title || "Activity"}</strong>
+                      {item.session?.date ? (
+                        <time dateTime={item.session.date}>{new Date(item.session.date).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Manila" })}</time>
+                      ) : null}
+                      <span>{item.isAbsent ? "Absent" : item.score === null || item.score === undefined ? "No score" : `Score ${item.score}${item.activity?.maxScore ? ` / ${item.activity.maxScore}` : ""}`}</span>
                     </article>
                   ))}
                   {!records?.activities?.length ? <p className="student-record-empty">No activity scores yet.</p> : null}
+                </div>
+              </Card>
+
+              <Card className="student-record-section">
+                <div className="student-record-section-heading">
+                  <div>
+                    <span className="eyebrow"><Icon name="folder" /> Projects</span>
+                    <h2>Project scores</h2>
+                  </div>
+                  <Badge tone="success">Live data</Badge>
+                </div>
+                <div className="student-record-list">
+                  {(records?.projects || []).map((item) => (
+                    <article key={item.id} className="student-record-item">
+                      <strong>{item.project?.type === "MIDTERM" ? "Midterm project" : item.project?.type === "FINALS" ? "Finals project" : item.project?.type || "Project"}</strong>
+                      {item.session?.date ? (
+                        <time dateTime={item.session.date}>{new Date(item.session.date).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Manila" })}</time>
+                      ) : null}
+                      <span>{item.isAbsent ? "Absent" : item.score === null || item.score === undefined ? "No score" : `Score ${item.score}${item.project?.maxScore ? ` / ${item.project.maxScore}` : ""}`}</span>
+                    </article>
+                  ))}
+                  {!records?.projects?.length ? <p className="student-record-empty">No project scores yet.</p> : null}
                 </div>
               </Card>
 
