@@ -31,20 +31,35 @@ export default function Register() {
   });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [recaptchaToken, setRecaptchaToken] = useState("");
+  const [captchaOpen, setCaptchaOpen] = useState(false);
   const captchaRef = useRef(null);
+  const submitButtonRef = useRef(null);
 
   function update(field) {
     return (event) => setForm((prev) => ({ ...prev, [field]: event.target.value }));
   }
 
-  async function handleSubmit(event) {
+  function handleSubmit(event) {
     event.preventDefault();
+    if (submitting) return;
     setError("");
-    if (!recaptchaToken) {
-      setError("Please complete the security check.");
+    if (!ROLES.some((role) => role.value === form.role) || !form.name.trim()) {
+      setError("Choose an account type and enter your full name.");
       return;
     }
+    if (form.password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+    if (form.password !== form.confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    setCaptchaOpen(true);
+  }
+
+  async function submitWithToken(recaptchaToken) {
+    if (submitting) return;
     setSubmitting(true);
     try {
       const user = await register({ ...form, recaptchaToken });
@@ -57,11 +72,19 @@ export default function Register() {
             : null;
       navigate(safeRequestedPath || (user.role === "FACULTY" ? "/faculty" : "/student"), { replace: true });
     } catch (err) {
-      captchaRef.current?.reset();
       setError(err.message);
     } finally {
       setSubmitting(false);
+      captchaRef.current?.reset();
+      setCaptchaOpen(false);
     }
+  }
+
+  function handleCaptchaChange(token) {
+    if (!token) return;
+    captchaRef.current?.reset();
+    setCaptchaOpen(false);
+    void submitWithToken(token);
   }
 
   return (
@@ -163,9 +186,8 @@ export default function Register() {
           </p>
         ) : null}
 
-        <RecaptchaWidget ref={captchaRef} onChange={setRecaptchaToken} />
-
         <button
+          ref={submitButtonRef}
           type="submit"
           disabled={submitting}
           className="w-full rounded-lg bg-navy py-2.5 text-sm font-semibold text-white hover:bg-royal disabled:opacity-70"
@@ -173,6 +195,7 @@ export default function Register() {
           {submitting ? "Creating account…" : "Register"}
         </button>
       </form>
+      {captchaOpen ? <RecaptchaWidget ref={captchaRef} onChange={handleCaptchaChange} onClose={() => setCaptchaOpen(false)} returnFocusRef={submitButtonRef} /> : null}
     </AuthLayout>
   );
 }
