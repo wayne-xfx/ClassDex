@@ -549,6 +549,101 @@ app.get(
   },
 );
 
+const SCHEDULE_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function parseScheduleTimeMinutes(value) {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  const match24 = /^([01]?\d|2[0-3]):(00|30)$/.exec(text);
+  if (match24) {
+    return Number(match24[1]) * 60 + Number(match24[2]);
+  }
+  const match12 = /^(1[0-2]|0?[1-9]):(00|30)\s*(AM|PM)$/i.exec(text);
+  if (match12) {
+    let hours = Number(match12[1]) % 12;
+    if (match12[3].toUpperCase() === "PM") hours += 12;
+    return hours * 60 + Number(match12[2]);
+  }
+  return undefined;
+}
+
+function formatMinutesTo24h(minutes) {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
+}
+
+function formatMinutesTo12h(minutes) {
+  const hours24 = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  const period = hours24 >= 12 ? "PM" : "AM";
+  const hours12 = hours24 % 12 || 12;
+  return `${hours12}:${String(mins).padStart(2, "0")} ${period}`;
+}
+
+function formatStructuredSchedule(days, startMinutes, endMinutes) {
+  return `${days.join(", ")} · ${formatMinutesTo12h(startMinutes)} – ${formatMinutesTo12h(endMinutes)}`;
+}
+
+function parseStructuredScheduleInput(body = {}) {
+  const scheduleObject =
+    body.schedule && typeof body.schedule === "object" && !Array.isArray(body.schedule)
+      ? body.schedule
+      : null;
+  const rawDays = body.scheduleDays ?? body.days ?? scheduleObject?.days;
+  const rawStart = body.scheduleStartTime ?? body.startTime ?? scheduleObject?.startTime;
+  const rawEnd = body.scheduleEndTime ?? body.endTime ?? scheduleObject?.endTime;
+  const hasStructuredInput =
+    rawDays !== undefined || rawStart !== undefined || rawEnd !== undefined;
+
+  if (!hasStructuredInput) {
+    return {
+      scheduleDays: [],
+      scheduleStartTime: null,
+      scheduleEndTime: null,
+      schedule: typeof body.schedule === "string" ? optionalText(body.schedule) : null,
+    };
+  }
+
+  const dayList = Array.isArray(rawDays)
+    ? rawDays.map((day) => String(day || "").trim()).filter(Boolean)
+    : [];
+  const startText = String(rawStart || "").trim();
+  const endText = String(rawEnd || "").trim();
+
+  if (!dayList.length && !startText && !endText) {
+    return {
+      scheduleDays: [],
+      scheduleStartTime: null,
+      scheduleEndTime: null,
+      schedule: typeof body.schedule === "string" ? optionalText(body.schedule) : null,
+    };
+  }
+
+  if (!dayList.length) {
+    return { error: "Select at least one day of the week for the schedule." };
+  }
+  if (dayList.some((day) => !SCHEDULE_DAYS.includes(day))) {
+    return { error: "Schedule days must be valid days from Mon to Sun." };
+  }
+  const sortedDays = SCHEDULE_DAYS.filter((day) => dayList.includes(day));
+  const startMinutes = parseScheduleTimeMinutes(startText);
+  const endMinutes = parseScheduleTimeMinutes(endText);
+  if (startMinutes == null || endMinutes == null) {
+    return { error: "Select both a start time and an end time in 30-minute steps." };
+  }
+  if (endMinutes <= startMinutes) {
+    return { error: "End time must be after start time." };
+  }
+
+  return {
+    scheduleDays: sortedDays,
+    scheduleStartTime: formatMinutesTo24h(startMinutes),
+    scheduleEndTime: formatMinutesTo24h(endMinutes),
+    schedule: formatStructuredSchedule(sortedDays, startMinutes, endMinutes),
+  };
+}
+
 app.post(
   "/api/classes",
   requireAuth,
@@ -563,6 +658,11 @@ app.post(
       return res.status(400).json({
         message: "Use 3–20 letters, numbers, or hyphens for the class code.",
       });
+    }
+
+    const parsedSchedule = parseStructuredScheduleInput(req.body);
+    if (parsedSchedule.error) {
+      return res.status(400).json({ message: parsedSchedule.error });
     }
 
     try {
@@ -589,7 +689,10 @@ app.post(
           sectionName,
           classCode,
           description: optionalText(req.body?.description),
-          schedule: optionalText(req.body?.schedule),
+          schedule: parsedSchedule.schedule,
+          scheduleDays: parsedSchedule.scheduleDays,
+          scheduleStartTime: parsedSchedule.scheduleStartTime,
+          scheduleEndTime: parsedSchedule.scheduleEndTime,
           facultyId: req.session.userId,
         },
         include: { _count: { select: { enrollments: true } } },

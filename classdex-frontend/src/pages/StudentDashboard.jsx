@@ -7,6 +7,7 @@ import RecaptchaWidget from "../components/RecaptchaWidget";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { PageHeader } from "../components/DesignSystem";
+import { formatClassSchedule } from "../utils/schedule";
 
 export default function StudentDashboard() {
   const { user, updateUser } = useAuth();
@@ -141,7 +142,7 @@ export default function StudentDashboard() {
                 <p className="class-label">Section</p>
                 <h3>{classRecord.sectionName}</h3>
                 <div className="code-chip">Code <b>{classRecord.classCode}</b></div>
-                <p className="class-schedule"><Icon name="clock" /> {classRecord.schedule || "Schedule not set"}</p>
+                <p className="class-schedule"><Icon name="clock" /> {formatClassSchedule(classRecord)}</p>
                 <p className="faculty-byline">
                   <Avatar
                     src={classRecord.faculty?.facultyProfile?.photo}

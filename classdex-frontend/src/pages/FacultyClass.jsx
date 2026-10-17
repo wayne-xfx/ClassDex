@@ -21,6 +21,7 @@ import PendingValidationList from "../components/classroom/PendingValidationList
 import QuizModule from "../components/classroom/QuizModule";
 import { Modal } from "../components/DesignSystem";
 import { api } from "../api";
+import { formatClassSchedule } from "../utils/schedule";
 
 const MODULE_LABELS = {
   deck: "Class deck",
@@ -448,7 +449,7 @@ export default function FacultyClass() {
               </div>
               <div className="classroom-meta">
                 <span className="class-code-pill"><span>CLASS CODE</span><strong>{classRecord.classCode}</strong></span>
-                <span className="class-schedule-pill"><Icon name="clock" /> {classRecord.schedule || "Schedule not set"}</span>
+                <span className="class-schedule-pill"><Icon name="clock" /> {formatClassSchedule(classRecord)}</span>
               </div>
             </header>
 

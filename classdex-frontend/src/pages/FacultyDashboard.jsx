@@ -6,6 +6,7 @@ import Icon from "../components/Icon";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { PageHeader } from "../components/DesignSystem";
+import { formatClassSchedule } from "../utils/schedule";
 
 export default function FacultyDashboard() {
   const { user, updateUser } = useAuth();
@@ -103,7 +104,7 @@ export default function FacultyDashboard() {
                 <p className="class-label">Section</p>
                 <h3>{classRecord.sectionName}</h3>
                 <div className="code-chip">Code <b>{classRecord.classCode}</b></div>
-                <p className="class-schedule"><Icon name="clock" /> {classRecord.schedule || "Schedule not set"}</p>
+                <p className="class-schedule"><Icon name="clock" /> {formatClassSchedule(classRecord)}</p>
                 <div className="class-card-actions">
                   <Link to={`/faculty/classes/${classRecord.id}`} className="button button-primary button-small">Open class <Icon name="arrow" /></Link>
                   <button type="button" className="button button-secondary button-small" onClick={() => copyInvite(classRecord.classCode)}><Icon name="copy" /> Invite</button>
