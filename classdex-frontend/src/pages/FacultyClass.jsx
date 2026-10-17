@@ -112,6 +112,27 @@ export default function FacultyClass() {
     setToastActionLabel(actionLabel);
     setToastAction(() => action);
   }
+  async function updatePending(enrollmentId, status) {
+    setPendingBusyId(enrollmentId);
+    try {
+      await api.updatePendingEnrollment(id, enrollmentId, status);
+      setPendingEnrollments((current) => current.filter((item) => item.id !== enrollmentId));
+      if (status === "APPROVED") {
+        try {
+          const deck = await api.classDeck(id);
+          setClassRecord({ ...deck.class, session: deck.session, students: deck.students });
+        } catch {
+          showToast("Student approved, but the class list could not refresh.", "error");
+          return;
+        }
+      }
+      showToast(status === "APPROVED" ? "Student approved." : "Request declined.");
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      setPendingBusyId(null);
+    }
+  }
   const students = useMemo(
     () => (classRecord?.students || classRecord?.enrollments?.map(({ id: enrollmentId, studentProfile }) => ({
       ...studentProfile,

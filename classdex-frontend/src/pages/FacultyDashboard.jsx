@@ -89,7 +89,7 @@ export default function FacultyDashboard() {
               <article className="class-card" key={classRecord.id} style={{ "--card-accent": index % 2 ? "var(--accent-teal)" : "var(--accent-amber)" }}>
                 <div className="class-card-top">
                   <span className="class-icon"><Icon name="book" /></span>
-                  <span className="class-count"><Icon name="users" /> {classRecord._count.enrollments}</span>{pendingCounts[classRecord.id] ? <span className="class-count class-pending-count"><Icon name="users" /> {pendingCounts[classRecord.id]} pending</span> : null}
+                  <span className="class-count"><Icon name="users" /> {classRecord._count.enrollments}</span>{pendingCounts[classRecord.id] ? <span className="class-count class-pending-count"><Icon name="userCheck" /> {pendingCounts[classRecord.id]} pending</span> : null}
                 </div>
                 <p className="class-label">Section</p>
                 <h3>{classRecord.sectionName}</h3>
