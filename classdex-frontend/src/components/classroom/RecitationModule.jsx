@@ -1,6 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Icon from "../Icon";
 import { formatStudentName } from "./studentNames";
+import {
+  getSavedShuffleMuted,
+  playShuffleReveal,
+  playShuffleTick,
+  saveShuffleMuted,
+  unlockShuffleAudio,
+} from "../../utils/shuffleSound";
+
+const SHUFFLE_DURATION_MS = 2400;
 
 export default function RecitationModule({
   eligibleStudents,
@@ -19,14 +28,86 @@ export default function RecitationModule({
   const student = currentCall?.student || null;
   const count = eligibleStudents.length;
   const [previewIndex, setPreviewIndex] = useState(0);
+  const [soundMuted, setSoundMuted] = useState(getSavedShuffleMuted);
+  const soundMutedRef = useRef(soundMuted);
+  const userGestureActiveRef = useRef(false);
+  const lastRevealedLogIdRef = useRef(currentCall?.log?.id || null);
+
+  useEffect(() => {
+    soundMutedRef.current = soundMuted;
+  }, [soundMuted]);
+
+  function toggleSoundMuted() {
+    setSoundMuted((current) => {
+      const nextMuted = !current;
+      saveShuffleMuted(nextMuted);
+      if (!nextMuted) {
+        unlockShuffleAudio();
+      }
+      return nextMuted;
+    });
+  }
+
+  function handleShuffleClick() {
+    userGestureActiveRef.current = true;
+    if (!soundMutedRef.current) {
+      unlockShuffleAudio();
+    }
+    onShuffle(animationEnabled);
+  }
+
+  function handleSkipClick() {
+    userGestureActiveRef.current = true;
+    if (!soundMutedRef.current) {
+      unlockShuffleAudio();
+    }
+    onSkip(animationEnabled);
+  }
 
   useEffect(() => {
     if (!busy || !animationEnabled || !eligibleStudents.length) return undefined;
-    const interval = window.setInterval(() => {
+    let cancelled = false;
+    let timeoutId = null;
+    const startTime = performance.now();
+
+    function step() {
+      if (cancelled) return;
+      const elapsed = performance.now() - startTime;
+      const progress = Math.min(1, elapsed / SHUFFLE_DURATION_MS);
+
       setPreviewIndex((index) => (index + 1) % eligibleStudents.length);
-    }, 100);
-    return () => window.clearInterval(interval);
+      if (userGestureActiveRef.current && !soundMutedRef.current) {
+        playShuffleTick(progress);
+      }
+
+      // Start fast (~55ms) and decelerate smoothly (~250ms) with the shuffle animation
+      const nextDelay = Math.round(55 + (progress * progress) * 195);
+      timeoutId = window.setTimeout(step, nextDelay);
+    }
+
+    if (userGestureActiveRef.current && !soundMutedRef.current) {
+      playShuffleTick(0);
+    }
+    timeoutId = window.setTimeout(step, 55);
+
+    return () => {
+      cancelled = true;
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+    };
   }, [animationEnabled, busy, eligibleStudents.length]);
+
+  useEffect(() => {
+    const logId = currentCall?.log?.id || null;
+    if (busy || !logId) return;
+    if (logId !== lastRevealedLogIdRef.current) {
+      lastRevealedLogIdRef.current = logId;
+      if (userGestureActiveRef.current && !soundMutedRef.current) {
+        playShuffleReveal();
+      }
+      userGestureActiveRef.current = false;
+    }
+  }, [busy, currentCall?.log?.id]);
+
   const previewStudent = eligibleStudents[previewIndex] || null;
 
   return (
@@ -93,6 +174,16 @@ export default function RecitationModule({
       </section>
 
       <div className="recitation-animation-toggle">
+        <button
+          type="button"
+          className={`recitation-sound-toggle${soundMuted ? " is-muted" : ""}`}
+          aria-pressed={!soundMuted}
+          aria-label={soundMuted ? "Unmute shuffle sound" : "Mute shuffle sound"}
+          onClick={toggleSoundMuted}
+        >
+          <Icon name={soundMuted ? "volumeOff" : "volume"} size={16} />
+          <span>{soundMuted ? "Sound muted" : "Sound on"}</span>
+        </button>
         <label className="recitation-animation-switch">
           <span>Shuffle animation</span>
           <input
@@ -165,13 +256,13 @@ export default function RecitationModule({
           type="button"
           className="button button-primary recitation-primary-action"
           disabled={!count || busy || savingScore}
-          onClick={() => onShuffle(animationEnabled)}
+          onClick={handleShuffleClick}
         >
           <Icon name="shuffle" />
           {busy ? "Picking…" : student ? "Shuffle again" : "Shuffle"}
         </button>
         {student ? (
-          <button type="button" className="button button-secondary" disabled={count < 2 || busy || savingScore} onClick={() => onSkip(animationEnabled)}>
+          <button type="button" className="button button-secondary" disabled={count < 2 || busy || savingScore} onClick={handleSkipClick}>
             <Icon name="arrow" /> Skip
           </button>
         ) : null}

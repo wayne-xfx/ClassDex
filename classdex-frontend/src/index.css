@@ -4143,9 +4143,35 @@ textarea {
 
 .recitation-animation-toggle {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
+  gap: 12px;
   margin: 10px 2px;
+}
+
+.recitation-sound-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line, var(--border-color));
+  background: var(--card, #ffffff);
+  color: var(--royal);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.recitation-sound-toggle:hover {
+  border-color: var(--royal);
+}
+
+.recitation-sound-toggle.is-muted {
+  color: var(--muted, var(--text-muted));
 }
 
 .recitation-animation-switch {
