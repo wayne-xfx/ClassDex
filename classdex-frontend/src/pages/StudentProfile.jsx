@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
+import Avatar from "../components/Avatar";
 import Icon from "../components/Icon";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
@@ -21,7 +22,7 @@ function emptyForm(user) {
 }
 
 export default function StudentProfile() {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState(() => emptyForm(user));
   const [loading, setLoading] = useState(true);
@@ -78,7 +79,8 @@ export default function StudentProfile() {
     if (idInvalid) return;
     setSaving(true);
     try {
-      await api.saveStudentProfile(form);
+      const { profile: saved } = await api.saveStudentProfile(form);
+      updateUser?.({ photo: saved?.photo || null });
       navigate("/student", { state: { notice: "Your index card has been saved." } });
     } catch (saveError) {
       setError(saveError.message);
@@ -101,9 +103,7 @@ export default function StudentProfile() {
           {loading ? <p className="muted">Loading your index card…</p> : (
             <>
               <div className="photo-upload">
-                <div className="photo-preview student-photo">
-                  {form.photo ? <img src={form.photo} alt="Student profile" /> : <Icon name="camera" size={28} />}
-                </div>
+                <Avatar src={form.photo} name={form.name || user?.name} alt="Student profile" className="photo-preview student-photo" />
                 <div>
                   <label className="button button-secondary file-button">
                     <Icon name="camera" /> {uploading ? "Uploading…" : form.photo ? "Change photo" : "Upload a photo *"}

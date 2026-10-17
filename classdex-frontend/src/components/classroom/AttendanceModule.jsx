@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import Avatar from "../Avatar";
 import Icon from "../Icon";
 import { StatCounter, StatusButton, StudentCard } from "./ClassroomComponents";
 import { formatStudentName } from "./studentNames";
@@ -145,9 +146,7 @@ export default function AttendanceModule({
               <div className="recitation-stage attendance-focus-stage">
                 <article className="recitation-card attendance-focus-card">
                   <span className="recitation-call-label">Student {activeIndex + 1} of {students.length}</span>
-                  <div className="recitation-student-photo">
-                    {currentStudent.photo ? <img src={currentStudent.photo} alt="" /> : <Icon name="user" size={36} />}
-                  </div>
+                  <Avatar src={currentStudent.photo} name={currentStudent.name} className="recitation-student-photo" />
                   <h3>{formatStudentName(currentStudent.name)}</h3>
                   <p className="recitation-student-id">Student ID · {currentStudent.studentId}</p>
                   <p className="recitation-student-program">

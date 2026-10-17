@@ -1,6 +1,7 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import Avatar from "./Avatar";
 import ThemeToggle from "./ThemeToggle";
 import Icon from "./Icon";
 
@@ -71,7 +72,7 @@ export default function AppShell({ children, active = "" }) {
                 aria-haspopup="menu"
                 onClick={() => setUserMenuOpen((open) => !open)}
               >
-                <span className="user-menu-avatar" aria-hidden="true">{user?.name?.charAt(0)?.toUpperCase() || "U"}</span>
+                <Avatar src={user?.photo} name={user?.name} className="user-menu-avatar" />
                 <span className="header-user">{user?.name}</span>
                 <Icon name="chevron" size={14} />
               </button>

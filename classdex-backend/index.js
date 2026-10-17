@@ -66,6 +66,7 @@ function publicUser(user) {
     name: user.name,
     email: user.email,
     role: user.role,
+    photo: user.facultyProfile?.photo || user.studentProfile?.photo || user.photo || null,
     createdAt: user.createdAt,
   };
 }
@@ -246,7 +247,13 @@ app.post("/api/auth/login", async (req, res) => {
         .json({ message: "Email and password are required." });
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: {
+        facultyProfile: { select: { photo: true } },
+        studentProfile: { select: { photo: true } },
+      },
+    });
     if (!user) {
       clearTimeout(timeout);
       return res.status(401).json({ message: "Invalid email or password." });
@@ -292,6 +299,10 @@ app.get("/api/auth/me", requireAuth, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.session.userId },
+      include: {
+        facultyProfile: { select: { photo: true } },
+        studentProfile: { select: { photo: true } },
+      },
     });
     if (!user) {
       req.session.destroy(() => {});
@@ -551,6 +562,20 @@ app.post(
   },
 );
 
+async function enrichRosterWithPhotos(roster) {
+  if (!roster.length) return roster;
+  const studentIds = [...new Set(roster.map((entry) => entry.studentId).filter(Boolean))];
+  const profiles = await prisma.studentProfile.findMany({
+    where: { studentId: { in: studentIds } },
+    select: { studentId: true, photo: true },
+  });
+  const photoByStudentId = new Map(profiles.map((p) => [p.studentId, p.photo]));
+  return roster.map((entry) => ({
+    ...entry,
+    photo: photoByStudentId.get(entry.studentId) || null,
+  }));
+}
+
 app.get(
   "/api/classes/:id/roster",
   requireAuth,
@@ -559,7 +584,7 @@ app.get(
     try {
       if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
       const roster = await prisma.classRoster.findMany({ where: { classId: req.params.id }, orderBy: [{ studentName: "asc" }, { studentId: "asc" }] });
-      return res.json({ roster });
+      return res.json({ roster: await enrichRosterWithPhotos(roster) });
     } catch (error) {
       console.error("Roster lookup failed:", error);
       return res.status(500).json({ message: "Unable to load the student list." });
@@ -589,7 +614,7 @@ app.post(
         create: { classId: req.params.id, studentName: entry.studentName, studentId: entry.studentId },
         update: { studentName: entry.studentName },
       })));
-      return res.status(201).json({ roster });
+      return res.status(201).json({ roster: await enrichRosterWithPhotos(roster) });
     } catch (error) {
       console.error("Roster save failed:", error);
       return res.status(error.code === "P2002" ? 409 : 500).json({ message: error.code === "P2002" ? "That student ID is already in this student list." : "Unable to save the student list." });
@@ -1822,7 +1847,14 @@ app.get(
           enrollments: {
             include: {
               class: {
-                include: { faculty: { select: { name: true } } },
+                include: {
+                  faculty: {
+                    select: {
+                      name: true,
+                      facultyProfile: { select: { name: true, photo: true } },
+                    },
+                  },
+                },
               },
             },
             orderBy: { joinedAt: "desc" },

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import AppShell from "../components/AppShell";
+import Avatar from "../components/Avatar";
 import Icon from "../components/Icon";
 import RecaptchaWidget from "../components/RecaptchaWidget";
 import { api } from "../api";
@@ -8,7 +9,7 @@ import { useAuth } from "../context/AuthContext";
 import { PageHeader } from "../components/DesignSystem";
 
 export default function StudentDashboard() {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const location = useLocation();
   const [profile, setProfile] = useState(null);
   const [classes, setClasses] = useState([]);
@@ -27,6 +28,9 @@ export default function StudentDashboard() {
       .then(([profileData, classData]) => {
         if (!cancelled) {
           setProfile(profileData.profile);
+          if (profileData.profile?.photo) {
+            updateUser?.({ photo: profileData.profile.photo });
+          }
           setClasses(classData.classes);
         }
       })
@@ -39,7 +43,7 @@ export default function StudentDashboard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [updateUser]);
 
   function handleJoin(event) {
     event.preventDefault();
@@ -92,7 +96,12 @@ export default function StudentDashboard() {
           icon="users"
           title={`Hello, ${profile?.name || user?.name?.split(" ")[0]}`}
           description="Your index card and every class you’re part of."
-          action={<Link to="/student/profile" className="button button-secondary"><Icon name="user" /> {profile ? "Edit index card" : "Create index card"}</Link>}
+          action={(
+            <Link to="/student/profile" className="button button-secondary">
+              <Avatar src={profile?.photo || user?.photo} name={profile?.name || user?.name} className="dashboard-profile-avatar" />
+              {profile ? "Edit index card" : "Create index card"}
+            </Link>
+          )}
         />
         {notice ? <p className="notice notice-success" role="status"><Icon name="check" /> {notice}</p> : null}
         {error ? <p className="notice notice-error" role="alert">{error}</p> : null}
@@ -133,7 +142,14 @@ export default function StudentDashboard() {
                 <h3>{classRecord.sectionName}</h3>
                 <div className="code-chip">Code <b>{classRecord.classCode}</b></div>
                 <p className="class-schedule"><Icon name="clock" /> {classRecord.schedule || "Schedule not set"}</p>
-                <p className="faculty-byline"><Icon name="user" /> {classRecord.faculty?.name || "Faculty"}</p>
+                <p className="faculty-byline">
+                  <Avatar
+                    src={classRecord.faculty?.facultyProfile?.photo}
+                    name={classRecord.faculty?.facultyProfile?.name || classRecord.faculty?.name || "Faculty"}
+                    className="faculty-byline-avatar"
+                  />
+                  {classRecord.faculty?.facultyProfile?.name || classRecord.faculty?.name || "Faculty"}
+                </p>
                 <div className="student-class-summary" aria-label="Class record summary">
                   {Object.entries(classRecord.recordSummary || { attendance: "—", recitation: "—", activities: "—", quiz: "—" }).map(([label, value]) => (
                     <span key={label}><b>{value}</b>{label}</span>

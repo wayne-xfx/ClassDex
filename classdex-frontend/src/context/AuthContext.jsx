@@ -43,6 +43,9 @@ export function AuthProvider({ children }) {
         await api.logout();
         setUser(null);
       },
+      updateUser(patch) {
+        setUser((current) => (current ? { ...current, ...patch } : current));
+      },
     }),
     [user, loading],
   );

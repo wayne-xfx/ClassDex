@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Avatar from "../Avatar";
 import Icon from "../Icon";
 import { formatStudentName } from "./studentNames";
 
@@ -79,9 +80,7 @@ export default function RecitationModule({
                 key={eligibleStudent.id}
                 title={`${formatStudentName(eligibleStudent.name)} · ${eligibleStudent.status === "LATE" ? "Late" : "Present"}`}
               >
-                <div className="recitation-mini-photo">
-                  {eligibleStudent.photo ? <img src={eligibleStudent.photo} alt="" /> : <Icon name="user" size={17} />}
-                </div>
+                <Avatar src={eligibleStudent.photo} name={eligibleStudent.name} className="recitation-mini-photo" />
                 <span>{formatStudentName(eligibleStudent.name)}</span>
                 {eligibleStudent.status === "LATE" ? <small className="recitation-mini-late">Late</small> : null}
               </div>
@@ -109,9 +108,7 @@ export default function RecitationModule({
       <section className="recitation-stage" aria-live="polite" aria-atomic="true">
         {busy && animationEnabled && previewStudent ? (
           <article className="recitation-shuffling-card" key={previewStudent.id}>
-            <div className="recitation-shuffling-photo">
-              {previewStudent.photo ? <img src={previewStudent.photo} alt="" /> : <Icon name="user" size={30} />}
-            </div>
+            <Avatar src={previewStudent.photo} name={previewStudent.name} className="recitation-shuffling-photo" />
             <strong>{formatStudentName(previewStudent.name)}</strong>
             <span>ID {previewStudent.studentId}</span>
             <div className="recitation-shuffling-lines" aria-hidden="true"><i /><i /><i /></div>
@@ -120,9 +117,7 @@ export default function RecitationModule({
         ) : student ? (
           <article className="recitation-card" key={currentCall.log.id}>
             <span className="recitation-call-label"><Icon name="check" size={15} /> Your next speaker</span>
-            <div className="recitation-student-photo">
-              {student.photo ? <img src={student.photo} alt="" /> : <Icon name="user" size={36} />}
-            </div>
+            <Avatar src={student.photo} name={student.name} className="recitation-student-photo" />
             <h3>{formatStudentName(student.name)}</h3>
             <p className="recitation-student-id">Student ID · {student.studentId}</p>
             <p className="recitation-student-program">
@@ -189,9 +184,7 @@ export default function RecitationModule({
           <ol>
             {history.map((call) => (
               <li key={call.id}>
-                <div className="history-student-photo">
-                  {call.student.photo ? <img src={call.student.photo} alt="" /> : <Icon name="user" size={16} />}
-                </div>
+                <Avatar src={call.student.photo} name={call.student.name} className="history-student-photo" />
                 <span className="history-student-name">{call.student.name}</span>
                 <span className="history-student-score">{call.score === null ? "No score" : `Score ${call.score}`}</span>
                 <time dateTime={call.calledAt}>
