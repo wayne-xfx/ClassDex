@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import Avatar from "../Avatar";
 import Icon from "../Icon";
 import { formatStudentName } from "./studentNames";
 
@@ -114,9 +115,7 @@ export function StudentCard({ student, status = "UNMARKED", children, layout = "
             aria-label={`Open ${formatStudentName(student.name)}'s index card profile and class records`}
           >
             <div className="student-card-identity">
-              <div className="student-card-photo">
-                {student.photo ? <img src={student.photo} alt="" /> : <Icon name="user" size={24} />}
-              </div>
+              <Avatar src={student.photo} name={student.name} className="student-card-photo" />
               <div className="student-card-copy">
                 <h3>{formatStudentName(student.name)}</h3>
                 <span className="student-card-id">ID {student.studentId}</span>
@@ -137,9 +136,7 @@ export function StudentCard({ student, status = "UNMARKED", children, layout = "
         ) : (
           <>
             <div className="student-card-identity">
-              <div className="student-card-photo">
-                {student.photo ? <img src={student.photo} alt="" /> : <Icon name="user" size={24} />}
-              </div>
+              <Avatar src={student.photo} name={student.name} className="student-card-photo" />
               <div className="student-card-copy">
                 <h3>{formatStudentName(student.name)}</h3>
                 <span className="student-card-id">ID {student.studentId}</span>
@@ -181,9 +178,7 @@ export function StudentDetailDialog({ student, className, records, loading, erro
           <Icon name="x" />
         </button>
         <div className="student-detail-profile">
-          <div className="student-detail-photo">
-            {student.photo ? <img src={student.photo} alt="" /> : <Icon name="user" size={34} />}
-          </div>
+          <Avatar src={student.photo} name={student.name} className="student-detail-photo" />
           <div>
             <span className="eyebrow"><Icon name="book" /> {className} · index card</span>
             <h2 id="student-detail-title">{formatStudentName(student.name)}</h2>

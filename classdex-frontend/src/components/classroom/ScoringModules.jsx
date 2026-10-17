@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import Avatar from "../Avatar";
 import Icon from "../Icon";
 import { Badge, Button, Card, Modal, PageHeader, Skeleton, StatusPill } from "../DesignSystem";
 import { ConfirmDialog, EmptyState } from "./ClassroomComponents";
@@ -129,9 +130,12 @@ function ScoreRow({ entry, maxScore, onSave, inputRef, onEnter }) {
   return (
     <div className={`scoring-row${isAbsent ? " scoring-row-absent" : ""}`}>
       <div className="scoring-student">
-        <div className="scoring-student-photo">
-          {entry.student.photo ? <img src={entry.student.photo} alt="" /> : <Icon name="user" size={20} />}
-        </div>
+        <Avatar
+          src={entry.student.photo}
+          name={entry.student.name}
+          size="md"
+          className="scoring-student-photo"
+        />
         <div className="scoring-student-copy">
           <strong>{formatStudentName(entry.student.name)}</strong>
           <span>ID {entry.student.studentId}</span>

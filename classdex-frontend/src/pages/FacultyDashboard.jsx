@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import AppShell from "../components/AppShell";
+import Avatar from "../components/Avatar";
 import Icon from "../components/Icon";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { PageHeader } from "../components/DesignSystem";
 
 export default function FacultyDashboard() {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const location = useLocation();
   const [classes, setClasses] = useState([]);
   const [profile, setProfile] = useState(null);
@@ -24,6 +25,9 @@ export default function FacultyDashboard() {
         if (cancelled) return;
         setClasses(classData.classes);
         setProfile(profileData.profile);
+        if (profileData.profile?.photo) {
+          updateUser?.({ photo: profileData.profile.photo });
+        }
         setPendingCounts(pendingData.counts || {});
       })
       .catch((requestError) => {
@@ -35,7 +39,7 @@ export default function FacultyDashboard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [updateUser]);
 
   useEffect(() => { const refresh = () => api.facultyPendingCounts().then(({ counts }) => setPendingCounts(counts || {})).catch(() => {}); const interval = window.setInterval(refresh, 30000); window.addEventListener("focus", refresh); return () => { window.clearInterval(interval); window.removeEventListener("focus", refresh); }; }, []);
 
@@ -65,7 +69,7 @@ export default function FacultyDashboard() {
 
         {!profile && !profilePromptDismissed ? (
           <section className="profile-prompt">
-            <div className="prompt-icon"><Icon name="user" size={21} /></div>
+            <Avatar src={user?.photo} name={user?.name} className="prompt-icon" />
             <div className="prompt-copy">
               <strong>Make your faculty card yours</strong>
               <p>Add your department and contact details. It’s optional and can be completed any time.</p>
@@ -80,7 +84,12 @@ export default function FacultyDashboard() {
             <h2>Your classes</h2>
             <p>{classes.length} {classes.length === 1 ? "class" : "classes"} created</p>
           </div>
-          {profile ? <Link to="/faculty/profile" className="text-link"><Icon name="edit" /> Edit profile</Link> : null}
+          {profile ? (
+            <Link to="/faculty/profile" className="text-link dashboard-profile-link">
+              <Avatar src={profile.photo || user?.photo} name={profile.name || user?.name} className="dashboard-profile-avatar" />
+              <Icon name="edit" /> Edit profile
+            </Link>
+          ) : null}
         </div>
 
         {loading ? <div className="loading-card">Loading your classes…</div> : classes.length ? (
