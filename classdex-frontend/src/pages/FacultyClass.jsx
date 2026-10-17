@@ -52,10 +52,12 @@ export default function FacultyClass() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [activeModule, setActiveModule] = useState("deck");
-  const [showPending, setShowPending] = useState(false);
+  const [showPending, setShowPending] = useState(() => new URLSearchParams(window.location.search).get("notifications") === "1");
   const [pendingEnrollments, setPendingEnrollments] = useState([]);
+  const [absenceWarnings, setAbsenceWarnings] = useState([]);
   const [studentListCount, setStudentListCount] = useState(0);
   const [pendingBusyId, setPendingBusyId] = useState(null);
+  const [dismissBusyId, setDismissBusyId] = useState(null);
   const [search, setSearch] = useState("");
   const [layout, setLayout] = useState("grid");
   const [attendanceOverrides, setAttendanceOverrides] = useState({});
@@ -160,7 +162,17 @@ export default function FacultyClass() {
   }, [inviteLink]);
 
   useEffect(() => { let cancelled = false; api.classRoster(id).then(({ roster }) => { if (!cancelled) setStudentListCount(roster.length); }).catch(() => {}); return () => { cancelled = true; }; }, [id]);
-  const refreshPending = useCallback(() => api.pendingEnrollments(id).then(({ pending }) => setPendingEnrollments(pending)).catch(() => {}), [id]);
+  const refreshPending = useCallback(
+    () =>
+      api
+        .pendingEnrollments(id)
+        .then(({ pending, absenceWarnings: warnings }) => {
+          setPendingEnrollments(pending || []);
+          setAbsenceWarnings(warnings || []);
+        })
+        .catch(() => {}),
+    [id],
+  );
   useEffect(() => { refreshPending(); const interval = window.setInterval(refreshPending, 30000); window.addEventListener("focus", refreshPending); return () => { window.clearInterval(interval); window.removeEventListener("focus", refreshPending); }; }, [refreshPending]);
 
   const dismissToast = useCallback(() => {
@@ -189,11 +201,24 @@ export default function FacultyClass() {
           return;
         }
       }
+      refreshPending();
       showToast(status === "APPROVED" ? "Student approved." : "Request declined.");
     } catch (error) {
       showToast(error.message, "error");
     } finally {
       setPendingBusyId(null);
+    }
+  }
+  async function dismissAbsenceWarning(studentId) {
+    setDismissBusyId(studentId);
+    try {
+      await api.dismissAbsenceWarning(id, studentId);
+      setAbsenceWarnings((current) => current.filter((item) => item.studentProfile?.id !== studentId));
+      showToast("Absence warning dismissed.");
+    } catch (dismissError) {
+      showToast(dismissError.message, "error");
+    } finally {
+      setDismissBusyId(null);
     }
   }
   const students = useMemo(
@@ -291,6 +316,7 @@ export default function FacultyClass() {
         );
       }
       setAttendanceOverrides((current) => ({ ...current, [student.id]: appliedStatus }));
+      refreshPending();
       const automaticLate = requestedStatus === "PRESENT" && appliedStatus === "LATE";
       if (automaticLate) {
         showToast(
@@ -386,15 +412,6 @@ export default function FacultyClass() {
     } catch (exportError) {
       showToast(exportError.message, "error");
     }
-  }
-
-  async function updatePending(enrollmentId, status) {
-    setPendingBusyId(enrollmentId);
-    try {
-      await api.updatePendingEnrollment(id, enrollmentId, status);
-      setPendingEnrollments((current) => current.filter((item) => item.id !== enrollmentId));
-      showToast(status === "APPROVED" ? "Student approved." : "Request declined.");
-    } catch (updateError) { showToast(updateError.message, "error"); } finally { setPendingBusyId(null); }
   }
 
   async function shuffleRecitation(skipCurrent = false, animate = recitationAnimationEnabled) {
@@ -502,7 +519,20 @@ export default function FacultyClass() {
                 <button type="button" className="button button-primary" onClick={copyInvite}>
                   <Icon name="copy" /> Copy invite link
                 </button>
-                <button type="button" className="button button-quiet class-share-pending" onClick={() => setShowPending(true)}><Icon name="bell" size={16} /> Pending {pendingEnrollments.length ? <span className="notification-badge">{pendingEnrollments.length}</span> : null}</button>
+                <button
+                  type="button"
+                  className="button button-quiet class-share-pending"
+                  aria-label={`Notifications${pendingEnrollments.length + absenceWarnings.length ? ` (${pendingEnrollments.length + absenceWarnings.length})` : ""}`}
+                  title="Notifications"
+                  onClick={() => setShowPending(true)}
+                >
+                  <Icon name="bell" size={17} />
+                  {pendingEnrollments.length + absenceWarnings.length > 0 ? (
+                    <span className="notification-badge">
+                      {pendingEnrollments.length + absenceWarnings.length}
+                    </span>
+                  ) : null}
+                </button>
               </div>
               {inviteExpanded ? (
                 <div id="class-share-expanded" className="class-share-expanded">
@@ -544,7 +574,19 @@ export default function FacultyClass() {
                 </div>
               </Modal>
             ) : null}
-            {showPending ? <PendingValidationList enrollments={pendingEnrollments} onApprove={(enrollmentId) => updatePending(enrollmentId, "APPROVED")} onDecline={(enrollmentId) => updatePending(enrollmentId, "DECLINED")} onClose={() => setShowPending(false)} busyId={pendingBusyId} /> : null}
+            {showPending ? (
+              <PendingValidationList
+                enrollments={pendingEnrollments}
+                absenceWarnings={absenceWarnings}
+                className={classRecord.sectionName}
+                onApprove={(enrollmentId) => updatePending(enrollmentId, "APPROVED")}
+                onDecline={(enrollmentId) => updatePending(enrollmentId, "DECLINED")}
+                onDismissWarning={dismissAbsenceWarning}
+                onClose={() => setShowPending(false)}
+                busyId={pendingBusyId}
+                dismissBusyId={dismissBusyId}
+              />
+            ) : null}
             <ModuleTabs active={activeModule} onChange={setActiveModule} studentListCount={studentListCount} />
             <Toast
               message={notice}

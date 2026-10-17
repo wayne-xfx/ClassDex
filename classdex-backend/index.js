@@ -523,11 +523,103 @@ app.get(
   },
 );
 
+const ABSENCE_WARNING_THRESHOLD = 7;
+
+async function getActiveAbsenceWarningsForClass(classId, sectionName = "") {
+  const [enrollments, absentCounts] = await Promise.all([
+    prisma.classEnrollment.findMany({
+      where: { classId, status: "APPROVED" },
+      include: {
+        studentProfile: {
+          select: {
+            id: true,
+            name: true,
+            studentId: true,
+            program: true,
+            section: true,
+            photo: true,
+          },
+        },
+      },
+      orderBy: { joinedAt: "asc" },
+    }),
+    prisma.attendanceRecord.groupBy({
+      by: ["studentId"],
+      where: {
+        status: "ABSENT",
+        session: { is: { classId } },
+      },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const countByStudent = new Map(
+    absentCounts.map((row) => [row.studentId, row._count._all]),
+  );
+  const warnings = [];
+
+  for (const enrollment of enrollments) {
+    const student = enrollment.studentProfile;
+    const absentCount = countByStudent.get(student.id) || 0;
+    const dismissedCount = enrollment.dismissedAbsenceCount || 0;
+
+    if (absentCount < dismissedCount) {
+      await prisma.classEnrollment.update({
+        where: { id: enrollment.id },
+        data: { dismissedAbsenceCount: absentCount },
+      });
+    }
+
+    if (absentCount >= ABSENCE_WARNING_THRESHOLD && absentCount > dismissedCount) {
+      warnings.push({
+        id: `${classId}:${student.id}`,
+        enrollmentId: enrollment.id,
+        classId,
+        className: sectionName,
+        studentId: student.id,
+        studentCode: student.studentId,
+        studentName: student.name,
+        program: student.program,
+        section: student.section,
+        photo: student.photo,
+        absentCount,
+        threshold: ABSENCE_WARNING_THRESHOLD,
+        message: `${student.name} has ${absentCount} absences in ${sectionName || "this class"} and may be subject to dropping`,
+      });
+    }
+  }
+
+  return warnings;
+}
+
 app.get("/api/faculty/classes/pending-counts", requireAuth, requireRole("FACULTY"), async (req, res) => {
   try {
-    const classes = await prisma.class.findMany({ where: { facultyId: req.session.userId }, select: { id: true, _count: { select: { enrollments: { where: { status: "PENDING" } } } } } });
-    return res.json({ counts: Object.fromEntries(classes.map((item) => [item.id, item._count.enrollments])) });
-  } catch (error) { return res.status(500).json({ message: "Unable to load pending request counts." }); }
+    const classes = await prisma.class.findMany({
+      where: { facultyId: req.session.userId },
+      select: {
+        id: true,
+        sectionName: true,
+        _count: { select: { enrollments: { where: { status: "PENDING" } } } },
+      },
+    });
+    const counts = {};
+    const pendingCounts = {};
+    const warningCounts = {};
+    for (const item of classes) {
+      const warnings = await getActiveAbsenceWarningsForClass(item.id, item.sectionName);
+      pendingCounts[item.id] = item._count.enrollments;
+      warningCounts[item.id] = warnings.length;
+      counts[item.id] = item._count.enrollments + warnings.length;
+    }
+    return res.json({
+      counts,
+      pendingCounts,
+      warningCounts,
+      threshold: ABSENCE_WARNING_THRESHOLD,
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Unable to load notification counts." });
+  }
 });
 
 app.get(
@@ -806,11 +898,84 @@ app.delete(
 
 app.get("/api/classes/:id/pending", requireAuth, requireRole("FACULTY"), async (req, res) => {
   try {
-    if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
-    const pending = await prisma.classEnrollment.findMany({ where: { classId: req.params.id, status: "PENDING" }, include: { studentProfile: { select: { id: true, name: true, studentId: true, program: true, section: true, photo: true } } }, orderBy: { joinedAt: "asc" } });
-    return res.json({ pending });
-  } catch (error) { return res.status(500).json({ message: "Unable to load pending requests." }); }
+    const ownedClass = await prisma.class.findFirst({
+      where: { id: req.params.id, facultyId: req.session.userId },
+      select: { id: true, sectionName: true },
+    });
+    if (!ownedClass) return res.status(404).json({ message: "Class not found." });
+    const [pending, absenceWarnings] = await Promise.all([
+      prisma.classEnrollment.findMany({
+        where: { classId: ownedClass.id, status: "PENDING" },
+        include: {
+          studentProfile: {
+            select: {
+              id: true,
+              name: true,
+              studentId: true,
+              program: true,
+              section: true,
+              photo: true,
+            },
+          },
+        },
+        orderBy: { joinedAt: "asc" },
+      }),
+      getActiveAbsenceWarningsForClass(ownedClass.id, ownedClass.sectionName),
+    ]);
+    return res.json({
+      pending,
+      absenceWarnings,
+      threshold: ABSENCE_WARNING_THRESHOLD,
+      totalNotifications: pending.length + absenceWarnings.length,
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Unable to load pending requests." });
+  }
 });
+
+app.post(
+  "/api/classes/:id/absence-warnings/:studentId/dismiss",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      const ownedClass = await findOwnedClass(req.params.id, req.session.userId);
+      if (!ownedClass) {
+        return res.status(404).json({ message: "Class not found." });
+      }
+      const enrollment = await prisma.classEnrollment.findFirst({
+        where: {
+          classId: ownedClass.id,
+          studentProfileId: req.params.studentId,
+          status: "APPROVED",
+        },
+        select: { id: true, studentProfileId: true },
+      });
+      if (!enrollment) {
+        return res.status(404).json({ message: "Student not found in this class." });
+      }
+      const absentCount = await prisma.attendanceRecord.count({
+        where: {
+          studentId: enrollment.studentProfileId,
+          status: "ABSENT",
+          session: { is: { classId: ownedClass.id } },
+        },
+      });
+      await prisma.classEnrollment.update({
+        where: { id: enrollment.id },
+        data: { dismissedAbsenceCount: absentCount },
+      });
+      return res.json({
+        dismissed: true,
+        studentId: enrollment.studentProfileId,
+        absentCount,
+      });
+    } catch (error) {
+      console.error("Dismiss absence warning failed:", error);
+      return res.status(500).json({ message: "Unable to dismiss warning." });
+    }
+  },
+);
 
 app.patch("/api/classes/:id/pending/:enrollmentId", requireAuth, requireRole("FACULTY"), async (req, res) => {
   const status = String(req.body?.status || "").toUpperCase();
