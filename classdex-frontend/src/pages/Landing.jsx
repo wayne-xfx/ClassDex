@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import lnuLogo from "../assets/lnu-logo.png";
 import { Brand } from "../components/AppShell";
 import Icon from "../components/Icon";
 import ThemeToggle from "../components/ThemeToggle";
@@ -42,7 +43,10 @@ export default function Landing() {
       <main className="landing-main">
         <section className="landing-hero">
           <div className="landing-copy">
-            <span className="landing-kicker"><span /> Made for Leyte Normal University</span>
+            <span className="landing-kicker">
+              <img src={lnuLogo} alt="Leyte Normal University logo" className="lnu-logo" />
+              Made for Leyte Normal University
+            </span>
             <h1>Make every student <span>count.</span></h1>
             <p className="landing-lead">
               Your classroom, your student list, your call. ClassDex turns the familiar index card into a better way to manage class and bring every voice into the room.
@@ -130,7 +134,10 @@ export default function Landing() {
 
       <footer className="landing-footer">
         <Brand />
-        <span>Designed for better classroom moments at Leyte Normal University.</span>
+        <span className="landing-footer-lnu">
+          <img src={lnuLogo} alt="" className="lnu-logo lnu-logo-sm" />
+          Designed for better classroom moments at Leyte Normal University.
+        </span>
       </footer>
     </div>
   );
