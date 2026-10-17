@@ -17,8 +17,9 @@ export default function StudentDashboard() {
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState(location.state?.notice || "");
-  const [recaptchaToken, setRecaptchaToken] = useState("");
+  const [captchaOpen, setCaptchaOpen] = useState(false);
   const captchaRef = useRef(null);
+  const submitButtonRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,28 +41,46 @@ export default function StudentDashboard() {
     };
   }, []);
 
-  async function handleJoin(event) {
+  function handleJoin(event) {
     event.preventDefault();
+    if (joining) return;
     setError("");
-    if (!recaptchaToken) {
-      setError("Please complete the security check.");
+    const normalizedCode = classCode.trim().toUpperCase();
+    if (!normalizedCode) {
+      setError("Enter a class invite code.");
       return;
     }
+    if (!/^[A-Z0-9-]{3,20}$/.test(normalizedCode)) {
+      setError("Use 3–20 letters, numbers, or hyphens.");
+      return;
+    }
+    setCaptchaOpen(true);
+  }
+
+  async function joinWithToken(recaptchaToken) {
+    if (joining) return;
     setJoining(true);
     try {
-      const joinResult = await api.joinClass(classCode, recaptchaToken);
+      const joinResult = await api.joinClass(classCode.trim().toUpperCase(), recaptchaToken);
       setClassCode("");
-      setRecaptchaToken("");
       setNotice(joinResult.status === "PENDING" ? joinResult.message || "Waiting for instructor approval." : "You joined the class. Welcome aboard!");
       const result = await api.studentClasses();
       setClasses(result.classes);
     } catch (joinError) {
-      captchaRef.current?.reset();
       if (joinError.status === "PENDING" || joinError.status === "APPROVED") setNotice(joinError.message);
       else setError(joinError.message);
     } finally {
       setJoining(false);
+      captchaRef.current?.reset();
+      setCaptchaOpen(false);
     }
+  }
+
+  function handleCaptchaChange(token) {
+    if (!token) return;
+    captchaRef.current?.reset();
+    setCaptchaOpen(false);
+    void joinWithToken(token);
   }
 
   return (
@@ -95,10 +114,10 @@ export default function StudentDashboard() {
               <p>Enter the code from your faculty member or open their invite link.</p>
             </div>
             <form onSubmit={handleJoin} className="join-form">
-              <input className="input" aria-label="Class code" value={classCode} onChange={(event) => setClassCode(event.target.value.toUpperCase())} placeholder="e.g. ENG3A25" required />
-              <button className="button button-primary" type="submit" disabled={joining}>{joining ? "Joining…" : "Join class"} <Icon name="arrow" /></button>
-              <RecaptchaWidget ref={captchaRef} onChange={setRecaptchaToken} />
+              <input className="input" aria-label="Class code" value={classCode} onChange={(event) => setClassCode(event.target.value.toUpperCase())} placeholder="e.g. ENG3A25" />
+              <button ref={submitButtonRef} className="button button-primary" type="submit" disabled={joining}>{joining ? "Joining…" : "Join class"} <Icon name="arrow" /></button>
             </form>
+            {captchaOpen ? <RecaptchaWidget ref={captchaRef} onChange={handleCaptchaChange} onClose={() => setCaptchaOpen(false)} returnFocusRef={submitButtonRef} /> : null}
           </section>
         )}
 

@@ -637,14 +637,18 @@ textarea {
   gap: 8px;
 }
 
-.join-form > .recaptcha-widget { grid-column: 1 / -1; }
 .join-form > .input { min-width: 0; }
 .join-code-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: .75rem; }
 .join-invite-panel { display: grid; gap: 1rem; }
 .join-code-row .field { min-width: 0; }
 .join-code-row .input { min-width: 0; }
-.recaptcha-widget { display: grid; justify-items: start; gap: .35rem; width: 304px; max-width: 100%; min-width: 0; }
-.recaptcha-frame { width: 304px; max-width: 100%; min-height: 78px; overflow: hidden; }
+.captcha-modal-backdrop { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; padding: 4vw; background: rgb(10 24 48 / 52%); }
+.captcha-modal { position: relative; box-sizing: border-box; width: min(92vw, 360px); max-height: 90vh; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-dialog); padding: 12px; background: var(--card); color: var(--navy); box-shadow: var(--shadow-floating); }
+.captcha-modal h2 { margin: 0 42px 12px 0; color: var(--navy); font-size: 1.1rem; }
+.captcha-modal-close { position: absolute; top: 6px; right: 6px; display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--muted); font-size: 1.5rem; line-height: 1; cursor: pointer; }
+.recaptcha-widget { display: grid; justify-items: start; gap: .35rem; width: min(304px, 100%); max-width: 100%; min-width: 0; }
+.recaptcha-frame { width: min(304px, 100%); max-width: 100%; min-width: 0; min-height: 78px; overflow: hidden; }
+.recaptcha-frame > div { width: 100%; min-width: 0; }
 .recaptcha-retry { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 .recaptcha-retry .button { padding: .35rem .65rem; font-size: .8rem; }
 
@@ -1266,7 +1270,6 @@ textarea {
   .join-code-row { grid-template-columns: minmax(0, 1fr); }
   .join-code-row > .button { justify-self: start; }
   .join-form { grid-template-columns: minmax(0, 1fr); }
-  .join-form > .recaptcha-widget { grid-column: 1; }
 }
 
 .module-navigation {
