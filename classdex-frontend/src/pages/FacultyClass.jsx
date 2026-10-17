@@ -310,9 +310,9 @@ export default function FacultyClass() {
     }
   }
 
-  async function downloadExcelExport() {
+  async function downloadExcelExport(types) {
     try {
-      const blob = await api.exportClassExcel(id);
+      const blob = await api.exportClassExcel(id, types);
       const url = window.URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -330,9 +330,9 @@ export default function FacultyClass() {
     }
   }
 
-  async function downloadCsvExport() {
+  async function downloadCsvExport(types) {
     try {
-      const blob = await api.exportClassCsv(id);
+      const blob = await api.exportClassCsv(id, types);
       const url = window.URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
