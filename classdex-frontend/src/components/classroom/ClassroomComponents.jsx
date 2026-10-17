@@ -14,14 +14,15 @@ const DETAIL_STATUS_LABELS = {
   ABSENT: "Absent",
 };
 
-export function ModuleTabs({ active, onChange }) {
+export function ModuleTabs({ active, onChange, studentListCount = 0 }) {
   const tabRefs = useRef([]);
   const tabs = [
-    { id: "attendance", label: "Attendance", icon: "check" },
-    { id: "recitation", label: "Recitation", icon: "user" },
-    { id: "activities", label: "Activities", icon: "book" },
-    { id: "projects", label: "Projects", icon: "book" },
-    { id: "quiz", label: "Quiz", icon: "book", disabled: true },
+    { id: "attendance", label: "Attendance", icon: "clipboardCheck" },
+    { id: "recitation", label: "Recitation", icon: "message" },
+    { id: "activities", label: "Activities", icon: "listChecks" },
+    { id: "projects", label: "Projects", icon: "folder" },
+    { id: "quiz", label: "Quiz", icon: "brain" },
+    { id: "student-list", label: `Student List (${studentListCount})`, icon: "users" },
   ];
 
   function handleTabKeyDown(event, index) {

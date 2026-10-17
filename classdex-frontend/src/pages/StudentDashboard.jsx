@@ -6,6 +6,9 @@ import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { PageHeader } from "../components/DesignSystem";
 
+// Placeholder presentation data for SCRUM-39. Replace with dashboard aggregates in a later sprint.
+const MOCK_RECORD_SUMMARY = { attendance: "—", recitation: "—", activity: "—", project: "—" };
+
 export default function StudentDashboard() {
   const { user } = useAuth();
   const location = useLocation();
@@ -42,13 +45,15 @@ export default function StudentDashboard() {
     setError("");
     setJoining(true);
     try {
-      await api.joinClass(classCode);
+      const joinResult = await api.joinClass(classCode);
       setNotice("You’ve joined the class. Welcome aboard!");
+      setNotice(joinResult.status === "PENDING" ? joinResult.message || "Waiting for instructor approval." : "You joined the class. Welcome aboard!");
       setClassCode("");
       const result = await api.studentClasses();
       setClasses(result.classes);
     } catch (joinError) {
-      setError(joinError.message);
+      if (joinError.status === "PENDING" || joinError.status === "APPROVED") setNotice(joinError.message);
+      else setError(joinError.message);
     } finally {
       setJoining(false);
     }
@@ -98,19 +103,22 @@ export default function StudentDashboard() {
           <div className="class-grid student-class-grid">
             {classes.map((classRecord, index) => (
               <article className="class-card" key={classRecord.id} style={{ "--card-accent": index % 2 ? "var(--accent-teal)" : "var(--accent-amber)" }}>
-                <div className="class-card-top"><span className="class-icon"><Icon name="book" /></span><span className="enrolled-pill">Enrolled</span></div>
+                <div className="class-card-top"><span className="class-icon"><Icon name="book" /></span><span className={`enrolled-pill ${classRecord.enrollmentStatus !== "APPROVED" ? "enrolled-pill-pending" : ""}`}>{classRecord.enrollmentStatus === "PENDING" ? "Pending approval" : classRecord.enrollmentStatus === "DECLINED" ? "Declined" : "Enrolled"}</span></div>
                 <p className="class-label">Section</p>
                 <h3>{classRecord.sectionName}</h3>
                 <div className="code-chip">Code <b>{classRecord.classCode}</b></div>
                 <p className="class-schedule"><Icon name="clock" /> {classRecord.schedule || "Schedule not set"}</p>
                 <p className="faculty-byline"><Icon name="user" /> {classRecord.faculty?.name || "Faculty"}</p>
+                <div className="student-class-summary" aria-label="Class record summary">
+                  {Object.entries(MOCK_RECORD_SUMMARY).map(([label, value]) => <span key={label}><b>{value}</b>{label}</span>)}
+                </div>
               </article>
             ))}
           </div>
         ) : !loading && profile ? (
           <section className="empty-state">
             <div className="empty-art"><Icon name="users" size={28} /></div>
-            <h3>No classes joined yet</h3>
+            <h3>You haven’t joined any class yet</h3>
             <p>Enter an invite code above, or open the class link your faculty shared.</p>
           </section>
         ) : null}

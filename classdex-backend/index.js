@@ -95,6 +95,31 @@ function normalizeClassCode(value) {
   return String(value || "").trim().toUpperCase();
 }
 
+const STUDENT_ID_PATTERN = /^\d{7}$/;
+
+function validateRosterEntry(entry) {
+  const studentName = String(entry?.studentName ?? entry?.name ?? "").trim();
+  const studentId = String(entry?.studentId ?? "").trim();
+  const errors = [];
+  if (!studentName) errors.push("Missing name");
+  if (!STUDENT_ID_PATTERN.test(studentId)) errors.push("Student ID must be exactly 7 digits");
+  return { studentName, studentId, errors };
+}
+
+function parseRosterText(text) {
+  return String(text || "").split(/\r?\n/).map((line, index) => {
+    const trimmed = line.trim();
+    if (!trimmed) return null;
+    const columns = trimmed.includes(",") ? trimmed.split(",") : trimmed.split(/\t|\s+-\s+/);
+    const entry = validateRosterEntry({ name: columns[0], studentId: columns[1] });
+    return { ...entry, line: index + 1 };
+  }).filter(Boolean);
+}
+
+async function findOwnedClass(classId, facultyId) {
+  return prisma.class.findFirst({ where: { id: classId, facultyId }, select: { id: true } });
+}
+
 function manilaDate(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Manila",
@@ -420,6 +445,13 @@ app.get(
   },
 );
 
+app.get("/api/faculty/classes/pending-counts", requireAuth, requireRole("FACULTY"), async (req, res) => {
+  try {
+    const classes = await prisma.class.findMany({ where: { facultyId: req.session.userId }, select: { id: true, _count: { select: { enrollments: { where: { status: "PENDING" } } } } } });
+    return res.json({ counts: Object.fromEntries(classes.map((item) => [item.id, item._count.enrollments])) });
+  } catch (error) { return res.status(500).json({ message: "Unable to load pending request counts." }); }
+});
+
 app.get(
   "/api/classes/check-code",
   requireAuth,
@@ -498,6 +530,171 @@ app.post(
 );
 
 app.get(
+  "/api/classes/:id/roster",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
+      const roster = await prisma.classRoster.findMany({ where: { classId: req.params.id }, orderBy: [{ studentName: "asc" }, { studentId: "asc" }] });
+      return res.json({ roster });
+    } catch (error) {
+      console.error("Roster lookup failed:", error);
+      return res.status(500).json({ message: "Unable to load the student list." });
+    }
+  },
+);
+
+app.post(
+  "/api/classes/:id/roster",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
+      const incoming = Array.isArray(req.body?.entries) ? req.body.entries.map(validateRosterEntry) : parseRosterText(req.body?.text);
+      const seen = new Set();
+      const invalid = incoming.map((entry, index) => {
+        const errors = [...entry.errors];
+        if (seen.has(entry.studentId)) errors.push("Duplicate student ID in upload");
+        if (entry.studentId) seen.add(entry.studentId);
+        return { ...entry, row: index + 1, errors };
+      }).filter((entry) => entry.errors.length);
+      if (!incoming.length) return res.status(400).json({ message: "Add at least one student list row." });
+      if (invalid.length) return res.status(400).json({ message: "Fix the invalid student list rows before saving.", invalidRows: invalid });
+      const roster = await prisma.$transaction(incoming.map((entry) => prisma.classRoster.upsert({
+        where: { classId_studentId: { classId: req.params.id, studentId: entry.studentId } },
+        create: { classId: req.params.id, studentName: entry.studentName, studentId: entry.studentId },
+        update: { studentName: entry.studentName },
+      })));
+      return res.status(201).json({ roster });
+    } catch (error) {
+      console.error("Roster save failed:", error);
+      return res.status(error.code === "P2002" ? 409 : 500).json({ message: error.code === "P2002" ? "That student ID is already in this student list." : "Unable to save the student list." });
+    }
+  },
+);
+
+app.patch(
+  "/api/classes/:id/roster/:entryId",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    const entry = validateRosterEntry(req.body);
+    if (entry.errors.length) return res.status(400).json({ message: entry.errors.join("; ") });
+    try {
+      if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
+      const updated = await prisma.classRoster.updateMany({ where: { id: req.params.entryId, classId: req.params.id }, data: { studentName: entry.studentName, studentId: entry.studentId } });
+      if (!updated.count) return res.status(404).json({ message: "Student list entry not found." });
+      return res.json({ entry: await prisma.classRoster.findUnique({ where: { id: req.params.entryId } }) });
+    } catch (error) {
+      return res.status(error.code === "P2002" ? 409 : 500).json({ message: error.code === "P2002" ? "That student ID is already in this student list." : "Unable to update the student list entry." });
+    }
+  },
+);
+
+app.delete(
+  "/api/classes/:id/roster/:entryId",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
+      const deleted = await prisma.classRoster.deleteMany({ where: { id: req.params.entryId, classId: req.params.id } });
+      if (!deleted.count) return res.status(404).json({ message: "Student list entry not found." });
+      return res.status(204).end();
+    } catch (error) {
+      return res.status(500).json({ message: "Unable to remove the student list entry." });
+    }
+  },
+);
+
+app.get("/api/classes/:id/pending", requireAuth, requireRole("FACULTY"), async (req, res) => {
+  try {
+    if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
+    const pending = await prisma.classEnrollment.findMany({ where: { classId: req.params.id, status: "PENDING" }, include: { studentProfile: { select: { id: true, name: true, studentId: true, program: true, section: true, photo: true } } }, orderBy: { joinedAt: "asc" } });
+    return res.json({ pending });
+  } catch (error) { return res.status(500).json({ message: "Unable to load pending requests." }); }
+});
+
+app.patch("/api/classes/:id/pending/:enrollmentId", requireAuth, requireRole("FACULTY"), async (req, res) => {
+  const status = String(req.body?.status || "").toUpperCase();
+  if (!["APPROVED", "DECLINED"].includes(status)) return res.status(400).json({ message: "Status must be APPROVED or DECLINED." });
+  try {
+    if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
+    const updated = await prisma.classEnrollment.updateMany({ where: { id: req.params.enrollmentId, classId: req.params.id, status: "PENDING" }, data: { status } });
+    if (!updated.count) return res.status(404).json({ message: "Pending request not found." });
+    return res.json({ enrollment: await prisma.classEnrollment.findUnique({ where: { id: req.params.enrollmentId }, include: { studentProfile: true, class: true } }) });
+  } catch (error) { return res.status(500).json({ message: "Unable to update pending request." }); }
+});
+
+app.get("/api/classes/:id/quizzes", requireAuth, requireRole("FACULTY"), async (req, res) => {
+  try {
+    if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
+    const sessions = await prisma.quizSession.findMany({ where: { classId: req.params.id }, include: { scores: true }, orderBy: { date: "desc" } });
+    const enriched = await Promise.all(sessions.map(async (session) => {
+      const attendanceSession = await prisma.classSession.findUnique({ where: { classId_date: { classId: req.params.id, date: new Date(new Date(session.date).toISOString().slice(0, 10)) } }, select: { attendance: { select: { studentId: true, status: true } } } });
+      const absentIds = new Set((attendanceSession?.attendance || []).filter((record) => record.status === "ABSENT").map((record) => record.studentId));
+      return { ...session, scores: session.scores.map((score) => ({ ...score, isAbsent: score.isAbsent || absentIds.has(score.studentId), score: absentIds.has(score.studentId) ? null : score.score })) };
+    }));
+    return res.json({ sessions: enriched });
+  } catch (error) { return res.status(500).json({ message: "Unable to load quiz sessions." }); }
+});
+
+app.post("/api/classes/:id/quizzes", requireAuth, requireRole("FACULTY"), async (req, res) => {
+  const title = String(req.body?.title || "").trim();
+  const totalItems = Number(req.body?.totalItems);
+  if (!title || !Number.isInteger(totalItems) || totalItems < 1) return res.status(400).json({ message: "Quiz title and a positive whole-number total are required." });
+  try {
+    if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
+    const session = await prisma.quizSession.create({ data: { classId: req.params.id, title, totalItems } });
+    return res.status(201).json({ session });
+  } catch (error) { return res.status(500).json({ message: "Unable to create quiz session." }); }
+});
+
+app.patch("/api/quizzes/:sessionId", requireAuth, requireRole("FACULTY"), async (req, res) => {
+  const title = String(req.body?.title || "").trim();
+  const totalItems = Number(req.body?.totalItems);
+  if (!title || !Number.isInteger(totalItems) || totalItems < 1) return res.status(400).json({ message: "Quiz title and a positive whole-number total are required." });
+  try {
+    const session = await prisma.quizSession.findFirst({ where: { id: req.params.sessionId, class: { is: { facultyId: req.session.userId } } }, include: { scores: { where: { score: { not: null } }, select: { studentId: true, score: true, studentProfile: { select: { name: true } } } } } });
+    if (!session) return res.status(404).json({ message: "Quiz session not found." });
+    const conflicts = session.scores.filter((item) => item.score > totalItems);
+    if (conflicts.length) return res.status(400).json({ message: "The new total is below existing scores.", conflicts: conflicts.map((item) => ({ studentId: item.studentId, name: item.studentProfile.name, score: item.score })) });
+    const updated = await prisma.quizSession.update({ where: { id: session.id }, data: { title, totalItems }, include: { scores: true } });
+    return res.json({ session: updated });
+  } catch (error) { return res.status(500).json({ message: "Unable to update quiz session." }); }
+});
+
+app.delete("/api/quizzes/:sessionId", requireAuth, requireRole("FACULTY"), async (req, res) => {
+  try {
+    const session = await prisma.quizSession.findFirst({ where: { id: req.params.sessionId, class: { is: { facultyId: req.session.userId } } }, select: { id: true } });
+    if (!session) return res.status(404).json({ message: "Quiz session not found." });
+    await prisma.quizSession.delete({ where: { id: session.id } });
+    return res.status(204).end();
+  } catch (error) { return res.status(500).json({ message: "Unable to delete quiz session." }); }
+});
+
+app.put("/api/quizzes/:sessionId/scores/:studentId", requireAuth, requireRole("FACULTY"), async (req, res) => {
+  const score = Number(req.body?.score);
+  if (!Number.isInteger(score) || score < 0) return res.status(400).json({ message: "Score must be a non-negative whole number." });
+  try {
+    const session = await prisma.quizSession.findFirst({ where: { id: req.params.sessionId, class: { is: { facultyId: req.session.userId } } } });
+    if (!session) return res.status(404).json({ message: "Quiz session not found." });
+    if (score > session.totalItems) return res.status(400).json({ message: `Score cannot be higher than ${session.totalItems}.` });
+    const enrollment = await prisma.classEnrollment.findFirst({ where: { classId: session.classId, studentProfileId: req.params.studentId, status: "APPROVED" } });
+    if (!enrollment) return res.status(404).json({ message: "Student is not approved for this class." });
+    const attendanceSession = await prisma.classSession.findUnique({ where: { classId_date: { classId: session.classId, date: new Date(new Date(session.date).toISOString().slice(0, 10)) } }, select: { attendance: { where: { studentId: req.params.studentId }, select: { status: true } } } });
+    if (attendanceSession?.attendance[0]?.status === "ABSENT") {
+      await prisma.quizScore.upsert({ where: { sessionId_studentId: { sessionId: session.id, studentId: req.params.studentId } }, create: { sessionId: session.id, studentId: req.params.studentId, score: null, isAbsent: true }, update: { score: null, isAbsent: true } });
+      return res.status(409).json({ message: "This student is absent and cannot be scored." });
+    }
+    const saved = await prisma.quizScore.upsert({ where: { sessionId_studentId: { sessionId: session.id, studentId: req.params.studentId } }, create: { sessionId: session.id, studentId: req.params.studentId, score }, update: { score, isAbsent: false } });
+    return res.json({ score: saved });
+  } catch (error) { return res.status(500).json({ message: "Unable to save quiz score." }); }
+});
+
+app.get(
   "/api/classes/:id",
   requireAuth,
   requireRole("FACULTY"),
@@ -533,6 +730,7 @@ app.get(
         where: { id: req.params.id, facultyId: req.session.userId },
         include: {
           enrollments: {
+            where: { status: "APPROVED" },
             include: {
               studentProfile: {
                 select: {
@@ -634,6 +832,7 @@ app.get(
         where: {
           classId: classRecord.id,
           studentProfileId: req.params.studentId,
+          status: "APPROVED",
         },
         select: {
           studentProfile: {
@@ -944,7 +1143,7 @@ app.get(
         return res.status(404).json({ message: "Activity not found." });
       }
       const enrollments = await prisma.classEnrollment.findMany({
-        where: { classId: activity.classId },
+        where: { classId: activity.classId, status: "APPROVED" },
         select: {
           studentProfile: {
             select: {
@@ -1181,7 +1380,7 @@ app.get(
         return res.status(404).json({ message: "Project not found." });
       }
       const enrollments = await prisma.classEnrollment.findMany({
-        where: { classId: project.classId },
+        where: { classId: project.classId, status: "APPROVED" },
         select: {
           studentProfile: {
             select: {
@@ -1594,7 +1793,7 @@ app.get(
           },
         },
       });
-      return res.json({ classes: profile?.enrollments.map((item) => item.class) || [] });
+      return res.json({ classes: profile?.enrollments.map((item) => ({ ...item.class, enrollmentStatus: item.status, joinedAt: item.joinedAt })) || [] });
     } catch (error) {
       console.error("Student classes lookup failed:", error);
       return res.status(500).json({ message: "Unable to load your classes." });
@@ -1612,8 +1811,10 @@ app.post(
       return res.status(400).json({ message: "Enter a class code or open an invite link." });
     }
 
+    let profile;
+    let classRecord;
     try {
-      const [profile, classRecord] = await Promise.all([
+      [profile, classRecord] = await Promise.all([
         prisma.studentProfile.findUnique({
           where: { userId: req.session.userId },
         }),
@@ -1628,29 +1829,59 @@ app.post(
         });
       }
 
-      const existingEnrollment = await prisma.classEnrollment.findUnique({
-        where: {
-          studentProfileId_classId: {
-            studentProfileId: profile.id,
-            classId: classRecord.id,
-          },
-        },
-      });
-      if (existingEnrollment) {
-        return res.status(409).json({ message: "You have already joined this class." });
-      }
+      const joinResult = await prisma.$transaction(async (tx) => {
+        const existingEnrollment = await tx.classEnrollment.findUnique({
+          where: { studentProfileId_classId: { studentProfileId: profile.id, classId: classRecord.id } },
+          include: { class: true },
+        });
+        if (existingEnrollment?.status === "APPROVED") {
+          return { kind: "existing", enrollment: existingEnrollment, status: "APPROVED", message: "You have already joined this class." };
+        }
+        if (existingEnrollment?.status === "PENDING") {
+          return { kind: "existing", enrollment: existingEnrollment, status: "PENDING", message: "Your request is already waiting for instructor approval." };
+        }
 
-      const enrollment = await prisma.classEnrollment.create({
-        data: {
-          studentProfileId: profile.id,
-          classId: classRecord.id,
-        },
-        include: { class: true },
+        const studentId = String(profile.studentId ?? "").trim();
+        const roster = await tx.classRoster.findMany({ where: { classId: classRecord.id }, select: { studentId: true } });
+        const matchesRoster = roster.some((entry) => String(entry.studentId ?? "").trim() === studentId);
+        const enrollment = existingEnrollment
+          ? await tx.classEnrollment.update({
+              where: { id: existingEnrollment.id },
+              data: { status: "PENDING", joinedAt: new Date() },
+              include: { class: true },
+            })
+          : await tx.classEnrollment.create({
+              data: {
+                studentProfileId: profile.id,
+                classId: classRecord.id,
+                status: matchesRoster ? "APPROVED" : "PENDING",
+              },
+              include: { class: true },
+            });
+        return {
+          kind: existingEnrollment ? "resubmitted" : "created",
+          enrollment,
+          status: enrollment.status,
+          message: existingEnrollment
+            ? "Your request was resubmitted for instructor approval."
+            : matchesRoster ? "You joined the class." : "Waiting for instructor approval.",
+        };
       });
-      return res.status(201).json({ enrollment });
+      const statusCode = joinResult.kind === "existing" ? 409 : 201;
+      return res.status(statusCode).json(joinResult);
     } catch (error) {
       if (error.code === "P2002") {
-        return res.status(409).json({ message: "You have already joined this class." });
+        const existing = await prisma.classEnrollment.findUnique({
+          where: { studentProfileId_classId: { studentProfileId: profile.id, classId: classRecord.id } },
+          include: { class: true },
+        }).catch(() => null);
+        if (existing) {
+          return res.status(409).json({
+            message: existing.status === "PENDING" ? "Your request is already waiting for instructor approval." : "You have already joined this class.",
+            enrollment: existing,
+            status: existing.status,
+          });
+        }
       }
       console.error("Class join failed:", error);
       return res.status(500).json({ message: "Unable to join that class." });
