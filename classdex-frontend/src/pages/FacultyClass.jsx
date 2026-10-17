@@ -18,6 +18,7 @@ import { ActivitiesModule, ProjectsModule } from "../components/classroom/Scorin
 import StudentListManager from "../components/classroom/StudentListManager";
 import PendingValidationList from "../components/classroom/PendingValidationList";
 import QuizModule from "../components/classroom/QuizModule";
+import { Modal } from "../components/DesignSystem";
 import { api } from "../api";
 
 const MODULE_LABELS = {
@@ -72,7 +73,28 @@ export default function FacultyClass() {
   const [studentRecordsError, setStudentRecordsError] = useState("");
   const [inviteQr, setInviteQr] = useState("");
   const [inviteQrError, setInviteQrError] = useState("");
+  const [showLargeQr, setShowLargeQr] = useState(false);
+  const [inviteExpanded, setInviteExpanded] = useState(false);
   const studentRecordsLoading = Boolean(selectedStudent && !studentRecords && !studentRecordsError);
+
+  useEffect(() => {
+    if (!classRecord?.id) return;
+    try {
+      setInviteExpanded(window.localStorage.getItem(`classdex:invite-expanded:${classRecord.id}`) === "true");
+    } catch {
+      setInviteExpanded(false);
+    }
+  }, [classRecord?.id]);
+
+  function toggleInviteExpanded() {
+    const nextExpanded = !inviteExpanded;
+    setInviteExpanded(nextExpanded);
+    try {
+      window.localStorage.setItem(`classdex:invite-expanded:${classRecord.id}`, String(nextExpanded));
+    } catch {
+      // Keep the choice for this page session when storage is unavailable.
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -368,24 +390,58 @@ export default function FacultyClass() {
             </header>
 
             <div className="classroom-date"><Icon name="clock" size={16} /> {today}</div>
-            <section className="panel class-share-panel" aria-labelledby="class-share-title">
-              <div className="class-share-copy">
-                <span className="eyebrow"><Icon name="share" /> Share class invite</span>
-                <h2 id="class-share-title">Invite students with a link or QR code</h2>
-                <p>Students can scan the QR code or use the invite link to join this class.</p>
-                <div className="class-share-actions">
-                  <button type="button" className="button button-primary" onClick={copyInvite}>
-                    <Icon name="copy" /> Copy invite link
-                  </button>
-                  <span className="class-share-code">Class code <strong>{classRecord.classCode}</strong></span>
-                  <button type="button" className="button button-quiet" onClick={() => setShowPending(true)}><Icon name="bell" size={16} /> Pending {pendingEnrollments.length ? <span className="notification-badge">{pendingEnrollments.length}</span> : null}</button>
+            <section className={`panel class-share-panel${inviteExpanded ? " is-expanded" : ""}`} aria-labelledby="class-share-title">
+              <div className="class-share-row">
+                <button type="button" className="class-share-toggle" aria-expanded={inviteExpanded} aria-controls="class-share-expanded" onClick={toggleInviteExpanded}>
+                  <Icon name="share" />
+                  <span id="class-share-title">Share class invite</span>
+                  <Icon name="chevron" className={inviteExpanded ? "is-rotated" : ""} />
+                </button>
+                <span className="class-share-code">{classRecord.classCode}</span>
+                <button type="button" className="button button-primary" onClick={copyInvite}>
+                  <Icon name="copy" /> Copy invite link
+                </button>
+                <button type="button" className="button button-quiet class-share-pending" onClick={() => setShowPending(true)}><Icon name="bell" size={16} /> Pending {pendingEnrollments.length ? <span className="notification-badge">{pendingEnrollments.length}</span> : null}</button>
+              </div>
+              {inviteExpanded ? (
+                <div id="class-share-expanded" className="class-share-expanded">
+                  <div className="class-share-copy">
+                    <h2>Invite students with a link or QR code</h2>
+                    <p>Students can scan the QR code or use the invite link to join this class.</p>
+                  </div>
+                  <div className="class-share-qr">
+                    {inviteQr ? (
+                      <>
+                        <img src={inviteQr} alt={`QR code for joining ${classRecord.sectionName}`} />
+                        <div className="class-share-qr-actions">
+                          <button type="button" className="button button-quiet" onClick={() => setShowLargeQr(true)}>Show larger</button>
+                          <a href={inviteQr} download={`${classRecord.classCode || "class"}-qr.png`} className="button button-quiet">Download QR</a>
+                        </div>
+                      </>
+                    ) : <div className="class-share-qr-placeholder">Generating QR…</div>}
+                    {inviteQrError ? <span className="class-share-error">{inviteQrError}</span> : null}
+                  </div>
                 </div>
-              </div>
-              <div className="class-share-qr">
-                {inviteQr ? <img src={inviteQr} alt={`QR code for joining ${classRecord.sectionName}`} /> : <div className="class-share-qr-placeholder">Generating QR…</div>}
-                {inviteQrError ? <span className="class-share-error">{inviteQrError}</span> : null}
-              </div>
+              ) : null}
             </section>
+            {showLargeQr && inviteQr ? (
+              <Modal
+                title="Class join QR code"
+                description={`Scan with any mobile camera or QR reader to join ${classRecord.sectionName}.`}
+                onClose={() => setShowLargeQr(false)}
+                footer={(
+                  <div className="class-share-modal-actions">
+                    <button type="button" className="button button-secondary" onClick={() => setShowLargeQr(false)}>Close</button>
+                    <a href={inviteQr} download={`${classRecord.classCode || "class"}-qr.png`} className="button button-primary">Download QR</a>
+                  </div>
+                )}
+              >
+                <div className="class-share-large-qr">
+                  <img src={inviteQr} alt={`Large QR code for ${classRecord.sectionName}`} />
+                  <p>Class code: {classRecord.classCode}</p>
+                </div>
+              </Modal>
+            ) : null}
             {showPending ? <PendingValidationList enrollments={pendingEnrollments} onApprove={(enrollmentId) => updatePending(enrollmentId, "APPROVED")} onDecline={(enrollmentId) => updatePending(enrollmentId, "DECLINED")} onClose={() => setShowPending(false)} busyId={pendingBusyId} /> : null}
             <ModuleTabs active={activeModule} onChange={setActiveModule} studentListCount={studentListCount} />
             <Toast
