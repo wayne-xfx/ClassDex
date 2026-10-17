@@ -115,7 +115,7 @@ export function StudentCard({ student, status = "UNMARKED", children, layout = "
             aria-label={`Open ${formatStudentName(student.name)}'s index card profile and class records`}
           >
             <div className="student-card-identity">
-              <Avatar src={student.photo} name={student.name} className="student-card-photo" />
+              <Avatar src={student.photo} name={student.name} size="md" className="student-card-photo" />
               <div className="student-card-copy">
                 <h3>{formatStudentName(student.name)}</h3>
                 <span className="student-card-id">ID {student.studentId}</span>
@@ -136,7 +136,7 @@ export function StudentCard({ student, status = "UNMARKED", children, layout = "
         ) : (
           <>
             <div className="student-card-identity">
-              <Avatar src={student.photo} name={student.name} className="student-card-photo" />
+              <Avatar src={student.photo} name={student.name} size="md" className="student-card-photo" />
               <div className="student-card-copy">
                 <h3>{formatStudentName(student.name)}</h3>
                 <span className="student-card-id">ID {student.studentId}</span>
@@ -178,7 +178,7 @@ export function StudentDetailDialog({ student, className, records, loading, erro
           <Icon name="x" />
         </button>
         <div className="student-detail-profile">
-          <Avatar src={student.photo} name={student.name} className="student-detail-photo" />
+          <Avatar src={student.photo} name={student.name} size="lg" className="student-detail-photo" />
           <div>
             <span className="eyebrow"><Icon name="book" /> {className} · index card</span>
             <h2 id="student-detail-title">{formatStudentName(student.name)}</h2>

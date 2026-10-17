@@ -72,7 +72,7 @@ export default function AppShell({ children, active = "" }) {
                 aria-haspopup="menu"
                 onClick={() => setUserMenuOpen((open) => !open)}
               >
-                <Avatar src={user?.photo} name={user?.name} className="user-menu-avatar" />
+                <Avatar src={user?.photo} name={user?.name} size="sm" className="user-menu-avatar" />
                 <span className="header-user">{user?.name}</span>
                 <Icon name="chevron" size={14} />
               </button>
