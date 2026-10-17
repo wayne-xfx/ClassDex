@@ -152,37 +152,41 @@ Create `.env` files in both `classdex-backend/` and `classdex-frontend/` based o
 
 ### 4. Database Setup
 
-From `classdex-backend/`, prepare the database according to your environment:
+From `classdex-backend/`, run the project's setup script to generate the Prisma Client and apply all additive schema migrations:
 
-#### Path A: Brand-New EMPTY Database
-If connecting to a clean, empty PostgreSQL database:
 ```bash
-npx prisma migrate deploy
+# In classdex-backend/
+npm run db:setup
 ```
 
-#### Path B: Database with Existing Tables (No Prisma Migration History)
-If your database already contains tables (e.g., initialized previously via `db push` or manual scripts), running `migrate deploy` will return error `P3005`. First run `npx prisma migrate status`, then baseline the 6 migrations in chronological order:
-```bash
-npx prisma migrate resolve --applied 20260927011000_profiles_classes
-npx prisma migrate resolve --applied 20260929010000_class_deck_attendance_recitation
-npx prisma migrate resolve --applied 20260930010000_activities_projects
-npx prisma migrate resolve --applied 20261005010000_official_class_roster
-npx prisma migrate resolve --applied 20261005020000_enrollment_status
-npx prisma migrate resolve --applied 20261005030000_quiz_sessions
-```
+#### What `npm run db:setup` Does
+1. Runs `prisma generate` to compile the Prisma Client code to `node_modules/@prisma/client`.
+2. Executes `node scripts/apply-schema.js`, which:
+   - Connects to your PostgreSQL database using direct TLS (`sslnegotiation=direct`, required by Neon endpoints).
+   - Creates the tracking table `_ClassDexMigration` if it does not already exist.
+   - Applies each SQL migration in `prisma/migrations/` in chronological order within a transaction.
+   - Verifies all required tables and columns (including `Class.gracePeriodMinutes`) are in place.
 
-Verify migration status is up-to-date:
-```bash
-npx prisma migrate status
-```
+> [!NOTE]
+> **Idempotent / Safe to Run Multiple Times:**
+> `npm run db:setup` checks `_ClassDexMigration` before applying each migration. Already applied migrations are safely skipped.
 
-#### Path C: Generate Prisma Client
-Generate the Prisma Client code:
+#### Standalone Prisma Client Generation
+If you only need to regenerate the Prisma Client without touching the database schema:
 ```bash
+# In classdex-backend/
 npx prisma generate
 ```
 
-### 5. Start the Application
+> [!NOTE]
+> **Note on `npx prisma migrate status`:**
+> `npx prisma migrate status` checks exclusively for Prisma's internal `_prisma_migrations` table. Because ClassDex applies migrations using its direct-connection runner `scripts/apply-schema.js` (tracking them in `_ClassDexMigration`), `_prisma_migrations` is not populated. It is therefore **expected and normal** for `npx prisma migrate status` to report pending migrations on an initialized database; the database tables and constraints are already fully in place and match `prisma/schema.prisma`.
+>
+> *(Do not run `npx prisma migrate deploy` or `npx prisma migrate resolve`, as Prisma Migrate CLI is not verified for this project).*
+
+---
+
+## 5. Start the Application
 
 #### Start Backend API
 From `classdex-backend/`:
@@ -227,23 +231,22 @@ The client starts on `http://localhost:5173`. Open `http://localhost:5173` in yo
 ### Backend (`classdex-backend`)
 - `npm test`: Runs backend access control and business rule tests (`node --test`).
 - `npm run dev`: Starts backend development server (`node index.js`).
-- `npm run start`: Starts backend production server.
-- `npm run db:setup`: Generates Prisma client and applies schema migrations via direct connection.
+- `npm run start`: Starts backend production server (`node index.js`).
+- `npm run db:setup`: Generates Prisma client and applies schema migrations (`prisma generate && node scripts/apply-schema.js`).
 
 ### Frontend (`classdex-frontend`)
-- `npm run dev`: Starts Vite local development server.
-- `npm run build`: Bundles production assets into `dist/`.
-- `npm run lint`: Runs `oxlint` static code analysis.
-- `npm run preview`: Previews built production bundle locally.
+- `npm run dev`: Starts Vite local development server (`vite`).
+- `npm run build`: Bundles production assets into `dist/` (`vite build`).
+- `npm run lint`: Runs `oxlint` static code analysis (`oxlint`).
+- `npm run preview`: Previews built production bundle locally (`vite preview`).
 
 ---
 
 ## Troubleshooting
 
-- **Prisma Migration Error P3005**:
-  - *Symptom*: `The database schema is not empty. Read more about how to baseline an existing production database...`
-  - *Cause*: Running `prisma migrate deploy` on a database that already has tables created outside Prisma Migrate.
-  - *Solution*: Baseline existing migrations with `npx prisma migrate resolve --applied <migration-name>` for all six migration folders listed above.
+- **Database Connection / Schema Setup Failed**:
+  - *Symptom*: `Database schema setup failed: connect ETIMEDOUT` or `DATABASE_URL is not set`.
+  - *Solution*: Verify `DATABASE_URL` is set in `classdex-backend/.env`. For Neon connections, ensure the endpoint URL includes `?sslmode=require`. The script automatically configures direct TLS negotiation (`sslnegotiation=direct`).
 - **reCAPTCHA Error / Rejected Token**:
   - *Symptom*: Captcha fails or reports `invalid-input-secret` / `invalid-input-response`.
   - *Solution*: Verify `localhost` is listed in your Google reCAPTCHA Admin Console domains, and ensure the Site Key is in `classdex-frontend/.env` while the Secret Key is in `classdex-backend/.env`.
