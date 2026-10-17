@@ -33,6 +33,8 @@ const PATHS = {
   listChecks: <><path d="M9 6h12M9 12h12M9 18h12" /><path d="m3 6 1 1 2-2M3 12l1 1 2-2M3 18l1 1 2-2" /></>,
   folderKanban: <><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" /><path d="M8 12v3m4-5v5m4-2v2" /></>,
   exportSheet: <><path d="M12 3v11m-4-4 4 4 4-4" /><path d="M5 15v5h14v-5" /><path d="M4 3h5v5H4z" /></>,
+  spreadsheet: <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M3 15h18M9 3v18m6-18v18" /></>,
+  download: <><path d="M12 3v12m-5-5 5 5 5-5" /><path d="M5 17v3h14v-3" /></>,
   brain: <><path d="M9.5 4a3.5 3.5 0 0 0-3 5.3A3 3 0 0 0 7 15a3.5 3.5 0 0 0 6 2.5A3.5 3.5 0 0 0 19 15a3 3 0 0 0 .5-5.7A3.5 3.5 0 0 0 16.5 4a3.5 3.5 0 0 0-7 0Z" /><path d="M12 5v14m-3-9h3m3 4h-3" /></>,
   bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></>,
   lock: <><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></>,
