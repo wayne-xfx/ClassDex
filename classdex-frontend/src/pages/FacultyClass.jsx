@@ -285,7 +285,7 @@ export default function FacultyClass() {
       await navigator.clipboard.writeText(inviteLink);
       showToast("Invite link copied. Share it with your students.");
     } catch {
-      showToast(`Copy unavailable — share code ${classRecord.classCode} or link ${inviteLink}`, "error");
+      showToast(`Copy unavailable — share code ${classRecord.classCode} instead.`, "error");
     }
   }
 
