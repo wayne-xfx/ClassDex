@@ -5813,6 +5813,16 @@ textarea {
   flex-shrink: 0;
 }
 
+.faculty-dashboard-content {
+  padding-top: 8px;
+}
+
+.faculty-dashboard-content > .dashboard-heading {
+  margin-top: 0;
+  margin-bottom: 28px;
+  align-items: flex-end;
+}
+
 .dashboard-welcome-title {
   display: flex;
   align-items: center;
@@ -5823,6 +5833,51 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
+}
+
+.profile-banner-compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 24px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--royal) 20%, var(--line));
+  background: color-mix(in srgb, var(--royal) 6%, var(--card));
+}
+
+.profile-banner-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.profile-banner-copy strong {
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 740;
+}
+
+.profile-banner-copy span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.profile-banner-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 680px) {
+  .profile-banner-compact {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
 .student-list-name-cell {
