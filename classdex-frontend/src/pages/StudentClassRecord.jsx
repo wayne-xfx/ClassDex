@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import Icon from "../components/Icon";
@@ -11,6 +11,25 @@ export default function StudentClassRecord() {
   const [error, setError] = useState("");
   const [classRecord, setClassRecord] = useState(null);
   const [records, setRecords] = useState(null);
+  const quizStats = useMemo(() => {
+    const quizzes = records?.quizzes || [];
+    const scored = quizzes.filter((item) => item.score !== null && item.score !== undefined);
+    const totalPossible = scored.reduce((sum, item) => sum + (item.session.totalItems || 0), 0);
+    const totalScore = scored.reduce((sum, item) => sum + item.score, 0);
+    const bestItem = scored.reduce((best, item) => {
+      const currentPercent = item.session.totalItems ? item.score / item.session.totalItems : 0;
+      const bestPercent = best && best.session.totalItems ? best.score / best.session.totalItems : -1;
+      return currentPercent > bestPercent ? item : best;
+    }, null);
+    return {
+      attempts: quizzes.length,
+      average: totalPossible ? `${Math.round((totalScore / totalPossible) * 100)}%` : "—",
+      best: bestItem
+        ? `${Math.round((bestItem.session.totalItems ? (bestItem.score / bestItem.session.totalItems) * 100 : 0))}%`
+        : "—",
+      latest: scored[0]?.score === undefined ? "—" : scored[0]?.score,
+    };
+  }, [records]);
 
   useEffect(() => {
     let cancelled = false;
@@ -153,6 +172,20 @@ export default function StudentClassRecord() {
                     <h2>Quiz performance</h2>
                   </div>
                   <Badge tone="success">Live data</Badge>
+                </div>
+                <div className="student-record-quiz-stats">
+                  <div>
+                    <strong>{quizStats.average}</strong>
+                    <span>Average</span>
+                  </div>
+                  <div>
+                    <strong>{quizStats.best}</strong>
+                    <span>Best attempt</span>
+                  </div>
+                  <div>
+                    <strong>{quizStats.attempts}</strong>
+                    <span>Recorded quizzes</span>
+                  </div>
                 </div>
                 <div className="student-record-list">
                   {(records?.quizzes || []).map((item) => (
