@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import lnuLogo from "../assets/lnu-logo.png";
 import ThemeToggle from "./ThemeToggle";
 import { Card } from "./DesignSystem";
 
@@ -11,15 +12,18 @@ export function Logo({ to = "/" }) {
   );
 }
 
-export function AuthLayout({ title, subtitle, children, footer }) {
+export function AuthLayout({ title, subtitle, children, footer, showLnuLogo = false }) {
   return (
     <div className="min-h-screen bg-paper">
       <div className="auth-theme-toggle"><ThemeToggle /></div>
       <div className="auth-layout-inner">
         <aside className="auth-brand-pane hidden lg:block">
           <Logo />
-          <p className="mt-8 max-w-md text-sm uppercase tracking-[0.2em] text-royal">
-            Leyte Normal University
+          <p className="auth-lnu-line mt-8 max-w-md text-sm uppercase tracking-[0.2em] text-royal">
+            {showLnuLogo ? (
+              <img src={lnuLogo} alt="Leyte Normal University logo" className="lnu-logo" />
+            ) : null}
+            <span>Leyte Normal University</span>
           </p>
           <h1 className="mt-3 text-4xl font-semibold leading-tight text-navy">
             Your classroom index cards, digitized.
@@ -43,6 +47,12 @@ export function AuthLayout({ title, subtitle, children, footer }) {
         <main className="auth-form-pane">
           <div className="mb-6 lg:hidden">
             <Logo />
+            {showLnuLogo ? (
+              <p className="auth-lnu-line auth-lnu-line-mobile mt-3 text-xs uppercase tracking-[0.18em] text-royal">
+                <img src={lnuLogo} alt="Leyte Normal University logo" className="lnu-logo lnu-logo-sm" />
+                <span>Leyte Normal University</span>
+              </p>
+            ) : null}
           </div>
           <Card className="auth-card rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
             <h2 className="text-2xl font-semibold text-navy">{title}</h2>

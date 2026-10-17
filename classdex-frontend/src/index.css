@@ -5788,3 +5788,44 @@ textarea {
   gap: 0.65rem;
 }
 
+/* LNU logo branding beside Leyte Normal University text */
+.lnu-logo {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #ffffff;
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.85), 0 2px 6px rgba(15, 23, 42, 0.16);
+}
+
+.lnu-logo-sm {
+  width: 22px;
+  height: 22px;
+}
+
+.landing-footer-lnu,
+.auth-lnu-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+[data-theme="dark"] .lnu-logo,
+.dark .lnu-logo {
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.28), 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+@media (max-width: 680px) {
+  .lnu-logo {
+    width: 24px;
+    height: 24px;
+  }
+
+  .lnu-logo-sm {
+    width: 20px;
+    height: 20px;
+  }
+}
+
+

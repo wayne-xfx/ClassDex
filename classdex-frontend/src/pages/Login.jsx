@@ -44,6 +44,7 @@ export default function Login() {
 
   return (
     <AuthLayout
+      showLnuLogo
       title="Welcome back"
       subtitle="Sign in with the email and password you used to register."
       footer={
