@@ -21,8 +21,8 @@ export function ModuleTabs({ active, onChange, studentListCount = 0 }) {
     { id: "recitation", label: "Recitation", icon: "mic" },
     { id: "activities", label: "Activities", icon: "listChecks" },
     { id: "projects", label: "Projects", icon: "folderKanban" },
-    { id: "export", label: "Data export", icon: "download" },
     { id: "quiz", label: "Quiz", icon: "brain" },
+    { id: "export", label: "Data export", icon: "exportSheet" },
     { id: "student-list", label: `Student List (${studentListCount})`, icon: "users" },
   ];
 
@@ -45,6 +45,30 @@ export function ModuleTabs({ active, onChange, studentListCount = 0 }) {
     tabRefs.current[tabs.indexOf(nextTab)]?.focus();
   }
 
+  function renderTab(tab, index) {
+    return (
+      <button
+        className={`module-tab${active === tab.id ? " is-active" : ""}${tab.disabled ? " module-tab-disabled" : ""}`}
+        id={`module-tab-${tab.id}`}
+        key={tab.id}
+        type="button"
+        role="tab"
+        aria-selected={active === tab.id}
+        aria-controls={tab.disabled ? undefined : `module-panel-${tab.id}`}
+        aria-disabled={tab.disabled || undefined}
+        title={tab.disabled ? "Quiz is coming soon" : undefined}
+        tabIndex={tab.disabled ? -1 : active === tab.id ? 0 : -1}
+        ref={(element) => { tabRefs.current[index] = element; }}
+        onKeyDown={(event) => !tab.disabled && handleTabKeyDown(event, index)}
+        onClick={() => !tab.disabled && onChange(tab.id)}
+      >
+        <Icon name={tab.icon} size={17} />
+        {tab.label}
+        {tab.disabled ? <span className="coming-soon-badge">Coming soon</span> : null}
+      </button>
+    );
+  }
+
   return (
     <div className="module-navigation">
       <button
@@ -58,27 +82,9 @@ export function ModuleTabs({ active, onChange, studentListCount = 0 }) {
         <Icon name="book" size={17} /> Class Deck
       </button>
       <div className="module-tabs" role="tablist" aria-label="Class modules">
-        {tabs.map((tab, index) => (
-        <button
-          className={`module-tab${active === tab.id ? " is-active" : ""}${tab.disabled ? " module-tab-disabled" : ""}`}
-          id={`module-tab-${tab.id}`}
-          key={tab.id}
-          type="button"
-          role="tab"
-          aria-selected={active === tab.id}
-          aria-controls={tab.disabled ? undefined : `module-panel-${tab.id}`}
-          aria-disabled={tab.disabled || undefined}
-          title={tab.disabled ? "Quiz is coming soon" : undefined}
-          tabIndex={tab.disabled ? -1 : active === tab.id ? 0 : -1}
-          ref={(element) => { tabRefs.current[index] = element; }}
-          onKeyDown={(event) => !tab.disabled && handleTabKeyDown(event, index)}
-          onClick={() => !tab.disabled && onChange(tab.id)}
-        >
-          <Icon name={tab.icon} size={17} />
-          {tab.label}
-          {tab.disabled ? <span className="coming-soon-badge">Coming soon</span> : null}
-        </button>
-        ))}
+        {tabs.slice(0, 5).map(renderTab)}
+        <span className="module-tab-divider" aria-hidden="true" />
+        {tabs.slice(5).map((tab, index) => renderTab(tab, index + 5))}
       </div>
     </div>
   );
