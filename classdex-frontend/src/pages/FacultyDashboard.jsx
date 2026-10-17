@@ -89,7 +89,20 @@ export default function FacultyDashboard() {
               <article className="class-card" key={classRecord.id} style={{ "--card-accent": index % 2 ? "var(--accent-teal)" : "var(--accent-amber)" }}>
                 <div className="class-card-top">
                   <span className="class-icon"><Icon name="book" /></span>
-                  <span className="class-count"><Icon name="users" /> {classRecord._count.enrollments}</span>{pendingCounts[classRecord.id] ? <span className="class-count class-pending-count"><Icon name="userCheck" /> {pendingCounts[classRecord.id]} pending</span> : null}
+                  <div className="class-card-counts">
+                    <span className="class-count"><Icon name="users" /> {classRecord._count.enrollments}</span>
+                    {pendingCounts[classRecord.id] ? (
+                      <Link
+                        to={`/faculty/classes/${classRecord.id}?notifications=1`}
+                        className="class-count class-pending-count"
+                        aria-label={`${pendingCounts[classRecord.id]} class notification${pendingCounts[classRecord.id] === 1 ? "" : "s"}`}
+                        title="Open class notifications"
+                      >
+                        <Icon name="bell" size={15} />
+                        <span className="notification-badge">{pendingCounts[classRecord.id]}</span>
+                      </Link>
+                    ) : null}
+                  </div>
                 </div>
                 <p className="class-label">Section</p>
                 <h3>{classRecord.sectionName}</h3>

@@ -1,0 +1,2 @@
+ALTER TABLE "ClassEnrollment"
+  ADD COLUMN IF NOT EXISTS "dismissedAbsenceCount" INTEGER NOT NULL DEFAULT 0;

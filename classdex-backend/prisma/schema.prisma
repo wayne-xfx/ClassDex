@@ -101,13 +101,14 @@ model Class {
 }
 
 model ClassEnrollment {
-  id               String         @id @default(cuid())
-  studentProfileId String
-  classId          String
-  studentProfile   StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
-  class            Class          @relation(fields: [classId], references: [id], onDelete: Cascade)
-  joinedAt         DateTime       @default(now())
-  status           EnrollmentStatus @default(APPROVED)
+  id                    String           @id @default(cuid())
+  studentProfileId      String
+  classId               String
+  studentProfile        StudentProfile   @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  class                 Class            @relation(fields: [classId], references: [id], onDelete: Cascade)
+  joinedAt              DateTime         @default(now())
+  status                EnrollmentStatus @default(APPROVED)
+  dismissedAbsenceCount Int              @default(0)
 
   @@unique([studentProfileId, classId])
 }
