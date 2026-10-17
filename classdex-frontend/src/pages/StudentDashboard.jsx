@@ -135,8 +135,13 @@ export default function StudentDashboard() {
                 <p className="class-schedule"><Icon name="clock" /> {classRecord.schedule || "Schedule not set"}</p>
                 <p className="faculty-byline"><Icon name="user" /> {classRecord.faculty?.name || "Faculty"}</p>
                 <div className="student-class-summary" aria-label="Class record summary">
-                  <span><b>Open</b> record</span>
+                  {Object.entries(classRecord.recordSummary || { attendance: "—", recitation: "—", activities: "—", quiz: "—" }).map(([label, value]) => (
+                    <span key={label}><b>{value}</b>{label}</span>
+                  ))}
                 </div>
+                <Link to={`/student/classes/${classRecord.id}`} className="button button-secondary student-class-action">
+                  View class record <Icon name="arrow" />
+                </Link>
               </article>
             ))}
           </div>

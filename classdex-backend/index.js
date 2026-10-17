@@ -2049,6 +2049,82 @@ app.get(
 );
 
 
+app.get(
+  "/api/student/classes/:classId/records",
+  requireAuth,
+  requireRole("STUDENT"),
+  async (req, res) => {
+    try {
+      const profile = await prisma.studentProfile.findUnique({
+        where: { userId: req.session.userId },
+        select: { id: true, name: true, studentId: true, email: true, photo: true, program: true, section: true },
+      });
+      if (!profile) {
+        return res.status(409).json({ message: "Create your student profile before joining a class." });
+      }
+
+      const classRecord = await prisma.class.findFirst({
+        where: {
+          id: req.params.classId,
+          enrollments: {
+            some: {
+              studentProfileId: profile.id,
+              status: { in: ["APPROVED", "PENDING"] },
+            },
+          },
+        },
+        include: { faculty: { select: { name: true } } },
+      });
+      if (!classRecord) {
+        return res.status(404).json({ message: "Class not found." });
+      }
+
+      const [attendance, recitations, activities, quizzes] = await Promise.all([
+        prisma.attendanceRecord.findMany({
+          where: { studentId: profile.id, session: { is: { classId: classRecord.id } } },
+          select: { id: true, status: true, markedAt: true, session: { select: { id: true, date: true } } },
+          orderBy: { markedAt: "desc" },
+        }),
+        prisma.recitationLog.findMany({
+          where: { studentId: profile.id, session: { is: { classId: classRecord.id } } },
+          select: { id: true, method: true, calledAt: true, score: true, session: { select: { id: true, date: true } } },
+          orderBy: { calledAt: "desc" },
+        }),
+        prisma.activityScore.findMany({
+          where: { studentId: profile.id, activity: { is: { classId: classRecord.id } } },
+          select: { id: true, score: true, isAbsent: true, createdAt: true, activity: { select: { id: true, title: true, maxScore: true } }, session: { select: { id: true, date: true } } },
+          orderBy: { updatedAt: "desc" },
+        }),
+        prisma.quizScore.findMany({
+          where: { studentId: profile.id, session: { is: { classId: classRecord.id } } },
+          select: { id: true, score: true, isAbsent: true, createdAt: true, session: { select: { id: true, date: true, title: true, totalItems: true } } },
+          orderBy: { updatedAt: "desc" },
+        }),
+      ]);
+
+      return res.json({
+        student: profile,
+        class: {
+          ...classRecord,
+          recordSummary: summarizeStudentClass({
+            attendance,
+            recitations,
+            activities: activities.map((item) => ({ score: item.score, maxScore: item.activity.maxScore })),
+            quizzes: quizzes.map((item) => ({ score: item.score, totalItems: item.session.totalItems })),
+          }),
+        },
+        attendance,
+        recitations,
+        activities,
+        quizzes,
+      });
+    } catch (error) {
+      console.error("Student class records lookup failed:", error);
+      return res.status(500).json({ message: "Unable to load this class record." });
+    }
+  },
+);
+
 app.post(
   "/api/classes/join",
   requireAuth,
