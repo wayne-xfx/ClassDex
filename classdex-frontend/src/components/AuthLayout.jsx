@@ -19,13 +19,12 @@ export function AuthLayout({ title, subtitle, children, footer, showLnuLogo = fa
       <div className="auth-layout-inner">
         <aside className="auth-brand-pane hidden lg:block">
           <Logo />
-          <p className="auth-lnu-line mt-8 max-w-md text-sm uppercase tracking-[0.2em] text-royal">
-            {showLnuLogo ? (
-              <img src={lnuLogo} alt="Leyte Normal University logo" className="lnu-logo" />
-            ) : null}
-            <span>Leyte Normal University</span>
-          </p>
-          <h1 className="mt-3 text-4xl font-semibold leading-tight text-navy">
+          {!showLnuLogo ? (
+            <p className="mt-8 max-w-md text-sm uppercase tracking-[0.2em] text-royal">
+              Leyte Normal University
+            </p>
+          ) : null}
+          <h1 className={`${showLnuLogo ? "mt-8" : "mt-3"} text-4xl font-semibold leading-tight text-navy`}>
             Your classroom index cards, digitized.
           </h1>
           <p className="mt-4 max-w-md text-slate-600">
@@ -47,12 +46,6 @@ export function AuthLayout({ title, subtitle, children, footer, showLnuLogo = fa
         <main className="auth-form-pane">
           <div className="mb-6 lg:hidden">
             <Logo />
-            {showLnuLogo ? (
-              <p className="auth-lnu-line auth-lnu-line-mobile mt-3 text-xs uppercase tracking-[0.18em] text-royal">
-                <img src={lnuLogo} alt="Leyte Normal University logo" className="lnu-logo lnu-logo-sm" />
-                <span>Leyte Normal University</span>
-              </p>
-            ) : null}
           </div>
           <Card className="auth-card rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
             <h2 className="text-2xl font-semibold text-navy">{title}</h2>
@@ -61,6 +54,20 @@ export function AuthLayout({ title, subtitle, children, footer, showLnuLogo = fa
           </Card>
           {footer ? (
             <p className="mt-5 text-center text-sm text-slate-600">{footer}</p>
+          ) : null}
+          {showLnuLogo ? (
+            <div className="auth-lnu-footer" aria-label="Leyte Normal University">
+              <img
+                src={lnuLogo}
+                alt="Leyte Normal University logo"
+                width={24}
+                height={24}
+                loading="lazy"
+                decoding="async"
+                className="auth-lnu-footer-logo"
+              />
+              <span>Leyte Normal University</span>
+            </div>
           ) : null}
         </main>
       </div>
