@@ -160,7 +160,7 @@ model ClassSession {
   id          String             @id @default(cuid())
   classId     String
   date        DateTime           @db.Date
-  startedAt   DateTime           @default(now())
+  startedAt   DateTime?
   endedAt     DateTime?
   class       Class              @relation(fields: [classId], references: [id], onDelete: Cascade)
   attendance  AttendanceRecord[]

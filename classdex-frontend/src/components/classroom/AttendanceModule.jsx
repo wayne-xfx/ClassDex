@@ -11,7 +11,8 @@ export default function AttendanceModule({
   counts,
   layout,
   onLayoutChange,
-  gracePeriodMinutes,
+  gracePeriodMinutes = 15,
+  onStartAttendance,
   onStatusChange,
   onSaveGracePeriod,
   pendingStudentIds = [],
@@ -22,7 +23,7 @@ export default function AttendanceModule({
   const [search, setSearch] = useState("");
   const [takingAttendance, setTakingAttendance] = useState(false);
   const [currentStudentId, setCurrentStudentId] = useState(null);
-  const inputGraceValue = graceValue ?? String(gracePeriodMinutes);
+  const inputGraceValue = graceValue ?? String(gracePeriodMinutes ?? 15);
 
   const displayedStudents = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
@@ -46,6 +47,7 @@ export default function AttendanceModule({
   }
 
   function startTakingAttendance() {
+    onStartAttendance?.();
     setTakingAttendance(true);
     setCurrentStudentId(unmarkedStudents[0]?.id || null);
   }
