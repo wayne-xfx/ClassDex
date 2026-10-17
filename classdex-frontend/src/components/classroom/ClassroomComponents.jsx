@@ -18,9 +18,9 @@ export function ModuleTabs({ active, onChange, studentListCount = 0 }) {
   const tabRefs = useRef([]);
   const tabs = [
     { id: "attendance", label: "Attendance", icon: "clipboardCheck" },
-    { id: "recitation", label: "Recitation", icon: "mic" },
+    { id: "recitation", label: "Recitation", icon: "message" },
     { id: "activities", label: "Activities", icon: "listChecks" },
-    { id: "projects", label: "Projects", icon: "folderKanban" },
+    { id: "projects", label: "Projects", icon: "folder" },
     { id: "quiz", label: "Quiz", icon: "brain" },
     { id: "student-list", label: `Student List (${studentListCount})`, icon: "users" },
   ];

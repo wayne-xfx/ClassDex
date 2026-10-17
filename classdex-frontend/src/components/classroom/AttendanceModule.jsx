@@ -91,7 +91,7 @@ export default function AttendanceModule({
     <div className="attendance-module">
       <div className="attendance-heading">
         <div>
-          <span className="eyebrow"><Icon name="check" /> Attendance</span>
+          <span className="eyebrow"><Icon name="clipboardCheck" /> Attendance</span>
           <h2>Attendance</h2>
           <p>Review attendance cards or take attendance one student at a time.</p>
         </div>
@@ -130,7 +130,7 @@ export default function AttendanceModule({
         <section className="attendance-taking" aria-live="polite">
           <div className="attendance-taking-header">
             <div>
-              <span className="eyebrow"><Icon name="check" /> Taking attendance</span>
+              <span className="eyebrow"><Icon name="clipboardCheck" /> Taking attendance</span>
               <strong>{students.length - counts.UNMARKED} of {students.length} students marked</strong>
             </div>
             <button type="button" className="button button-secondary" onClick={() => setTakingAttendance(false)}>
