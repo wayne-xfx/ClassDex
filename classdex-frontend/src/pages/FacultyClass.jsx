@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import QRCode from "qrcode";
 import AppShell from "../components/AppShell";
 import Icon from "../components/Icon";
 import {
@@ -12,11 +13,13 @@ import {
 } from "../components/classroom/ClassroomComponents";
 import { compareStudentsByLastName } from "../components/classroom/studentNames";
 import AttendanceModule from "../components/classroom/AttendanceModule";
+import ExportModule from "../components/classroom/ExportModule";
 import RecitationModule from "../components/classroom/RecitationModule";
 import { ActivitiesModule, ProjectsModule } from "../components/classroom/ScoringModules";
 import StudentListManager from "../components/classroom/StudentListManager";
 import PendingValidationList from "../components/classroom/PendingValidationList";
 import QuizModule from "../components/classroom/QuizModule";
+import { Modal } from "../components/DesignSystem";
 import { api } from "../api";
 
 const MODULE_LABELS = {
@@ -25,6 +28,7 @@ const MODULE_LABELS = {
   recitation: "Recitation",
   activities: "Activities",
   projects: "Projects",
+  export: "Data export",
   quiz: "Quiz",
   "student-list": "Student List",
 };
@@ -69,7 +73,30 @@ export default function FacultyClass() {
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [studentRecords, setStudentRecords] = useState(null);
   const [studentRecordsError, setStudentRecordsError] = useState("");
+  const [inviteQr, setInviteQr] = useState("");
+  const [inviteQrError, setInviteQrError] = useState("");
+  const [showLargeQr, setShowLargeQr] = useState(false);
+  const [inviteExpanded, setInviteExpanded] = useState(false);
   const studentRecordsLoading = Boolean(selectedStudent && !studentRecords && !studentRecordsError);
+
+  useEffect(() => {
+    if (!classRecord?.id) return;
+    try {
+      setInviteExpanded(window.localStorage.getItem(`classdex:invite-expanded:${classRecord.id}`) === "true");
+    } catch {
+      setInviteExpanded(false);
+    }
+  }, [classRecord?.id]);
+
+  function toggleInviteExpanded() {
+    const nextExpanded = !inviteExpanded;
+    setInviteExpanded(nextExpanded);
+    try {
+      window.localStorage.setItem(`classdex:invite-expanded:${classRecord.id}`, String(nextExpanded));
+    } catch {
+      // Keep the choice for this page session when storage is unavailable.
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -95,6 +122,41 @@ export default function FacultyClass() {
       cancelled = true;
     };
   }, [id]);
+
+  const inviteLink = useMemo(
+    () => (classRecord ? `${window.location.origin}/join/${classRecord.classCode}` : ""),
+    [classRecord],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!inviteLink) {
+      setInviteQr("");
+      setInviteQrError("");
+      return () => {};
+    }
+    QRCode.toDataURL(inviteLink, {
+      errorCorrectionLevel: "M",
+      margin: 1,
+      width: 208,
+      color: { dark: "#0f172a", light: "#ffffff" },
+    })
+      .then((dataUrl) => {
+        if (!cancelled) {
+          setInviteQr(dataUrl);
+          setInviteQrError("");
+        }
+      })
+      .catch((qrError) => {
+        if (!cancelled) {
+          setInviteQr("");
+          setInviteQrError(qrError.message);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [inviteLink]);
 
   useEffect(() => { let cancelled = false; api.classRoster(id).then(({ roster }) => { if (!cancelled) setStudentListCount(roster.length); }).catch(() => {}); return () => { cancelled = true; }; }, [id]);
   const refreshPending = useCallback(() => api.pendingEnrollments(id).then(({ pending }) => setPendingEnrollments(pending)).catch(() => {}), [id]);
@@ -240,12 +302,51 @@ export default function FacultyClass() {
       showToast(rosterError.message, "error");
       return;
     }
-    const link = `${window.location.origin}/join/${classRecord.classCode}`;
     try {
-      await navigator.clipboard.writeText(link);
+      await navigator.clipboard.writeText(inviteLink);
       showToast("Invite link copied. Share it with your students.");
     } catch {
-      showToast(`Copy unavailable — share code ${classRecord.classCode} or link ${link}`, "error");
+      showToast(`Copy unavailable — share code ${classRecord.classCode} instead.`, "error");
+    }
+  }
+
+  async function downloadExcelExport() {
+    try {
+      const blob = await api.exportClassExcel(id);
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const code = (classRecord?.classCode || "class").replace(/[^\w.-]+/g, "_");
+      const section = (classRecord?.sectionName || "section").replace(/[^\w.-]+/g, "_");
+      anchor.download = `${code}_${section}_${dateStr}.xlsx`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+      showToast("Excel export downloaded.");
+    } catch (exportError) {
+      showToast(exportError.message, "error");
+    }
+  }
+
+  async function downloadCsvExport() {
+    try {
+      const blob = await api.exportClassCsv(id);
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const code = (classRecord?.classCode || "class").replace(/[^\w.-]+/g, "_");
+      const section = (classRecord?.sectionName || "section").replace(/[^\w.-]+/g, "_");
+      anchor.download = `${code}_${section}_${dateStr}.csv`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+      showToast("CSV export downloaded.");
+    } catch (exportError) {
+      showToast(exportError.message, "error");
     }
   }
 
@@ -351,8 +452,60 @@ export default function FacultyClass() {
               </div>
             </header>
 
-            <div className="classroom-date"><Icon name="clock" size={16} /> {today}</div>
-            <div className="classroom-pending-action"><button type="button" className="button button-quiet" onClick={() => setShowPending(true)}><Icon name="bell" size={16} /> Pending {pendingEnrollments.length ? <span className="notification-badge">{pendingEnrollments.length}</span> : null}</button></div>
+            <div className="classroom-date"><Icon name="calendar" size={16} /> {today}</div>
+            <section className={`panel class-share-panel${inviteExpanded ? " is-expanded" : ""}`} aria-labelledby="class-share-title">
+              <div className="class-share-row">
+                <button type="button" className="class-share-toggle" aria-expanded={inviteExpanded} aria-controls="class-share-expanded" onClick={toggleInviteExpanded}>
+                  <Icon name="qrCode" />
+                  <span id="class-share-title">Share class invite</span>
+                  <Icon name="chevron" className={inviteExpanded ? "is-rotated" : ""} />
+                </button>
+                <span className="class-share-code">{classRecord.classCode}</span>
+                <button type="button" className="button button-primary" onClick={copyInvite}>
+                  <Icon name="copy" /> Copy invite link
+                </button>
+                <button type="button" className="button button-quiet class-share-pending" onClick={() => setShowPending(true)}><Icon name="bell" size={16} /> Pending {pendingEnrollments.length ? <span className="notification-badge">{pendingEnrollments.length}</span> : null}</button>
+              </div>
+              {inviteExpanded ? (
+                <div id="class-share-expanded" className="class-share-expanded">
+                  <div className="class-share-copy">
+                    <h2>Invite students with a link or QR code</h2>
+                    <p>Students can scan the QR code or use the invite link to join this class.</p>
+                  </div>
+                  <div className="class-share-qr">
+                    {inviteQr ? (
+                      <>
+                        <img src={inviteQr} alt={`QR code for joining ${classRecord.sectionName}`} />
+                        <div className="class-share-qr-actions">
+                          <button type="button" className="button button-quiet" onClick={() => setShowLargeQr(true)}>Show larger</button>
+                          <a href={inviteQr} download={`${classRecord.classCode || "class"}-qr.png`} className="button button-quiet">Download QR</a>
+                        </div>
+                      </>
+                    ) : <div className="class-share-qr-placeholder">Generating QR…</div>}
+                    {inviteQrError ? <span className="class-share-error">{inviteQrError}</span> : null}
+                  </div>
+                </div>
+              ) : null}
+            </section>
+
+            {showLargeQr && inviteQr ? (
+              <Modal
+                title="Class join QR code"
+                description={`Scan with any mobile camera or QR reader to join ${classRecord.sectionName}.`}
+                onClose={() => setShowLargeQr(false)}
+                footer={
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem" }}>
+                    <button type="button" className="button button-secondary" onClick={() => setShowLargeQr(false)}>Close</button>
+                    <a href={inviteQr} download={`${classRecord.classCode || "class"}-qr.png`} className="button button-primary">Download QR</a>
+                  </div>
+                }
+              >
+                <div style={{ display: "grid", placeItems: "center", padding: "1.25rem", textAlign: "center" }}>
+                  <img src={inviteQr} alt={`Large QR code for ${classRecord.sectionName}`} style={{ width: "260px", height: "260px", borderRadius: "12px", border: "1px solid var(--border-color, #e2e8f0)" }} />
+                  <p style={{ marginTop: "0.75rem", fontWeight: "bold" }}>Class code: {classRecord.classCode}</p>
+                </div>
+              </Modal>
+            ) : null}
             {showPending ? <PendingValidationList enrollments={pendingEnrollments} onApprove={(enrollmentId) => updatePending(enrollmentId, "APPROVED")} onDecline={(enrollmentId) => updatePending(enrollmentId, "DECLINED")} onClose={() => setShowPending(false)} busyId={pendingBusyId} /> : null}
             <ModuleTabs active={activeModule} onChange={setActiveModule} studentListCount={studentListCount} />
             <Toast
@@ -477,6 +630,8 @@ export default function FacultyClass() {
                 <ActivitiesModule key={classRecord.session.id} sessionId={classRecord.session.id} students={sortedStudents} />
               ) : activeModule === "projects" ? (
                 <ProjectsModule key={id} classId={id} sessionId={classRecord.session.id} students={sortedStudents} />
+              ) : activeModule === "export" ? (
+                <ExportModule classRecord={classRecord} students={sortedStudents} pendingEnrollments={pendingEnrollments} onExcel={downloadExcelExport} onCsv={downloadCsvExport} />
               ) : activeModule === "quiz" ? (
                 <QuizModule classId={id} students={sortedStudents} attendanceTaken={students.some((student) => student.status !== "UNMARKED")} onTakeAttendance={() => setActiveModule("attendance")} />
               ) : null}

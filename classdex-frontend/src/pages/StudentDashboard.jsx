@@ -1,13 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import Icon from "../components/Icon";
+import RecaptchaWidget from "../components/RecaptchaWidget";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { PageHeader } from "../components/DesignSystem";
-
-// Placeholder presentation data for SCRUM-39. Replace with dashboard aggregates in a later sprint.
-const MOCK_RECORD_SUMMARY = { attendance: "—", recitation: "—", activity: "—", project: "—" };
 
 export default function StudentDashboard() {
   const { user } = useAuth();
@@ -19,6 +17,9 @@ export default function StudentDashboard() {
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState(location.state?.notice || "");
+  const [captchaOpen, setCaptchaOpen] = useState(false);
+  const captchaRef = useRef(null);
+  const submitButtonRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,15 +41,29 @@ export default function StudentDashboard() {
     };
   }, []);
 
-  async function handleJoin(event) {
+  function handleJoin(event) {
     event.preventDefault();
+    if (joining) return;
     setError("");
+    const normalizedCode = classCode.trim().toUpperCase();
+    if (!normalizedCode) {
+      setError("Enter a class invite code.");
+      return;
+    }
+    if (!/^[A-Z0-9-]{3,20}$/.test(normalizedCode)) {
+      setError("Use 3–20 letters, numbers, or hyphens.");
+      return;
+    }
+    setCaptchaOpen(true);
+  }
+
+  async function joinWithToken(recaptchaToken) {
+    if (joining) return;
     setJoining(true);
     try {
-      const joinResult = await api.joinClass(classCode);
-      setNotice("You’ve joined the class. Welcome aboard!");
-      setNotice(joinResult.status === "PENDING" ? joinResult.message || "Waiting for instructor approval." : "You joined the class. Welcome aboard!");
+      const joinResult = await api.joinClass(classCode.trim().toUpperCase(), recaptchaToken);
       setClassCode("");
+      setNotice(joinResult.status === "PENDING" ? joinResult.message || "Waiting for instructor approval." : "You joined the class. Welcome aboard!");
       const result = await api.studentClasses();
       setClasses(result.classes);
     } catch (joinError) {
@@ -56,7 +71,16 @@ export default function StudentDashboard() {
       else setError(joinError.message);
     } finally {
       setJoining(false);
+      captchaRef.current?.reset();
+      setCaptchaOpen(false);
     }
+  }
+
+  function handleCaptchaChange(token) {
+    if (!token) return;
+    captchaRef.current?.reset();
+    setCaptchaOpen(false);
+    void joinWithToken(token);
   }
 
   return (
@@ -90,9 +114,10 @@ export default function StudentDashboard() {
               <p>Enter the code from your faculty member or open their invite link.</p>
             </div>
             <form onSubmit={handleJoin} className="join-form">
-              <input className="input" aria-label="Class code" value={classCode} onChange={(event) => setClassCode(event.target.value.toUpperCase())} placeholder="e.g. ENG3A25" required />
-              <button className="button button-primary" type="submit" disabled={joining}>{joining ? "Joining…" : "Join class"} <Icon name="arrow" /></button>
+              <input className="input" aria-label="Class code" value={classCode} onChange={(event) => setClassCode(event.target.value.toUpperCase())} placeholder="e.g. ENG3A25" />
+              <button ref={submitButtonRef} className="button button-primary" type="submit" disabled={joining}>{joining ? "Joining…" : "Join class"} <Icon name="arrow" /></button>
             </form>
+            {captchaOpen ? <RecaptchaWidget ref={captchaRef} onChange={handleCaptchaChange} onClose={() => setCaptchaOpen(false)} returnFocusRef={submitButtonRef} /> : null}
           </section>
         )}
 
@@ -110,7 +135,7 @@ export default function StudentDashboard() {
                 <p className="class-schedule"><Icon name="clock" /> {classRecord.schedule || "Schedule not set"}</p>
                 <p className="faculty-byline"><Icon name="user" /> {classRecord.faculty?.name || "Faculty"}</p>
                 <div className="student-class-summary" aria-label="Class record summary">
-                  {Object.entries(MOCK_RECORD_SUMMARY).map(([label, value]) => <span key={label}><b>{value}</b>{label}</span>)}
+                  <span><b>Open</b> record</span>
                 </div>
               </article>
             ))}

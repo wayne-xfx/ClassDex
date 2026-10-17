@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { AuthLayout } from "../components/AuthLayout";
+import RecaptchaWidget from "../components/RecaptchaWidget";
 import PasswordField from "../components/PasswordField";
 import { useAuth } from "../context/AuthContext";
 
@@ -30,17 +31,38 @@ export default function Register() {
   });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [captchaOpen, setCaptchaOpen] = useState(false);
+  const captchaRef = useRef(null);
+  const submitButtonRef = useRef(null);
 
   function update(field) {
     return (event) => setForm((prev) => ({ ...prev, [field]: event.target.value }));
   }
 
-  async function handleSubmit(event) {
+  function handleSubmit(event) {
     event.preventDefault();
+    if (submitting) return;
     setError("");
+    if (!ROLES.some((role) => role.value === form.role) || !form.name.trim()) {
+      setError("Choose an account type and enter your full name.");
+      return;
+    }
+    if (form.password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+    if (form.password !== form.confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    setCaptchaOpen(true);
+  }
+
+  async function submitWithToken(recaptchaToken) {
+    if (submitting) return;
     setSubmitting(true);
     try {
-      const user = await register(form);
+      const user = await register({ ...form, recaptchaToken });
       const requestedPath = location.state?.from?.pathname;
       const safeRequestedPath =
         user.role === "STUDENT" && requestedPath?.startsWith("/join/")
@@ -53,7 +75,16 @@ export default function Register() {
       setError(err.message);
     } finally {
       setSubmitting(false);
+      captchaRef.current?.reset();
+      setCaptchaOpen(false);
     }
+  }
+
+  function handleCaptchaChange(token) {
+    if (!token) return;
+    captchaRef.current?.reset();
+    setCaptchaOpen(false);
+    void submitWithToken(token);
   }
 
   return (
@@ -156,6 +187,7 @@ export default function Register() {
         ) : null}
 
         <button
+          ref={submitButtonRef}
           type="submit"
           disabled={submitting}
           className="w-full rounded-lg bg-navy py-2.5 text-sm font-semibold text-white hover:bg-royal disabled:opacity-70"
@@ -163,6 +195,7 @@ export default function Register() {
           {submitting ? "Creating account…" : "Register"}
         </button>
       </form>
+      {captchaOpen ? <RecaptchaWidget ref={captchaRef} onChange={handleCaptchaChange} onClose={() => setCaptchaOpen(false)} returnFocusRef={submitButtonRef} /> : null}
     </AuthLayout>
   );
 }

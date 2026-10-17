@@ -80,7 +80,7 @@ export default function FacultyDashboard() {
             <h2>Your classes</h2>
             <p>{classes.length} {classes.length === 1 ? "class" : "classes"} created</p>
           </div>
-          {profile ? <Link to="/faculty/profile" className="text-link"><Icon name="user" /> Edit profile</Link> : null}
+          {profile ? <Link to="/faculty/profile" className="text-link"><Icon name="edit" /> Edit profile</Link> : null}
         </div>
 
         {loading ? <div className="loading-card">Loading your classes…</div> : classes.length ? (

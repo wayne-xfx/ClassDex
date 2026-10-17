@@ -33,6 +33,18 @@ async function request(path, options = {}) {
   return data;
 }
 
+async function requestBlob(path, options = {}) {
+  const response = await fetch(`${API_BASE}${path}`, {
+    credentials: "include",
+    ...options,
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.message || "Something went wrong.");
+  }
+  return response.blob();
+}
+
 export const api = {
   register: (payload) =>
     request("/auth/register", {
@@ -78,6 +90,12 @@ export const api = {
   updateQuizSession: (sessionId, payload) => request(`/quizzes/${encodeURIComponent(sessionId)}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteQuizSession: (sessionId) => request(`/quizzes/${encodeURIComponent(sessionId)}`, { method: "DELETE" }),
   setQuizScore: (sessionId, studentId, score) => request(`/quizzes/${encodeURIComponent(sessionId)}/scores/${encodeURIComponent(studentId)}`, { method: "PUT", body: JSON.stringify({ score }) }),
+  studentClassRecord: (classId) =>
+    request(`/student/classes/${encodeURIComponent(classId)}/records`),
+  exportClassExcel: (classId) =>
+    requestBlob(`/classes/${encodeURIComponent(classId)}/export/excel`),
+  exportClassCsv: (classId) =>
+    requestBlob(`/classes/${encodeURIComponent(classId)}/export/csv`),
   studentClassRecords: (classId, studentId) =>
     request(`/classes/${encodeURIComponent(classId)}/students/${encodeURIComponent(studentId)}/records`),
   todaySession: (id) =>
@@ -136,9 +154,9 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ score, sessionId }),
     }),
-  joinClass: (classCode) =>
+  joinClass: (classCode, recaptchaToken) =>
     request("/classes/join", {
       method: "POST",
-      body: JSON.stringify({ classCode }),
+      body: JSON.stringify({ classCode, recaptchaToken }),
     }),
 };
