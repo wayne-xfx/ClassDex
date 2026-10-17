@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { getAvatarThumbnailUrl } from "../utils/photoUpload";
 
 const AVATAR_SIZES = {
   xs: 24,
@@ -46,10 +47,11 @@ function resolveAvatarSize(size) {
 
 export default function Avatar({ src, name = "", alt = "", className = "", size = "md" }) {
   const [failedSrc, setFailedSrc] = useState(null);
-  const validSrc = isUsablePhotoUrl(src) ? src.trim() : "";
-  const showImage = Boolean(validSrc && failedSrc !== validSrc);
-  const initials = getInitials(name);
   const { variant, px } = resolveAvatarSize(size);
+  const rawSrc = isUsablePhotoUrl(src) ? src.trim() : "";
+  const resolvedSrc = rawSrc ? getAvatarThumbnailUrl(rawSrc, variant, px) : "";
+  const showImage = Boolean(resolvedSrc && failedSrc !== resolvedSrc);
+  const initials = getInitials(name);
   const dimension = `${px}px`;
   const circleStyle = {
     width: dimension,
@@ -72,7 +74,7 @@ export default function Avatar({ src, name = "", alt = "", className = "", size 
     >
       {showImage ? (
         <img
-          src={validSrc}
+          src={resolvedSrc}
           alt={alt}
           width={px}
           height={px}
@@ -80,10 +82,10 @@ export default function Avatar({ src, name = "", alt = "", className = "", size 
           decoding="async"
           className="avatar-image h-full w-full rounded-full object-cover object-top"
           style={{ objectFit: "cover", objectPosition: "center top" }}
-          onError={() => setFailedSrc(validSrc)}
+          onError={() => setFailedSrc(resolvedSrc)}
           onLoad={(event) => {
             if (!event.currentTarget.naturalWidth) {
-              setFailedSrc(validSrc);
+              setFailedSrc(resolvedSrc);
             }
           }}
         />

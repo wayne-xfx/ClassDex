@@ -1,35 +1,49 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import AppShell from "../components/AppShell";
-import Avatar from "../components/Avatar";
 import Icon from "../components/Icon";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { PageHeader } from "../components/DesignSystem";
 import { formatClassSchedule } from "../utils/schedule";
 
+const PROMPT_DISMISSED_KEY = "classdex:faculty-profile-prompt-dismissed";
+
+function isFacultyProfileComplete(profile, user) {
+  if (!profile) return Boolean(user?.profileCompleted);
+  if (typeof profile.profileCompleted === "boolean") return profile.profileCompleted;
+  return Boolean(
+    profile.department?.trim() ||
+      profile.contact?.trim() ||
+      profile.photo?.trim() ||
+      user?.photo?.trim(),
+  );
+}
+
 export default function FacultyDashboard() {
-  const { user, updateUser } = useAuth();
+  const { user } = useAuth();
   const location = useLocation();
   const [classes, setClasses] = useState([]);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState(location.state?.notice || "");
-  const [profilePromptDismissed, setProfilePromptDismissed] = useState(false);
+  const [profilePromptDismissed, setProfilePromptDismissed] = useState(() => {
+    try {
+      return window.sessionStorage.getItem(PROMPT_DISMISSED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
   const [pendingCounts, setPendingCounts] = useState({});
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([api.facultyClasses(), api.facultyProfile(), api.facultyPendingCounts()])
-      .then(([classData, profileData, pendingData]) => {
+    Promise.all([api.facultyClasses(), api.facultyProfile({ summary: true })])
+      .then(([classData, profileData]) => {
         if (cancelled) return;
-        setClasses(classData.classes);
-        setProfile(profileData.profile);
-        if (profileData.profile?.photo) {
-          updateUser?.({ photo: profileData.profile.photo });
-        }
-        setPendingCounts(pendingData.counts || {});
+        setClasses(classData.classes || []);
+        setProfile(profileData.profile || null);
       })
       .catch((requestError) => {
         if (!cancelled) setError(requestError.message);
@@ -37,12 +51,41 @@ export default function FacultyDashboard() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
+
+    api
+      .facultyPendingCounts()
+      .then(({ counts }) => {
+        if (!cancelled) setPendingCounts(counts || {});
+      })
+      .catch(() => {});
+
     return () => {
       cancelled = true;
     };
-  }, [updateUser]);
+  }, []);
 
-  useEffect(() => { const refresh = () => api.facultyPendingCounts().then(({ counts }) => setPendingCounts(counts || {})).catch(() => {}); const interval = window.setInterval(refresh, 30000); window.addEventListener("focus", refresh); return () => { window.clearInterval(interval); window.removeEventListener("focus", refresh); }; }, []);
+  useEffect(() => {
+    const refresh = () =>
+      api
+        .facultyPendingCounts()
+        .then(({ counts }) => setPendingCounts(counts || {}))
+        .catch(() => {});
+    const interval = window.setInterval(refresh, 30000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+    };
+  }, []);
+
+  function dismissProfilePrompt() {
+    setProfilePromptDismissed(true);
+    try {
+      window.sessionStorage.setItem(PROMPT_DISMISSED_KEY, "1");
+    } catch {
+      // Ignore storage errors
+    }
+  }
 
   async function copyInvite(classCode) {
     try {
@@ -53,14 +96,17 @@ export default function FacultyDashboard() {
     }
   }
 
+  const profileCompleted = isFacultyProfileComplete(profile, user);
+  const displayName = profile?.name?.trim() || user?.name?.split(" ")[0] || "Faculty";
+
   return (
     <AppShell active="home">
-      <div className="content-wide">
+      <div className="content-wide faculty-dashboard-content">
         <PageHeader
           className="dashboard-heading"
           eyebrow="Faculty workspace"
           icon="book"
-          title={`Welcome back, ${profile?.name || user?.name?.split(" ")[0]}`}
+          title={`Welcome back, ${displayName}`}
           description="All your classes, student lists, and invitations in one place."
           action={<Link to="/faculty/classes/new" className="button button-primary"><Icon name="plus" /> Create a class</Link>}
         />
@@ -68,15 +114,18 @@ export default function FacultyDashboard() {
         {notice ? <p className="notice notice-success" role="status"><Icon name="check" /> {notice}</p> : null}
         {error ? <p className="notice notice-error" role="alert">{error}</p> : null}
 
-        {!profile && !profilePromptDismissed ? (
-          <section className="profile-prompt">
-            <Avatar src={user?.photo} name={user?.name} size="md" className="prompt-icon" />
-            <div className="prompt-copy">
-              <strong>Make your faculty card yours</strong>
-              <p>Add your department and contact details. It’s optional and can be completed any time.</p>
+        {!loading && !profileCompleted && !profilePromptDismissed ? (
+          <section className="profile-banner-compact" aria-label="Complete faculty profile">
+            <span className="profile-banner-icon" aria-hidden="true"><Icon name="user" size={16} /></span>
+            <p className="profile-banner-text">
+              <strong>Complete your faculty profile</strong> — add your department and contact details any time.
+            </p>
+            <div className="profile-banner-actions">
+              <Link to="/faculty/profile" className="text-link">Set up profile</Link>
+              <button type="button" className="prompt-skip" aria-label="Dismiss profile reminder" onClick={dismissProfilePrompt}>
+                Dismiss
+              </button>
             </div>
-            <Link to="/faculty/profile" className="button button-secondary">Set up profile <Icon name="arrow" /></Link>
-            <button type="button" className="prompt-skip" onClick={() => setProfilePromptDismissed(true)}>Skip for now</button>
           </section>
         ) : null}
 
@@ -85,12 +134,6 @@ export default function FacultyDashboard() {
             <h2>Your classes</h2>
             <p>{classes.length} {classes.length === 1 ? "class" : "classes"} created</p>
           </div>
-          {profile ? (
-            <Link to="/faculty/profile" className="text-link dashboard-profile-link">
-              <Avatar src={profile.photo || user?.photo} name={profile.name || user?.name} size="xs" className="dashboard-profile-avatar" />
-              <Icon name="edit" /> Edit profile
-            </Link>
-          ) : null}
         </div>
 
         {loading ? <div className="loading-card">Loading your classes…</div> : classes.length ? (
@@ -137,3 +180,4 @@ export default function FacultyDashboard() {
     </AppShell>
   );
 }
+

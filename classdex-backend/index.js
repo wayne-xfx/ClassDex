@@ -60,13 +60,28 @@ app.use(
   }),
 );
 
+function isFacultyProfileComplete(profile, user) {
+  if (!profile) return false;
+  const name = String(profile.name || user?.name || "").trim();
+  const department = String(profile.department || "").trim();
+  return Boolean(name && department);
+}
+
 function publicUser(user) {
+  const photo = user.facultyProfile?.photo || user.studentProfile?.photo || user.photo || null;
+  const profileCompleted =
+    user.role === "FACULTY"
+      ? isFacultyProfileComplete(user.facultyProfile, user)
+      : user.role === "STUDENT"
+        ? Boolean(user.studentProfile?.studentId && user.studentProfile?.name && photo)
+        : true;
   return {
     id: user.id,
     name: user.name,
     email: user.email,
     role: user.role,
-    photo: user.facultyProfile?.photo || user.studentProfile?.photo || user.photo || null,
+    photo,
+    profileCompleted,
     createdAt: user.createdAt,
   };
 }
@@ -295,8 +310,8 @@ app.post("/api/auth/login", async (req, res) => {
     const user = await prisma.user.findUnique({
       where: { email },
       include: {
-        facultyProfile: { select: { photo: true } },
-        studentProfile: { select: { photo: true } },
+        facultyProfile: { select: { photo: true, name: true, department: true, email: true } },
+        studentProfile: { select: { photo: true, name: true, studentId: true } },
       },
     });
     if (!user) {
@@ -345,8 +360,8 @@ app.get("/api/auth/me", requireAuth, async (req, res) => {
     const user = await prisma.user.findUnique({
       where: { id: req.session.userId },
       include: {
-        facultyProfile: { select: { photo: true } },
-        studentProfile: { select: { photo: true } },
+        facultyProfile: { select: { photo: true, name: true, department: true, email: true } },
+        studentProfile: { select: { photo: true, name: true, studentId: true } },
       },
     });
     if (!user) {
@@ -366,10 +381,28 @@ app.get(
   requireRole("FACULTY"),
   async (req, res) => {
     try {
+      const isSummary = String(req.query.summary || "") === "1";
       const profile = await prisma.facultyProfile.findUnique({
         where: { userId: req.session.userId },
+        ...(isSummary
+          ? {
+              select: {
+                id: true,
+                userId: true,
+                name: true,
+                department: true,
+                email: true,
+                contact: true,
+                updatedAt: true,
+              },
+            }
+          : {}),
       });
-      return res.json({ profile });
+      return res.json({
+        profile: profile
+          ? { ...profile, profileCompleted: isFacultyProfileComplete(profile) }
+          : null,
+      });
     } catch (error) {
       console.error("Faculty profile lookup failed:", error);
       return res.status(500).json({ message: "Unable to load faculty profile." });
@@ -512,7 +545,20 @@ app.get(
     try {
       const classes = await prisma.class.findMany({
         where: { facultyId: req.session.userId },
-        include: { _count: { select: { enrollments: true } } },
+        select: {
+          id: true,
+          sectionName: true,
+          classCode: true,
+          description: true,
+          schedule: true,
+          scheduleDays: true,
+          scheduleStartTime: true,
+          scheduleEndTime: true,
+          gracePeriodMinutes: true,
+          facultyId: true,
+          createdAt: true,
+          _count: { select: { enrollments: true } },
+        },
         orderBy: { createdAt: "desc" },
       });
       return res.json({ classes });
@@ -598,19 +644,62 @@ app.get("/api/faculty/classes/pending-counts", requireAuth, requireRole("FACULTY
       where: { facultyId: req.session.userId },
       select: {
         id: true,
-        sectionName: true,
         _count: { select: { enrollments: { where: { status: "PENDING" } } } },
       },
     });
+    const classIds = classes.map((item) => item.id);
     const counts = {};
     const pendingCounts = {};
     const warningCounts = {};
-    for (const item of classes) {
-      const warnings = await getActiveAbsenceWarningsForClass(item.id, item.sectionName);
-      pendingCounts[item.id] = item._count.enrollments;
-      warningCounts[item.id] = warnings.length;
-      counts[item.id] = item._count.enrollments + warnings.length;
+
+    if (classIds.length > 0) {
+      const [approvedEnrollments, absentRecords] = await Promise.all([
+        prisma.classEnrollment.findMany({
+          where: { classId: { in: classIds }, status: "APPROVED" },
+          select: {
+            id: true,
+            classId: true,
+            studentProfileId: true,
+            dismissedAbsenceCount: true,
+          },
+        }),
+        prisma.attendanceRecord.findMany({
+          where: {
+            status: "ABSENT",
+            session: { is: { classId: { in: classIds } } },
+          },
+          select: {
+            studentId: true,
+            session: { select: { classId: true } },
+          },
+        }),
+      ]);
+
+      const absentByClassAndStudent = new Map();
+      for (const rec of absentRecords) {
+        const key = `${rec.session.classId}:${rec.studentId}`;
+        absentByClassAndStudent.set(key, (absentByClassAndStudent.get(key) || 0) + 1);
+      }
+
+      const warningsByClass = new Map();
+      for (const enrollment of approvedEnrollments) {
+        const key = `${enrollment.classId}:${enrollment.studentProfileId}`;
+        const absentCount = absentByClassAndStudent.get(key) || 0;
+        const dismissedCount = enrollment.dismissedAbsenceCount || 0;
+        if (absentCount >= ABSENCE_WARNING_THRESHOLD && absentCount > dismissedCount) {
+          warningsByClass.set(enrollment.classId, (warningsByClass.get(enrollment.classId) || 0) + 1);
+        }
+      }
+
+      for (const item of classes) {
+        const pending = item._count.enrollments;
+        const warnings = warningsByClass.get(item.id) || 0;
+        pendingCounts[item.id] = pending;
+        warningCounts[item.id] = warnings;
+        counts[item.id] = pending + warnings;
+      }
     }
+
     return res.json({
       counts,
       pendingCounts,

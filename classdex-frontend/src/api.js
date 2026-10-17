@@ -58,7 +58,8 @@ export const api = {
     }),
   logout: () => request("/auth/logout", { method: "POST" }),
   me: () => request("/auth/me"),
-  facultyProfile: () => request("/faculty/profile"),
+  facultyProfile: (options = {}) =>
+    request(`/faculty/profile${options.summary ? "?summary=1" : ""}`),
   saveFacultyProfile: (payload) =>
     request("/faculty/profile", {
       method: "PUT",
