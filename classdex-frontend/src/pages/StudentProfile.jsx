@@ -103,7 +103,7 @@ export default function StudentProfile() {
           {loading ? <p className="muted">Loading your index card…</p> : (
             <>
               <div className="photo-upload">
-                <Avatar src={form.photo} name={form.name || user?.name} alt="Student profile" className="photo-preview student-photo" />
+                <Avatar src={form.photo} name={form.name || user?.name} alt="Student profile" size="lg" className="photo-preview student-photo" />
                 <div>
                   <label className="button button-secondary file-button">
                     <Icon name="camera" /> {uploading ? "Uploading…" : form.photo ? "Change photo" : "Upload a photo *"}

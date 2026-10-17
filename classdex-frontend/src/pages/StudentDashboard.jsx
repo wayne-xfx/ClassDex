@@ -99,7 +99,7 @@ export default function StudentDashboard() {
           description="Your index card and every class you’re part of."
           action={(
             <Link to="/student/profile" className="button button-secondary">
-              <Avatar src={profile?.photo || user?.photo} name={profile?.name || user?.name} className="dashboard-profile-avatar" />
+              <Avatar src={profile?.photo || user?.photo} name={profile?.name || user?.name} size="xs" className="dashboard-profile-avatar" />
               {profile ? "Edit index card" : "Create index card"}
             </Link>
           )}
@@ -147,6 +147,7 @@ export default function StudentDashboard() {
                   <Avatar
                     src={classRecord.faculty?.facultyProfile?.photo}
                     name={classRecord.faculty?.facultyProfile?.name || classRecord.faculty?.name || "Faculty"}
+                    size="xs"
                     className="faculty-byline-avatar"
                   />
                   {classRecord.faculty?.facultyProfile?.name || classRecord.faculty?.name || "Faculty"}

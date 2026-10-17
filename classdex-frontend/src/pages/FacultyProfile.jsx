@@ -92,7 +92,7 @@ export default function FacultyProfile() {
           {loading ? <p className="muted">Loading your profile…</p> : (
             <>
               <div className="photo-upload">
-                <Avatar src={form.photo} name={form.name || user?.name} alt="Faculty profile" className="photo-preview" />
+                <Avatar src={form.photo} name={form.name || user?.name} alt="Faculty profile" size="lg" className="photo-preview" />
                 <div>
                   <label className="button button-secondary file-button">
                     <Icon name="camera" /> {uploading ? "Uploading…" : "Add a photo"}

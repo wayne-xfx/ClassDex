@@ -70,7 +70,7 @@ export default function FacultyDashboard() {
 
         {!profile && !profilePromptDismissed ? (
           <section className="profile-prompt">
-            <Avatar src={user?.photo} name={user?.name} className="prompt-icon" />
+            <Avatar src={user?.photo} name={user?.name} size="md" className="prompt-icon" />
             <div className="prompt-copy">
               <strong>Make your faculty card yours</strong>
               <p>Add your department and contact details. It’s optional and can be completed any time.</p>
@@ -87,7 +87,7 @@ export default function FacultyDashboard() {
           </div>
           {profile ? (
             <Link to="/faculty/profile" className="text-link dashboard-profile-link">
-              <Avatar src={profile.photo || user?.photo} name={profile.name || user?.name} className="dashboard-profile-avatar" />
+              <Avatar src={profile.photo || user?.photo} name={profile.name || user?.name} size="xs" className="dashboard-profile-avatar" />
               <Icon name="edit" /> Edit profile
             </Link>
           ) : null}

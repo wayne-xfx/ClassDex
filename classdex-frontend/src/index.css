@@ -4076,8 +4076,8 @@ textarea {
 
 .recitation-mini-card {
   display: flex;
-  width: 98px;
-  min-height: 94px;
+  width: 102px;
+  min-height: 104px;
   flex: 0 0 auto;
   flex-direction: column;
   align-items: center;
@@ -4086,7 +4086,7 @@ textarea {
   border: 1px solid var(--line);
   border-top: 3px solid #278655;
   border-radius: 11px;
-  padding: 7px 5px;
+  padding: 8px 6px;
   background:
     repeating-linear-gradient(to bottom, transparent 0, transparent 25px, color-mix(in srgb, var(--royal) 5%, transparent) 26px, transparent 27px),
     var(--card);
@@ -4095,12 +4095,14 @@ textarea {
 
 .recitation-mini-photo {
   display: grid;
-  width: 39px;
-  height: 39px;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  aspect-ratio: 1 / 1;
   place-items: center;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 50%;
   background: color-mix(in srgb, var(--royal) 10%, var(--card));
   color: var(--royal);
 }
@@ -4109,9 +4111,11 @@ textarea {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center top;
 }
 
-.recitation-mini-card > span {
+.recitation-mini-name,
+.recitation-mini-card > span:not(.avatar) {
   width: 100%;
   overflow: hidden;
   color: var(--navy);
@@ -4254,12 +4258,14 @@ textarea {
 
 .recitation-shuffling-photo {
   display: grid;
-  width: 68px;
-  height: 68px;
+  width: 80px;
+  height: 80px;
+  flex: 0 0 auto;
+  aspect-ratio: 1 / 1;
   place-items: center;
   overflow: hidden;
   border: 2px solid var(--card);
-  border-radius: 20px;
+  border-radius: 50%;
   background: color-mix(in srgb, var(--royal) 10%, var(--card));
   box-shadow: 0 0 0 1px var(--line);
   color: var(--royal);
@@ -4269,6 +4275,7 @@ textarea {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center top;
 }
 
 .recitation-shuffling-card > strong {
@@ -4281,7 +4288,7 @@ textarea {
   white-space: nowrap;
 }
 
-.recitation-shuffling-card > span:not(.recitation-shuffling-label) {
+.recitation-shuffling-card > span:not(.recitation-shuffling-label):not(.avatar) {
   margin-top: 3px;
   color: var(--muted);
   font-size: 10px;
@@ -5753,27 +5760,30 @@ textarea {
   display: inline-grid;
   place-items: center;
   flex: 0 0 auto;
+  flex-shrink: 0;
+  aspect-ratio: 1 / 1;
   overflow: hidden;
-  border-radius: 50%;
+  border-radius: 9999px;
   border: 1px solid var(--line, var(--border-color));
-  background: color-mix(in srgb, var(--royal, #2563eb) 11%, var(--card, #ffffff));
+  background: color-mix(in srgb, var(--royal, #2563eb) 13%, var(--card, #ffffff));
   color: var(--royal, #2563eb);
   font-weight: 800;
   letter-spacing: 0.02em;
   user-select: none;
 }
 
-.avatar-xs { width: 26px; height: 26px; font-size: 11px; }
-.avatar-sm { width: 34px; height: 34px; font-size: 13px; }
-.avatar-md { width: 44px; height: 44px; font-size: 15px; }
-.avatar-lg { width: 68px; height: 68px; font-size: 20px; }
-.avatar-xl { width: 96px; height: 96px; font-size: 28px; }
+.avatar-xs { width: 24px; height: 24px; min-width: 24px; min-height: 24px; font-size: 10px; }
+.avatar-sm { width: 32px; height: 32px; min-width: 32px; min-height: 32px; font-size: 12px; }
+.avatar-md { width: 48px; height: 48px; min-width: 48px; min-height: 48px; font-size: 15px; }
+.avatar-lg { width: 80px; height: 80px; min-width: 80px; min-height: 80px; font-size: 22px; }
+.avatar-xl { width: 96px; height: 96px; min-width: 96px; min-height: 96px; font-size: 28px; }
 
 .avatar-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 50%;
+  object-position: center top;
+  border-radius: 9999px;
   display: block;
 }
 
@@ -5789,10 +5799,18 @@ textarea {
 .avatar.pending-photo,
 .avatar.recitation-mini-photo,
 .avatar.recitation-shuffling-photo,
+.avatar.recitation-student-photo,
 .avatar.recitation-spotlight-photo,
+.avatar.history-student-photo,
 .avatar.student-detail-photo,
+.avatar.photo-preview,
+.avatar.faculty-byline-avatar,
+.avatar.dashboard-profile-avatar,
+.avatar.student-list-avatar,
 .avatar.profile-avatar-frame {
-  border-radius: 50%;
+  border-radius: 9999px;
+  aspect-ratio: 1 / 1;
+  flex-shrink: 0;
 }
 
 .dashboard-welcome-title {

@@ -1,5 +1,13 @@
 import { useState } from "react";
 
+const AVATAR_SIZES = {
+  xs: 24,
+  sm: 32,
+  md: 48,
+  lg: 80,
+  xl: 96,
+};
+
 export function getInitials(name = "") {
   const cleaned = String(name || "")
     .replace(/,/g, " ")
@@ -12,31 +20,72 @@ export function getInitials(name = "") {
   return `${parts[0][0] || ""}${parts[parts.length - 1][0] || ""}`.toUpperCase() || "U";
 }
 
-export default function Avatar({ src, name = "", alt = "", className = "", size }) {
+function isUsablePhotoUrl(value) {
+  if (typeof value !== "string") return false;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "null" || trimmed === "undefined") return false;
+  return (
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("data:image/") ||
+    trimmed.startsWith("blob:") ||
+    trimmed.startsWith("/")
+  );
+}
+
+function resolveAvatarSize(size) {
+  if (typeof size === "number" && Number.isFinite(size) && size > 0) {
+    return { variant: "custom", px: size };
+  }
+  const key = typeof size === "string" ? size.trim().toLowerCase() : "md";
+  if (AVATAR_SIZES[key]) {
+    return { variant: key, px: AVATAR_SIZES[key] };
+  }
+  return { variant: "md", px: AVATAR_SIZES.md };
+}
+
+export default function Avatar({ src, name = "", alt = "", className = "", size = "md" }) {
   const [failedSrc, setFailedSrc] = useState(null);
-  const validSrc = typeof src === "string" ? src.trim() : "";
+  const validSrc = isUsablePhotoUrl(src) ? src.trim() : "";
   const showImage = Boolean(validSrc && failedSrc !== validSrc);
   const initials = getInitials(name);
-  const style = size
-    ? {
-        width: typeof size === "number" ? `${size}px` : size,
-        height: typeof size === "number" ? `${size}px` : size,
-      }
-    : undefined;
+  const { variant, px } = resolveAvatarSize(size);
+  const dimension = `${px}px`;
+  const circleStyle = {
+    width: dimension,
+    height: dimension,
+    minWidth: dimension,
+    minHeight: dimension,
+    maxWidth: dimension,
+    maxHeight: dimension,
+    aspectRatio: "1 / 1",
+    flexShrink: 0,
+    borderRadius: "9999px",
+    overflow: "hidden",
+  };
 
   return (
     <span
-      className={`avatar ${className}`.trim()}
-      style={style}
+      className={`avatar avatar-${variant} aspect-square shrink-0 rounded-full overflow-hidden ${className}`.trim()}
+      style={circleStyle}
       aria-hidden={alt ? undefined : "true"}
     >
       {showImage ? (
         <img
           src={validSrc}
           alt={alt}
+          width={px}
+          height={px}
           loading="lazy"
-          className="avatar-image"
+          decoding="async"
+          className="avatar-image h-full w-full rounded-full object-cover object-top"
+          style={{ objectFit: "cover", objectPosition: "center top" }}
           onError={() => setFailedSrc(validSrc)}
+          onLoad={(event) => {
+            if (!event.currentTarget.naturalWidth) {
+              setFailedSrc(validSrc);
+            }
+          }}
         />
       ) : (
         <span className="avatar-initials" aria-hidden="true">
@@ -46,3 +95,4 @@ export default function Avatar({ src, name = "", alt = "", className = "", size 
     </span>
   );
 }
+

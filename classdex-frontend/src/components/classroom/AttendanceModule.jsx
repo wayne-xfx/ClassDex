@@ -148,7 +148,7 @@ export default function AttendanceModule({
               <div className="recitation-stage attendance-focus-stage">
                 <article className="recitation-card attendance-focus-card">
                   <span className="recitation-call-label">Student {activeIndex + 1} of {students.length}</span>
-                  <Avatar src={currentStudent.photo} name={currentStudent.name} className="recitation-student-photo" />
+                  <Avatar src={currentStudent.photo} name={currentStudent.name} size="lg" className="recitation-student-photo" />
                   <h3>{formatStudentName(currentStudent.name)}</h3>
                   <p className="recitation-student-id">Student ID · {currentStudent.studentId}</p>
                   <p className="recitation-student-program">
