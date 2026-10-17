@@ -393,7 +393,7 @@ export default function FacultyClass() {
             <section className={`panel class-share-panel${inviteExpanded ? " is-expanded" : ""}`} aria-labelledby="class-share-title">
               <div className="class-share-row">
                 <button type="button" className="class-share-toggle" aria-expanded={inviteExpanded} aria-controls="class-share-expanded" onClick={toggleInviteExpanded}>
-                  <Icon name="share" />
+                  <Icon name="qrCode" />
                   <span id="class-share-title">Share class invite</span>
                   <Icon name="chevron" className={inviteExpanded ? "is-rotated" : ""} />
                 </button>
