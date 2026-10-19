@@ -6,14 +6,18 @@ export const ABSENCE_WARNING_THRESHOLD = 7;
 
 export default function PendingValidationList({
   enrollments = [],
+  autoApproved = [],
   absenceWarnings = [],
   className = "",
   onApprove,
   onDecline,
+  onMarkAllRead,
+  onViewWarning,
   onDismissWarning,
   onClose,
   busyId,
   dismissBusyId,
+  readWarningBusyId,
 }) {
   const dialogRef = useRef(null);
   useEffect(() => {
@@ -42,7 +46,10 @@ export default function PendingValidationList({
     };
   }, [onClose]);
 
-  const hasNotifications = absenceWarnings.length > 0 || enrollments.length > 0;
+  const hasNotifications = absenceWarnings.length > 0 || enrollments.length > 0 || autoApproved.length > 0;
+  const unreadAutoApproved = autoApproved.filter((enrollment) => !enrollment.isRead).length;
+  const unreadWarnings = absenceWarnings.filter((warning) => !warning.isRead).length;
+  const canMarkAllRead = unreadAutoApproved + unreadWarnings > 0;
 
   return (
     <div
@@ -66,7 +73,7 @@ export default function PendingValidationList({
               <Icon name="bell" /> Faculty notifications
             </span>
             <h2 id="pending-validation-title">Notifications</h2>
-            <p>Pending join requests and attendance drop warnings for {className || "this class"}.</p>
+            <p>Pending requests stay active until resolved. Read auto approvals and attendance warnings can be marked as read.</p>
           </div>
           <button
             type="button"
@@ -80,53 +87,12 @@ export default function PendingValidationList({
 
         {hasNotifications ? (
           <div className="notifications-sections">
-            {absenceWarnings.length > 0 ? (
-              <section className="notifications-section" aria-label="Attendance warnings">
-                <div className="notifications-section-header">
-                  <span>
-                    <Icon name="alert" size={15} /> Drop warnings ({ABSENCE_WARNING_THRESHOLD}+ absences)
-                  </span>
-                  <span className="notification-badge notification-badge-danger">
-                    {absenceWarnings.length}
-                  </span>
-                </div>
-                <div className="pending-list">
-                  {absenceWarnings.map((warning) => {
-                    const student = warning.studentProfile;
-                    const resolvedClassName = warning.className || className || "this class";
-                    return (
-                      <article className="pending-row pending-row-warning" key={warning.id || student.id}>
-                        <Avatar
-                          src={student.photo}
-                          name={student.name}
-                          size="md"
-                          className="pending-photo pending-photo-warning"
-                        />
-                        <div className="pending-student">
-                          <strong>
-                            {student.name} has {warning.absenceCount} absences in {resolvedClassName} and may be subject to dropping
-                          </strong>
-                          <span>
-                            ID {student.studentId} · {student.program || "Program not set"} · {student.section || "Section not set"}
-                          </span>
-                        </div>
-                        <div className="pending-actions">
-                          <button
-                            type="button"
-                            className="button button-secondary button-small"
-                            disabled={dismissBusyId === student.id}
-                            onClick={() => onDismissWarning?.(student.id)}
-                          >
-                            {dismissBusyId === student.id ? "Dismissing…" : "Dismiss"}
-                          </button>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              </section>
-            ) : null}
-
+            <div className="notifications-read-actions">
+              <button type="button" className="button button-secondary button-small" onClick={onMarkAllRead} disabled={!canMarkAllRead}>
+                Mark all as read
+              </button>
+              {enrollments.length ? <span>Pending requests remain until you approve or decline them.</span> : null}
+            </div>
             <section className="notifications-section" aria-label="Pending join requests">
               <div className="notifications-section-header">
                 <span>
@@ -180,6 +146,87 @@ export default function PendingValidationList({
                 <p className="notifications-section-empty">No pending join requests right now.</p>
               )}
             </section>
+
+            {autoApproved.length > 0 ? (
+              <section className="notifications-section" aria-label="Auto approved join requests">
+                <div className="notifications-section-header">
+                  <span><Icon name="userCheck" size={15} /> Auto approved</span>
+                  {unreadAutoApproved ? <span className="notification-badge">{unreadAutoApproved} unread</span> : null}
+                </div>
+                <div className="pending-list">
+                  {autoApproved.map((enrollment) => {
+                    const student = enrollment.studentProfile;
+                    return (
+                      <article className={`pending-row pending-row-auto-approved${enrollment.isRead ? " pending-row-read" : ""}`} key={enrollment.id}>
+                        <Avatar src={student.photo} name={student.name} size="md" className="pending-photo" />
+                        <div className="pending-student">
+                          <strong>{student.name}</strong>
+                          <span>ID {student.studentId} · {student.program || "Program not set"} · {student.section || "Section not set"}</span>
+                          <small>Matched the student list · {new Date(enrollment.autoApprovedAt).toLocaleString()}</small>
+                        </div>
+                        <span className={`notification-status${enrollment.isRead ? " is-read" : ""}`}>
+                          {enrollment.isRead ? "Auto approved · Read" : "Auto approved"}
+                        </span>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
+
+            {absenceWarnings.length > 0 ? (
+              <section className="notifications-section" aria-label="Attendance warnings">
+                <div className="notifications-section-header">
+                  <span>
+                    <Icon name="alert" size={15} /> Drop warnings ({ABSENCE_WARNING_THRESHOLD}+ absences)
+                  </span>
+                  {unreadWarnings ? <span className="notification-badge notification-badge-danger">{unreadWarnings} unread</span> : null}
+                </div>
+                <div className="pending-list">
+                  {absenceWarnings.map((warning) => {
+                    const student = warning.studentProfile;
+                    const resolvedClassName = warning.className || className || "this class";
+                    return (
+                      <article className={`pending-row pending-row-warning${warning.isRead ? " pending-row-read" : ""}`} key={warning.id || student.id}>
+                        <Avatar
+                          src={student.photo}
+                          name={student.name}
+                          size="md"
+                          className="pending-photo pending-photo-warning"
+                        />
+                        <div className="pending-student">
+                          <strong>
+                            {student.name} has {warning.absenceCount} absences in {resolvedClassName} and may be subject to dropping
+                          </strong>
+                          <span>
+                            ID {student.studentId} · {student.program || "Program not set"} · {student.section || "Section not set"}
+                          </span>
+                        </div>
+                        <div className="pending-actions">
+                          <button
+                            type="button"
+                            className="button button-secondary button-small"
+                            disabled={readWarningBusyId === student.id}
+                            onClick={() => onViewWarning?.(warning)}
+                          >
+                            {readWarningBusyId === student.id ? "Opening…" : "View attendance & index card"}
+                          </button>
+                          <button
+                            type="button"
+                            className="button button-secondary button-small"
+                            disabled={dismissBusyId === student.id}
+                            onClick={() => onDismissWarning?.(student.id)}
+                          >
+                            {dismissBusyId === student.id ? "Dismissing…" : "Dismiss"}
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
+
           </div>
         ) : (
           <div className="empty-state pending-empty">

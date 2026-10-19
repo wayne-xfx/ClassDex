@@ -54,10 +54,12 @@ export default function FacultyClass() {
   const [activeModule, setActiveModule] = useState("deck");
   const [showPending, setShowPending] = useState(() => new URLSearchParams(window.location.search).get("notifications") === "1");
   const [pendingEnrollments, setPendingEnrollments] = useState([]);
+  const [autoApprovedNotifications, setAutoApprovedNotifications] = useState([]);
   const [absenceWarnings, setAbsenceWarnings] = useState([]);
   const [studentListCount, setStudentListCount] = useState(0);
   const [pendingBusyId, setPendingBusyId] = useState(null);
   const [dismissBusyId, setDismissBusyId] = useState(null);
+  const [readWarningBusyId, setReadWarningBusyId] = useState(null);
   const [search, setSearch] = useState("");
   const [layout, setLayout] = useState("grid");
   const [attendanceOverrides, setAttendanceOverrides] = useState({});
@@ -166,8 +168,9 @@ export default function FacultyClass() {
     () =>
       api
         .pendingEnrollments(id)
-        .then(({ pending, absenceWarnings: warnings }) => {
+        .then(({ pending, autoApproved, absenceWarnings: warnings }) => {
           setPendingEnrollments(pending || []);
+          setAutoApprovedNotifications(autoApproved || []);
           setAbsenceWarnings(warnings || []);
         })
         .catch(() => {}),
@@ -221,6 +224,49 @@ export default function FacultyClass() {
       setDismissBusyId(null);
     }
   }
+  async function markAllNotificationsRead() {
+    try {
+      const result = await api.markClassNotificationsRead(id);
+      await refreshPending();
+      if (result.pendingCount) {
+        showToast(`Completed notifications marked as read. ${result.pendingCount} pending ${result.pendingCount === 1 ? "request remains" : "requests remain"} at the top for your review.`);
+      } else {
+        showToast("All completed notifications marked as read.");
+      }
+    } catch (readError) {
+      showToast(readError.message, "error");
+    }
+  }
+  async function viewAbsenceWarning(warning) {
+    const student = warning.studentProfile;
+    setReadWarningBusyId(student.id);
+    try {
+      await api.markAbsenceWarningRead(id, student.id);
+      setAbsenceWarnings((current) => current.map((item) =>
+        item.studentProfile?.id === student.id ? { ...item, isRead: true } : item,
+      ));
+      setShowPending(false);
+      openStudentProfile(student);
+    } catch (readError) {
+      showToast(readError.message, "error");
+      setShowPending(false);
+      openStudentProfile(student);
+    } finally {
+      setReadWarningBusyId(null);
+    }
+  }
+  async function refreshAfterRosterApproval() {
+    try {
+      await Promise.all([
+        refreshPending(),
+        api.classDeck(id).then((deck) => {
+          setClassRecord({ ...deck.class, session: deck.session, students: deck.students });
+        }),
+      ]);
+    } catch {
+      showToast("Students were auto approved, but the class deck could not refresh.", "error");
+    }
+  }
   const students = useMemo(
     () => (classRecord?.students || classRecord?.enrollments?.map(({ id: enrollmentId, studentProfile }) => ({
       ...studentProfile,
@@ -254,6 +300,10 @@ export default function FacultyClass() {
     setSelectedStudent(student);
   }, []);
   const closeStudentProfile = useCallback(() => setSelectedStudent(null), []);
+  const unreadNotificationCount =
+    pendingEnrollments.length +
+    autoApprovedNotifications.filter((item) => !item.isRead).length +
+    absenceWarnings.filter((item) => !item.isRead).length;
 
   useEffect(() => {
     if (!selectedStudent || !id) return undefined;
@@ -522,15 +572,13 @@ export default function FacultyClass() {
                 <button
                   type="button"
                   className="button button-quiet class-share-pending"
-                  aria-label={`Notifications${pendingEnrollments.length + absenceWarnings.length ? ` (${pendingEnrollments.length + absenceWarnings.length})` : ""}`}
+                  aria-label={`Notifications${unreadNotificationCount ? ` (${unreadNotificationCount})` : ""}`}
                   title="Notifications"
                   onClick={() => setShowPending(true)}
                 >
                   <Icon name="bell" size={17} />
-                  {pendingEnrollments.length + absenceWarnings.length > 0 ? (
-                    <span className="notification-badge">
-                      {pendingEnrollments.length + absenceWarnings.length}
-                    </span>
+                  {unreadNotificationCount > 0 ? (
+                    <span className="notification-badge">{unreadNotificationCount}</span>
                   ) : null}
                 </button>
               </div>
@@ -577,14 +625,18 @@ export default function FacultyClass() {
             {showPending ? (
               <PendingValidationList
                 enrollments={pendingEnrollments}
+                autoApproved={autoApprovedNotifications}
                 absenceWarnings={absenceWarnings}
                 className={classRecord.sectionName}
                 onApprove={(enrollmentId) => updatePending(enrollmentId, "APPROVED")}
                 onDecline={(enrollmentId) => updatePending(enrollmentId, "DECLINED")}
+                onMarkAllRead={markAllNotificationsRead}
+                onViewWarning={viewAbsenceWarning}
                 onDismissWarning={dismissAbsenceWarning}
                 onClose={() => setShowPending(false)}
                 busyId={pendingBusyId}
                 dismissBusyId={dismissBusyId}
+                readWarningBusyId={readWarningBusyId}
               />
             ) : null}
             <ModuleTabs active={activeModule} onChange={setActiveModule} studentListCount={studentListCount} />
@@ -602,7 +654,7 @@ export default function FacultyClass() {
               aria-labelledby={activeModule === "deck" ? "module-deck-link" : `module-tab-${activeModule}`}
               className="classroom-module"
             >
-              {activeModule === "student-list" ? <StudentListManager classId={id} onCountChange={setStudentListCount} onClose={() => setActiveModule("deck")} /> : activeModule === "deck" ? (
+              {activeModule === "student-list" ? <StudentListManager classId={id} onCountChange={setStudentListCount} onAutoApproved={refreshAfterRosterApproval} onClose={() => setActiveModule("deck")} /> : activeModule === "deck" ? (
                 <>
                   <div className="deck-toolbar">
                     <div className="deck-title">

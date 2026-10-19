@@ -114,6 +114,9 @@ model ClassEnrollment {
   joinedAt              DateTime         @default(now())
   status                EnrollmentStatus @default(APPROVED)
   dismissedAbsenceCount Int              @default(0)
+  autoApprovedAt        DateTime?
+  autoApprovalReadAt    DateTime?
+  warningReadAbsenceCount Int             @default(0)
 
   @@unique([studentProfileId, classId])
   @@index([classId, status, studentProfileId])

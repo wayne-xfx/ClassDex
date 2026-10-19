@@ -14,7 +14,7 @@ ClassDex is an interactive web-based digital index card and classroom record-kee
 - **Role-Based Accounts & Dashboards**: Dedicated interfaces for Faculty and Students with secure session-based authentication and role enforcement.
 - **Class Management**: Create classes with unique alphanumeric class codes, sharable invite links, and downloadable QR codes with enlarged display modal.
 - **Student List Management**: Build and maintain official class Student Lists by manual input, bulk copy-paste, or CSV/Excel file upload.
-- **Smart Enrollment & Approval**: Roster-based auto-admission when student ID numbers match the Student List; automatic fallback to a Pending queue with Faculty Approve/Decline controls for unmatched students.
+- **Smart Enrollment & Approval**: Roster-based auto-admission when student ID numbers match the Student List; saving a roster automatically approves matching pending requests. Unmatched requests remain at the top of notifications until faculty approve or decline them; auto-approvals and attendance warnings support read tracking.
 - **Classroom Modules**:
   - **Class Deck**: Searchable student card interface organized like physical index cards, supporting grid and list layouts.
   - **Take Attendance**: Daily Manila-calendar-day attendance sessions (Present, Late, Absent) with configurable class grace periods for Late status and continuous editability.

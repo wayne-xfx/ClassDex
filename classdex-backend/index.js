@@ -154,6 +154,63 @@ async function findOwnedClass(classId, facultyId) {
   return prisma.class.findFirst({ where: { id: classId, facultyId }, select: { id: true } });
 }
 
+async function autoApproveRosterMatches(classId) {
+  const roster = await prisma.classRoster.findMany({
+    where: { classId },
+    select: { studentId: true },
+  });
+  const rosterStudentIds = [...new Set(roster.map((entry) => String(entry.studentId || "").trim()).filter(Boolean))];
+  if (!rosterStudentIds.length) return 0;
+
+  const [classRecord, pending] = await Promise.all([
+    prisma.class.findUnique({
+      where: { id: classId },
+      select: { sectionName: true, faculty: { select: { name: true } } },
+    }),
+    prisma.classEnrollment.findMany({
+      where: {
+        classId,
+        status: "PENDING",
+        studentProfile: { is: { studentId: { in: rosterStudentIds } } },
+      },
+      select: {
+        id: true,
+        studentProfile: { select: { name: true, email: true } },
+      },
+    }),
+  ]);
+  if (!classRecord || !pending.length) return 0;
+
+  const autoApprovedAt = new Date();
+  const results = await prisma.$transaction(pending.map((enrollment) =>
+    prisma.classEnrollment.updateMany({
+      where: { id: enrollment.id, classId, status: "PENDING" },
+      data: {
+        status: "APPROVED",
+        autoApprovedAt,
+        autoApprovalReadAt: null,
+        warningReadAbsenceCount: 0,
+      },
+    }),
+  ));
+  let approvedCount = 0;
+  results.forEach((result, index) => {
+    if (!result.count) return;
+    approvedCount += 1;
+    const student = pending[index].studentProfile;
+    if (student.email) {
+      queueEmail(buildDecisionEmail({
+        studentName: student.name,
+        studentEmail: student.email,
+        classSectionName: classRecord.sectionName,
+        decision: "APPROVED",
+        facultyName: classRecord.faculty?.name,
+      }), "automatic join approval");
+    }
+  });
+  return approvedCount;
+}
+
 function manilaDate(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Manila",
@@ -609,10 +666,18 @@ async function getActiveAbsenceWarningsForClass(classId, sectionName = "") {
     const absentCount = countByStudent.get(student.id) || 0;
     const dismissedCount = enrollment.dismissedAbsenceCount || 0;
 
+    const readAbsenceCount = enrollment.warningReadAbsenceCount || 0;
+    const enrollmentReadUpdates = {};
     if (absentCount < dismissedCount) {
+      enrollmentReadUpdates.dismissedAbsenceCount = absentCount;
+    }
+    if (absentCount < readAbsenceCount) {
+      enrollmentReadUpdates.warningReadAbsenceCount = absentCount;
+    }
+    if (Object.keys(enrollmentReadUpdates).length) {
       await prisma.classEnrollment.update({
         where: { id: enrollment.id },
-        data: { dismissedAbsenceCount: absentCount },
+        data: enrollmentReadUpdates,
       });
     }
 
@@ -629,6 +694,7 @@ async function getActiveAbsenceWarningsForClass(classId, sectionName = "") {
         section: student.section,
         photo: student.photo,
         absentCount,
+        isRead: absentCount <= readAbsenceCount,
         threshold: ABSENCE_WARNING_THRESHOLD,
         message: `${student.name} has ${absentCount} absences in ${sectionName || "this class"} and may be subject to dropping`,
       });
@@ -650,9 +716,11 @@ app.get("/api/faculty/classes/pending-counts", requireAuth, requireRole("FACULTY
     const counts = {};
     const pendingCounts = {};
     const warningCounts = {};
+    const autoApprovedCounts = {};
 
     if (classes.length > 0) {
-      const warningRows = await prisma.$queryRaw`
+      const [warningRows, autoApprovedRows] = await Promise.all([
+        prisma.$queryRaw`
         SELECT warning."classId", COUNT(*)::int AS "warningCount"
         FROM (
           SELECT session."classId", attendance."studentId"
@@ -665,21 +733,37 @@ app.get("/api/faculty/classes/pending-counts", requireAuth, requireRole("FACULTY
           WHERE class_record."facultyId" = ${req.session.userId}
             AND attendance."status" = 'ABSENT'::"AttendanceStatus"
             AND enrollment."status" = 'APPROVED'::"EnrollmentStatus"
-          GROUP BY session."classId", attendance."studentId", enrollment."dismissedAbsenceCount"
+          GROUP BY session."classId", attendance."studentId", enrollment."dismissedAbsenceCount", enrollment."warningReadAbsenceCount"
           HAVING COUNT(*) >= ${ABSENCE_WARNING_THRESHOLD}
             AND COUNT(*) > enrollment."dismissedAbsenceCount"
+            AND COUNT(*) > enrollment."warningReadAbsenceCount"
         ) AS warning
         GROUP BY warning."classId"
-      `;
+        `,
+        prisma.classEnrollment.groupBy({
+          by: ["classId"],
+          where: {
+            classId: { in: classes.map((item) => item.id) },
+            autoApprovedAt: { not: null },
+            autoApprovalReadAt: null,
+          },
+          _count: { _all: true },
+        }),
+      ]);
       const warningsByClass = new Map(
         warningRows.map((row) => [row.classId, Number(row.warningCount)]),
+      );
+      const autoApprovedByClass = new Map(
+        autoApprovedRows.map((row) => [row.classId, row._count._all]),
       );
       for (const item of classes) {
         const pending = item._count.enrollments;
         const warnings = warningsByClass.get(item.id) || 0;
+        const autoApproved = autoApprovedByClass.get(item.id) || 0;
         pendingCounts[item.id] = pending;
         warningCounts[item.id] = warnings;
-        counts[item.id] = pending + warnings;
+        autoApprovedCounts[item.id] = autoApproved;
+        counts[item.id] = pending + warnings + autoApproved;
       }
     }
 
@@ -687,6 +771,7 @@ app.get("/api/faculty/classes/pending-counts", requireAuth, requireRole("FACULTY
       counts,
       pendingCounts,
       warningCounts,
+      autoApprovedCounts,
       threshold: ABSENCE_WARNING_THRESHOLD,
     });
   } catch (error) {
@@ -926,7 +1011,8 @@ app.post(
         create: { classId: req.params.id, studentName: entry.studentName, studentId: entry.studentId },
         update: { studentName: entry.studentName },
       })));
-      return res.status(201).json({ roster: await enrichRosterWithPhotos(roster) });
+      const autoApprovedCount = await autoApproveRosterMatches(req.params.id);
+      return res.status(201).json({ roster: await enrichRosterWithPhotos(roster), autoApprovedCount });
     } catch (error) {
       console.error("Roster save failed:", error);
       return res.status(error.code === "P2002" ? 409 : 500).json({ message: error.code === "P2002" ? "That student ID is already in this student list." : "Unable to save the student list." });
@@ -945,7 +1031,11 @@ app.patch(
       if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
       const updated = await prisma.classRoster.updateMany({ where: { id: req.params.entryId, classId: req.params.id }, data: { studentName: entry.studentName, studentId: entry.studentId } });
       if (!updated.count) return res.status(404).json({ message: "Student list entry not found." });
-      return res.json({ entry: await prisma.classRoster.findUnique({ where: { id: req.params.entryId } }) });
+      const [savedEntry, autoApprovedCount] = await Promise.all([
+        prisma.classRoster.findUnique({ where: { id: req.params.entryId } }),
+        autoApproveRosterMatches(req.params.id),
+      ]);
+      return res.json({ entry: savedEntry, autoApprovedCount });
     } catch (error) {
       return res.status(error.code === "P2002" ? 409 : 500).json({ message: error.code === "P2002" ? "That student ID is already in this student list." : "Unable to update the student list entry." });
     }
@@ -975,7 +1065,7 @@ app.get("/api/classes/:id/pending", requireAuth, requireRole("FACULTY"), async (
       select: { id: true, sectionName: true },
     });
     if (!ownedClass) return res.status(404).json({ message: "Class not found." });
-    const [pending, absenceWarnings] = await Promise.all([
+    const [pending, autoApproved, absenceWarnings] = await Promise.all([
       prisma.classEnrollment.findMany({
         where: { classId: ownedClass.id, status: "PENDING" },
         include: {
@@ -992,18 +1082,114 @@ app.get("/api/classes/:id/pending", requireAuth, requireRole("FACULTY"), async (
         },
         orderBy: { joinedAt: "asc" },
       }),
+      prisma.classEnrollment.findMany({
+        where: { classId: ownedClass.id, autoApprovedAt: { not: null } },
+        include: {
+          studentProfile: {
+            select: { id: true, name: true, studentId: true, program: true, section: true, photo: true },
+          },
+        },
+        orderBy: { autoApprovedAt: "desc" },
+      }),
       getActiveAbsenceWarningsForClass(ownedClass.id, ownedClass.sectionName),
     ]);
+    const approvedNotifications = autoApproved.map((enrollment) => ({
+      ...enrollment,
+      isRead: Boolean(enrollment.autoApprovalReadAt),
+    }));
+    const unreadAutoApproved = approvedNotifications.filter((enrollment) => !enrollment.isRead).length;
+    const unreadWarnings = absenceWarnings.filter((warning) => !warning.isRead).length;
     return res.json({
       pending,
+      autoApproved: approvedNotifications,
       absenceWarnings,
       threshold: ABSENCE_WARNING_THRESHOLD,
-      totalNotifications: pending.length + absenceWarnings.length,
+      unreadNotificationCount: pending.length + unreadAutoApproved + unreadWarnings,
+      totalNotifications: pending.length + unreadAutoApproved + unreadWarnings,
     });
   } catch (error) {
     return res.status(500).json({ message: "Unable to load pending requests." });
   }
 });
+
+app.post(
+  "/api/classes/:id/notifications/read",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      const ownedClass = await prisma.class.findFirst({
+        where: { id: req.params.id, facultyId: req.session.userId },
+        select: { id: true, sectionName: true },
+      });
+      if (!ownedClass) return res.status(404).json({ message: "Class not found." });
+
+      const unreadWarnings = (await getActiveAbsenceWarningsForClass(ownedClass.id, ownedClass.sectionName))
+        .filter((warning) => !warning.isRead);
+      const readResults = await prisma.$transaction([
+        prisma.classEnrollment.updateMany({
+          where: {
+            classId: ownedClass.id,
+            autoApprovedAt: { not: null },
+            autoApprovalReadAt: null,
+          },
+          data: { autoApprovalReadAt: new Date() },
+        }),
+        ...unreadWarnings.map((warning) =>
+          prisma.classEnrollment.update({
+            where: { id: warning.enrollmentId },
+            data: { warningReadAbsenceCount: warning.absenceCount },
+          }),
+        ),
+      ]);
+      const pendingCount = await prisma.classEnrollment.count({
+        where: { classId: ownedClass.id, status: "PENDING" },
+      });
+      return res.json({
+        markedRead: readResults[0].count + unreadWarnings.length,
+        pendingCount,
+      });
+    } catch (error) {
+      console.error("Mark notifications read failed:", error);
+      return res.status(500).json({ message: "Unable to mark notifications as read." });
+    }
+  },
+);
+
+app.post(
+  "/api/classes/:id/absence-warnings/:studentId/read",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      const enrollment = await prisma.classEnrollment.findFirst({
+        where: {
+          classId: req.params.id,
+          status: "APPROVED",
+          studentProfileId: req.params.studentId,
+          class: { is: { facultyId: req.session.userId } },
+        },
+        select: { id: true, studentProfileId: true },
+      });
+      if (!enrollment) return res.status(404).json({ message: "Student not found in this class." });
+      const absentCount = await prisma.attendanceRecord.count({
+        where: {
+          studentId: enrollment.studentProfileId,
+          status: "ABSENT",
+          session: { is: { classId: req.params.id } },
+        },
+      });
+      await prisma.classEnrollment.update({
+        where: { id: enrollment.id },
+        data: { warningReadAbsenceCount: absentCount },
+      });
+      return res.json({ isRead: true, absentCount });
+    } catch (error) {
+      console.error("Mark absence warning read failed:", error);
+      return res.status(500).json({ message: "Unable to mark the warning as read." });
+    }
+  },
+);
 
 app.post(
   "/api/classes/:id/absence-warnings/:studentId/dismiss",
@@ -1035,7 +1221,7 @@ app.post(
       });
       await prisma.classEnrollment.update({
         where: { id: enrollment.id },
-        data: { dismissedAbsenceCount: absentCount },
+        data: { dismissedAbsenceCount: absentCount, warningReadAbsenceCount: absentCount },
       });
       return res.json({
         dismissed: true,
@@ -1058,7 +1244,10 @@ app.patch("/api/classes/:id/pending/:enrollmentId", requireAuth, requireRole("FA
       select: { id: true, sectionName: true, classCode: true, faculty: { select: { name: true, email: true } } },
     });
     if (!classRecord) return res.status(404).json({ message: "Class not found." });
-    const updated = await prisma.classEnrollment.updateMany({ where: { id: req.params.enrollmentId, classId: req.params.id, status: "PENDING" }, data: { status } });
+    const updated = await prisma.classEnrollment.updateMany({
+      where: { id: req.params.enrollmentId, classId: req.params.id, status: "PENDING" },
+      data: { status, autoApprovedAt: null, autoApprovalReadAt: null },
+    });
     if (!updated.count) return res.status(404).json({ message: "Pending request not found." });
     const enrollment = await prisma.classEnrollment.findUnique({ where: { id: req.params.enrollmentId }, include: { studentProfile: true, class: true } });
     if (enrollment?.studentProfile?.email) {
@@ -2753,34 +2942,46 @@ app.post(
         if (existingEnrollment?.status === "APPROVED") {
           return { kind: "existing", enrollment: existingEnrollment, status: "APPROVED", message: "You have already joined this class." };
         }
-        if (existingEnrollment?.status === "PENDING") {
-          return { kind: "existing", enrollment: existingEnrollment, status: "PENDING", message: "Your request is already waiting for instructor approval." };
-        }
 
         const studentId = String(profile.studentId ?? "").trim();
         const roster = await tx.classRoster.findMany({ where: { classId: classRecord.id }, select: { studentId: true } });
-        const matchesRoster = roster.some((entry) => String(entry.studentId ?? "").trim() === studentId);
+        const rosterStudentIds = new Set(roster.map((entry) => String(entry.studentId ?? "").trim()));
+        const matchesRoster = rosterStudentIds.has(studentId);
+        if (existingEnrollment?.status === "PENDING" && !matchesRoster) {
+          return { kind: "existing", enrollment: existingEnrollment, status: "PENDING", message: "Your request is already waiting for instructor approval." };
+        }
+        const status = matchesRoster ? "APPROVED" : "PENDING";
+        const autoApprovalData = {
+          status,
+          autoApprovedAt: matchesRoster ? new Date() : null,
+          autoApprovalReadAt: null,
+          ...(matchesRoster ? { warningReadAbsenceCount: 0 } : {}),
+        };
         const enrollment = existingEnrollment
           ? await tx.classEnrollment.update({
               where: { id: existingEnrollment.id },
-              data: { status: "PENDING", joinedAt: new Date() },
+              data: { ...autoApprovalData, joinedAt: new Date() },
               include: { class: true },
             })
           : await tx.classEnrollment.create({
               data: {
                 studentProfileId: profile.id,
                 classId: classRecord.id,
-                status: matchesRoster ? "APPROVED" : "PENDING",
+                ...autoApprovalData,
               },
               include: { class: true },
             });
         return {
-          kind: existingEnrollment ? "resubmitted" : "created",
+          kind: existingEnrollment ? matchesRoster ? "autoApproved" : "resubmitted" : "created",
           enrollment,
           status: enrollment.status,
           message: existingEnrollment
-            ? "Your request was resubmitted for instructor approval."
-            : matchesRoster ? "You joined the class." : "Waiting for instructor approval.",
+            ? matchesRoster
+              ? "Your request was approved automatically because your student ID matches the class list."
+              : "Your request was resubmitted for instructor approval."
+            : matchesRoster
+              ? "You joined the class."
+              : "Waiting for instructor approval.",
         };
       });
       if (joinResult.kind === "created") {
@@ -2802,6 +3003,14 @@ app.post(
             status: joinResult.enrollment.status,
           }), "faculty join notice");
         }
+      } else if (joinResult.kind === "autoApproved" && profile.email) {
+        queueEmail(buildDecisionEmail({
+          studentName: profile.name,
+          studentEmail: profile.email,
+          classSectionName: classRecord.sectionName,
+          decision: "APPROVED",
+          facultyName: classRecord.faculty?.name,
+        }), "automatic join approval");
       }
       const statusCode = joinResult.kind === "existing" ? 409 : 201;
       return res.status(statusCode).json(joinResult);

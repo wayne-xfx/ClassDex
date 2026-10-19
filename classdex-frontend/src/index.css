@@ -6029,12 +6029,18 @@ textarea {
 .class-pending-count:hover { transform: translateY(-1px); border-color: var(--accent-amber); }
 .class-share-pending { position: relative; min-width: 2.75rem; padding-inline: .75rem; gap: .4rem; }
 .notifications-sections { display: grid; gap: 1.35rem; margin-top: 1.25rem; }
+.notifications-read-actions { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.notifications-read-actions > span { color: var(--text-muted); font-size: .78rem; }
 .notifications-section { display: grid; gap: .65rem; }
 .notifications-section .pending-list { margin-top: 0; }
 .notifications-section-header { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding-bottom: .45rem; border-bottom: 1px solid var(--border-color); font-size: .78rem; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); }
 .notifications-section-header > span:first-child { display: inline-flex; align-items: center; gap: .4rem; }
 .notification-badge-danger { background: color-mix(in srgb, var(--accent-red) 18%, var(--card)); color: var(--accent-red); border: 1px solid color-mix(in srgb, var(--accent-red) 35%, transparent); }
 .pending-row-warning { border-color: color-mix(in srgb, var(--accent-red) 35%, var(--border-color)); background: color-mix(in srgb, var(--accent-red) 6%, var(--surface-card)); }
+.pending-row-auto-approved { border-color: color-mix(in srgb, var(--accent-teal) 32%, var(--border-color)); background: color-mix(in srgb, var(--accent-teal) 6%, var(--surface-card)); }
+.pending-row-read { opacity: .66; }
+.notification-status { flex: 0 0 auto; border-radius: 999px; padding: .25rem .55rem; background: color-mix(in srgb, var(--accent-teal) 14%, var(--surface-card)); color: var(--accent-teal); font-size: .75rem; font-weight: 700; }
+.notification-status.is-read { background: var(--surface-muted); color: var(--text-muted); }
 .pending-photo-warning { background: color-mix(in srgb, var(--accent-red) 14%, var(--surface-muted)); color: var(--accent-red); }
 .notifications-section-empty { margin: .25rem 0 0; color: var(--text-muted); font-size: .85rem; }
 
