@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import Icon from "../components/Icon";
@@ -36,6 +36,7 @@ export default function FacultyDashboard() {
     }
   });
   const [pendingCounts, setPendingCounts] = useState({});
+  const pendingCountsInFlight = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,27 +53,30 @@ export default function FacultyDashboard() {
         if (!cancelled) setLoading(false);
       });
 
-    api
-      .facultyPendingCounts()
-      .then(({ counts }) => {
-        if (!cancelled) setPendingCounts(counts || {});
-      })
-      .catch(() => {});
-
     return () => {
       cancelled = true;
     };
   }, []);
 
   useEffect(() => {
-    const refresh = () =>
-      api
-        .facultyPendingCounts()
-        .then(({ counts }) => setPendingCounts(counts || {}))
-        .catch(() => {});
+    let cancelled = false;
+    const refresh = async () => {
+      if (pendingCountsInFlight.current) return;
+      pendingCountsInFlight.current = true;
+      try {
+        const { counts } = await api.facultyPendingCounts();
+        if (!cancelled) setPendingCounts(counts || {});
+      } catch {
+        // Keep the last successful notification counts if a refresh fails.
+      } finally {
+        pendingCountsInFlight.current = false;
+      }
+    };
+    void refresh();
     const interval = window.setInterval(refresh, 30000);
     window.addEventListener("focus", refresh);
     return () => {
+      cancelled = true;
       window.clearInterval(interval);
       window.removeEventListener("focus", refresh);
     };

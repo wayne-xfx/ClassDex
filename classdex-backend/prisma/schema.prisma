@@ -101,6 +101,8 @@ model Class {
   quizSessions       QuizSession[]
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
+
+  @@index([facultyId, createdAt])
 }
 
 model ClassEnrollment {
@@ -114,6 +116,7 @@ model ClassEnrollment {
   dismissedAbsenceCount Int              @default(0)
 
   @@unique([studentProfileId, classId])
+  @@index([classId, status, studentProfileId])
 }
 
 model ClassRoster {
@@ -183,6 +186,7 @@ model AttendanceRecord {
 
   @@unique([sessionId, studentId])
   @@index([sessionId, status])
+  @@index([studentId])
 }
 
 model RecitationLog {

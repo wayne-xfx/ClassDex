@@ -647,50 +647,33 @@ app.get("/api/faculty/classes/pending-counts", requireAuth, requireRole("FACULTY
         _count: { select: { enrollments: { where: { status: "PENDING" } } } },
       },
     });
-    const classIds = classes.map((item) => item.id);
     const counts = {};
     const pendingCounts = {};
     const warningCounts = {};
 
-    if (classIds.length > 0) {
-      const [approvedEnrollments, absentRecords] = await Promise.all([
-        prisma.classEnrollment.findMany({
-          where: { classId: { in: classIds }, status: "APPROVED" },
-          select: {
-            id: true,
-            classId: true,
-            studentProfileId: true,
-            dismissedAbsenceCount: true,
-          },
-        }),
-        prisma.attendanceRecord.findMany({
-          where: {
-            status: "ABSENT",
-            session: { is: { classId: { in: classIds } } },
-          },
-          select: {
-            studentId: true,
-            session: { select: { classId: true } },
-          },
-        }),
-      ]);
-
-      const absentByClassAndStudent = new Map();
-      for (const rec of absentRecords) {
-        const key = `${rec.session.classId}:${rec.studentId}`;
-        absentByClassAndStudent.set(key, (absentByClassAndStudent.get(key) || 0) + 1);
-      }
-
-      const warningsByClass = new Map();
-      for (const enrollment of approvedEnrollments) {
-        const key = `${enrollment.classId}:${enrollment.studentProfileId}`;
-        const absentCount = absentByClassAndStudent.get(key) || 0;
-        const dismissedCount = enrollment.dismissedAbsenceCount || 0;
-        if (absentCount >= ABSENCE_WARNING_THRESHOLD && absentCount > dismissedCount) {
-          warningsByClass.set(enrollment.classId, (warningsByClass.get(enrollment.classId) || 0) + 1);
-        }
-      }
-
+    if (classes.length > 0) {
+      const warningRows = await prisma.$queryRaw`
+        SELECT warning."classId", COUNT(*)::int AS "warningCount"
+        FROM (
+          SELECT session."classId", attendance."studentId"
+          FROM "AttendanceRecord" AS attendance
+          JOIN "ClassSession" AS session ON session."id" = attendance."sessionId"
+          JOIN "Class" AS class_record ON class_record."id" = session."classId"
+          JOIN "ClassEnrollment" AS enrollment
+            ON enrollment."classId" = session."classId"
+            AND enrollment."studentProfileId" = attendance."studentId"
+          WHERE class_record."facultyId" = ${req.session.userId}
+            AND attendance."status" = 'ABSENT'::"AttendanceStatus"
+            AND enrollment."status" = 'APPROVED'::"EnrollmentStatus"
+          GROUP BY session."classId", attendance."studentId", enrollment."dismissedAbsenceCount"
+          HAVING COUNT(*) >= ${ABSENCE_WARNING_THRESHOLD}
+            AND COUNT(*) > enrollment."dismissedAbsenceCount"
+        ) AS warning
+        GROUP BY warning."classId"
+      `;
+      const warningsByClass = new Map(
+        warningRows.map((row) => [row.classId, Number(row.warningCount)]),
+      );
       for (const item of classes) {
         const pending = item._count.enrollments;
         const warnings = warningsByClass.get(item.id) || 0;
@@ -2334,49 +2317,65 @@ app.get(
         enrollmentStatus: item.status,
         joinedAt: item.joinedAt,
       }));
-      const summaries = await Promise.all(
-        enrolledClasses.map(async (classItem) => {
-          const [attendance, recitations, activities, quizzes] = await Promise.all([
-            prisma.attendanceRecord.findMany({
-              where: {
-                studentId: profile.id,
-                session: { is: { classId: classItem.id } },
-              },
-              select: { status: true },
-            }),
-            prisma.recitationLog.findMany({
-              where: {
-                studentId: profile.id,
-                session: { is: { classId: classItem.id } },
-              },
-              select: { score: true },
-            }),
-            prisma.activityScore.findMany({
-              where: {
-                studentId: profile.id,
-                activity: { is: { classId: classItem.id } },
-              },
-              select: { score: true, activity: { select: { maxScore: true } } },
-            }),
-            prisma.quizScore.findMany({
-              where: {
-                studentId: profile.id,
-                session: { is: { classId: classItem.id } },
-              },
-              select: { score: true, session: { select: { totalItems: true } } },
-            }),
-          ]);
-          return {
-            ...classItem,
-            recordSummary: summarizeStudentClass({
-              attendance,
-              recitations,
-              activities: activities.map((item) => ({ score: item.score, maxScore: item.activity.maxScore })),
-              quizzes: quizzes.map((item) => ({ score: item.score, totalItems: item.session.totalItems })),
-            }),
-          };
-        }),
-      );
+      const summaryRows = await prisma.$queryRaw`
+        WITH attendance AS (
+          SELECT session."classId",
+            COUNT(*)::int AS "attendanceCount",
+            COUNT(*) FILTER (WHERE record."status" IN ('PRESENT'::"AttendanceStatus", 'LATE'::"AttendanceStatus"))::int AS "attendedCount"
+          FROM "AttendanceRecord" AS record
+          JOIN "ClassSession" AS session ON session."id" = record."sessionId"
+          WHERE record."studentId" = ${profile.id}
+          GROUP BY session."classId"
+        ), recitations AS (
+          SELECT session."classId",
+            COALESCE(SUM(log."score"), 0)::float8 AS "scoreTotal",
+            COUNT(log."score")::int AS "scoreCount"
+          FROM "RecitationLog" AS log
+          JOIN "ClassSession" AS session ON session."id" = log."sessionId"
+          WHERE log."studentId" = ${profile.id}
+          GROUP BY session."classId"
+        ), activities AS (
+          SELECT activity."classId",
+            COALESCE(SUM(score."score") FILTER (WHERE score."score" >= 0), 0)::float8 AS "scoreTotal",
+            COALESCE(SUM(CASE WHEN score."score" >= 0 THEN CASE WHEN activity."maxScore" > 0 THEN activity."maxScore" ELSE 100 END END), 0)::float8 AS "possibleTotal"
+          FROM "ActivityScore" AS score
+          JOIN "Activity" AS activity ON activity."id" = score."activityId"
+          WHERE score."studentId" = ${profile.id}
+          GROUP BY activity."classId"
+        ), quizzes AS (
+          SELECT quiz."classId",
+            COALESCE(SUM(score."score") FILTER (WHERE score."score" >= 0), 0)::float8 AS "scoreTotal",
+            COALESCE(SUM(CASE WHEN score."score" >= 0 THEN CASE WHEN quiz."totalItems" > 0 THEN quiz."totalItems" ELSE 100 END END), 0)::float8 AS "possibleTotal"
+          FROM "QuizScore" AS score
+          JOIN "QuizSession" AS quiz ON quiz."id" = score."sessionId"
+          WHERE score."studentId" = ${profile.id}
+          GROUP BY quiz."classId"
+        )
+        SELECT COALESCE(attendance."classId", recitations."classId", activities."classId", quizzes."classId") AS "classId",
+          attendance."attendanceCount", attendance."attendedCount",
+          recitations."scoreTotal" AS "recitationScoreTotal", recitations."scoreCount" AS "recitationScoreCount",
+          activities."scoreTotal" AS "activityScoreTotal", activities."possibleTotal" AS "activityPossibleTotal",
+          quizzes."scoreTotal" AS "quizScoreTotal", quizzes."possibleTotal" AS "quizPossibleTotal"
+        FROM attendance
+        FULL OUTER JOIN recitations USING ("classId")
+        FULL OUTER JOIN activities USING ("classId")
+        FULL OUTER JOIN quizzes USING ("classId")
+      `;
+      const summaryByClass = new Map(summaryRows.map((row) => [row.classId, row]));
+      const summaries = enrolledClasses.map((classItem) => {
+        const row = summaryByClass.get(classItem.id) || {};
+        const activityPossible = Number(row.activityPossibleTotal || 0);
+        const quizPossible = Number(row.quizPossibleTotal || 0);
+        return {
+          ...classItem,
+          recordSummary: {
+            attendance: formatPercentSummary(Number(row.attendedCount || 0), Number(row.attendanceCount || 0)),
+            recitation: formatAverageSummary(Number(row.recitationScoreTotal || 0), Number(row.recitationScoreCount || 0), " / 5"),
+            activities: activityPossible ? `${Math.round((Number(row.activityScoreTotal || 0) / activityPossible) * 100)}%` : "—",
+            quiz: quizPossible ? `${Math.round((Number(row.quizScoreTotal || 0) / quizPossible) * 100)}%` : "—",
+          },
+        };
+      });
       return res.json({ classes: summaries });
     } catch (error) {
       console.error("Student classes lookup failed:", error);
