@@ -222,7 +222,7 @@ The client starts on `http://localhost:5173`. Open `http://localhost:5173` in yo
 ### Profile Photos (Cloudinary)
 - Register at [Cloudinary](https://cloudinary.com) and create an **unsigned upload preset**.
 - Set `VITE_CLOUDINARY_CLOUD_NAME` and `VITE_CLOUDINARY_UPLOAD_PRESET` in `classdex-frontend/.env`.
-- If omitted, selected student/faculty photos are automatically stored directly as inline data within the profile record in the database.
+- If omitted or the Cloudinary upload fails (for example, if the preset is not enabled for unsigned uploads), selected student/faculty photos are stored directly as inline data within the profile record in the database.
 
 ---
 

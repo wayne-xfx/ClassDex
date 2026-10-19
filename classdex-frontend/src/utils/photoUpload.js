@@ -47,15 +47,16 @@ export async function uploadPhoto(file) {
     const form = new FormData();
     form.append("file", file);
     form.append("upload_preset", uploadPreset);
-    const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/image/upload`,
-      { method: "POST", body: form },
-    );
-    const result = await response.json();
-    if (!response.ok || !result.secure_url) {
-      throw new Error(result.error?.message || "Unable to upload photo to Cloudinary.");
+    try {
+      const response = await fetch(
+        `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/image/upload`,
+        { method: "POST", body: form },
+      );
+      const result = await response.json();
+      if (response.ok && result.secure_url) return result.secure_url;
+    } catch {
+      // Fall back to storing the photo in the profile if the optional host is unavailable.
     }
-    return result.secure_url;
   }
 
   return new Promise((resolve, reject) => {
