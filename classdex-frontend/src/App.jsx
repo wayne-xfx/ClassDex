@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { GuestRoute, ProtectedRoute } from "./components/ProtectedRoute";
+import AccountSettings from "./pages/AccountSettings";
 import CreateClass from "./pages/CreateClass";
 import FacultyClass from "./pages/FacultyClass";
 import FacultyDashboard from "./pages/FacultyDashboard";
@@ -25,6 +26,9 @@ export default function App() {
       <Route element={<GuestRoute />}>
         <Route path="/register" element={<Register />} />
         <Route path="/login" element={<Login />} />
+      </Route>
+      <Route element={<ProtectedRoute />}>
+        <Route path="/settings" element={<AccountSettings />} />
       </Route>
       <Route element={<ProtectedRoute role="FACULTY" />}>
         <Route path="/faculty" element={<FacultyDashboard />} />
