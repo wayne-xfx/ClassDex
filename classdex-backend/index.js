@@ -26,8 +26,21 @@ const {
   validatePasswordWithConfirm,
 } = require("./src/utils/passwordValidator");
 const {
+  generateToken,
+  getResetTokenExpiry,
+  getResetTokenTtlMinutes,
   normalizeEmail,
 } = require("./src/utils/tokens");
+const {
+  getClientUrl,
+  sendMail,
+} = require("./src/services/mailer");
+const {
+  buildResetPasswordEmail,
+} = require("./src/services/emailTemplates");
+
+const FORGOT_PASSWORD_GENERIC_MESSAGE =
+  "If an account exists for that email, we've sent a reset link.";
 
 const SCORE_STUDENT_SELECT = {
   id: true,
@@ -415,6 +428,56 @@ app.post("/api/auth/logout", (req, res) => {
     res.clearCookie("classdex.sid");
     return res.json({ message: "Logged out." });
   });
+});
+
+app.post("/api/auth/forgot-password", async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body?.email);
+    if (!EMAIL_PATTERN.test(email)) {
+      return res.status(400).json({ message: "Enter a valid email address." });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, name: true, email: true },
+    });
+
+    if (user) {
+      const now = new Date();
+      const { raw, hash } = generateToken();
+      const expiresAt = getResetTokenExpiry(now);
+      const ttlMinutes = getResetTokenTtlMinutes();
+
+      await prisma.$transaction([
+        prisma.passwordResetToken.updateMany({
+          where: { userId: user.id, usedAt: null },
+          data: { usedAt: now },
+        }),
+        prisma.passwordResetToken.create({
+          data: {
+            userId: user.id,
+            tokenHash: hash,
+            expiresAt,
+          },
+        }),
+      ]);
+
+      const resetUrl = `${getClientUrl()}/reset-password?token=${encodeURIComponent(raw)}`;
+      void sendMail(
+        buildResetPasswordEmail({
+          to: user.email,
+          name: user.name,
+          resetUrl,
+          ttlMinutes,
+        }),
+      );
+    }
+
+    return res.status(200).json({ message: FORGOT_PASSWORD_GENERIC_MESSAGE });
+  } catch (error) {
+    console.error("Forgot password request failed:", error);
+    return res.status(500).json({ message: "Unable to process password reset request." });
+  }
 });
 
 app.get("/api/auth/me", requireAuth, async (req, res) => {
