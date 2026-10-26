@@ -137,9 +137,14 @@ Create `.env` files in both `classdex-backend/` and `classdex-frontend/` based o
 | `PORT` | Port for the backend Express API | `5000` |
 | `SESSION_SECRET` | Secret key for signing session cookies | `replace-with-a-long-random-string` |
 | `FRONTEND_ORIGIN` | Allowed CORS origin for the frontend | `http://localhost:5173` |
-| `FRONTEND_URL` | Base URL used in verification links | `http://localhost:5173` |
+| `FRONTEND_URL` | Base URL fallback for classroom notification links | `http://localhost:5173` |
+| `CLIENT_URL` | Base client URL used in password reset and email verification links (falls back to `FRONTEND_URL` / `FRONTEND_ORIGIN`) | `http://localhost:5173` |
+| `RESET_TOKEN_TTL_MINUTES` | Expiry window (minutes) for single-use password reset links | `30` *(Optional)* |
+| `VERIFY_TOKEN_TTL_HOURS` | Expiry window (hours) for single-use email verification links | `24` *(Optional)* |
+| `VERIFY_RESEND_COOLDOWN_SECONDS` | Per-user cooldown (seconds) between resend-verification requests | `60` *(Optional)* |
+| `TRUST_PROXY` | Express `trust proxy` hop count for IP rate limiting behind proxies | `1` *(Optional)* |
 | `RECAPTCHA_SECRET_KEY`| Google reCAPTCHA v2 secret key | *(Optional in development)* |
-| `RESEND_API_KEY` | Resend API key for email delivery | *(Optional; skips email if omitted)* |
+| `RESEND_API_KEY` | Resend API key (account recovery & verification use the dev console mailer in `src/services/mailer.js` until Resend is wired) | *(Optional; logs formatted emails to server console in dev)* |
 | `EMAIL_FROM` | Sender email address for notifications | `ClassDex <no-reply@classdex.local>` |
 
 #### Frontend Configuration (`classdex-frontend/.env`)

@@ -81,6 +81,9 @@ export default function AppShell({ children, active = "" }) {
                   <Link to={profilePath} role="menuitem" onClick={() => setUserMenuOpen(false)}>
                     <Icon name="user" /> Profile
                   </Link>
+                  <Link to="/settings" role="menuitem" onClick={() => setUserMenuOpen(false)}>
+                    <Icon name="settings" /> Account settings
+                  </Link>
                   <button type="button" role="menuitem" onClick={handleLogout}>
                     <Icon name="logout" /> Log out
                   </button>
