@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import Avatar from "../components/Avatar";
+import EmailVerificationBanner from "../components/EmailVerificationBanner";
 import Icon from "../components/Icon";
 import RecaptchaWidget from "../components/RecaptchaWidget";
 import { api } from "../api";
@@ -106,6 +107,8 @@ export default function StudentDashboard() {
         />
         {notice ? <p className="notice notice-success" role="status"><Icon name="check" /> {notice}</p> : null}
         {error ? <p className="notice notice-error" role="alert">{error}</p> : null}
+
+        <EmailVerificationBanner />
 
         {!profile ? (
           <section className="profile-prompt student-prompt">
