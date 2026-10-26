@@ -74,6 +74,7 @@ const FORGOT_CAPTCHA_ERROR_MESSAGE = "We couldn't verify you're human. Please tr
 
 const forgotPasswordIpStore = new MemoryStore();
 const forgotPasswordEmailStore = new MemoryStore();
+const changePasswordWrongCurrentStore = new MemoryStore();
 const verifyResendCooldownByUser = new Map();
 
 function getVerifyResendCooldownSeconds() {
@@ -104,9 +105,25 @@ const forgotPasswordEmailLimiter = rateLimit({
   handler: (_req, res) => res.status(429).json({ message: RATE_LIMIT_MESSAGE }),
 });
 
+const changePasswordWrongCurrentLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  store: changePasswordWrongCurrentStore,
+  keyGenerator: (req) => `change-pw-user:${req.session?.userId || "anonymous"}`,
+  skipSuccessfulRequests: true,
+  requestWasSuccessful: (_req, res) => !res.locals.wrongCurrentPassword,
+  handler: (_req, res) =>
+    res.status(429).json({
+      message: "Too many incorrect password attempts. Please try again in 15 minutes.",
+    }),
+});
+
 function resetRateLimitersForTests() {
   forgotPasswordIpStore.resetAll();
   forgotPasswordEmailStore.resetAll();
+  changePasswordWrongCurrentStore.resetAll();
   verifyResendCooldownByUser.clear();
 }
 
@@ -897,6 +914,129 @@ app.post("/api/auth/resend-verification", requireAuth, async (req, res) => {
     return res.status(500).json({ message: "Unable to resend verification email." });
   }
 });
+
+app.post(
+  "/api/auth/change-password",
+  requireAuth,
+  changePasswordWrongCurrentLimiter,
+  async (req, res) => {
+    try {
+      const currentPassword = String(req.body?.currentPassword || "");
+      const newPassword = String(req.body?.newPassword || "");
+      const hasConfirm = req.body?.confirmPassword !== undefined;
+
+      if (!currentPassword) {
+        return res.status(400).json({
+          field: "currentPassword",
+          message: "Enter your current password.",
+        });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: req.session.userId },
+        include: {
+          facultyProfile: { select: { photo: true, name: true, department: true, email: true } },
+          studentProfile: { select: { photo: true, name: true, studentId: true } },
+        },
+      });
+
+      if (!user) {
+        return res.status(401).json({ message: "Session expired. Please log in again." });
+      }
+
+      const matchesCurrent = await bcrypt.compare(currentPassword, user.password);
+      if (!matchesCurrent) {
+        res.locals.wrongCurrentPassword = true;
+        return res.status(400).json({
+          field: "currentPassword",
+          message: "Current password is incorrect.",
+        });
+      }
+
+      const passwordCheck = hasConfirm
+        ? validatePasswordWithConfirm(newPassword, req.body?.confirmPassword)
+        : validatePassword(newPassword);
+      if (!passwordCheck.valid) {
+        const field =
+          passwordCheck.message === "Passwords do not match."
+            ? "confirmPassword"
+            : "newPassword";
+        return res.status(400).json({
+          field,
+          message: passwordCheck.message,
+        });
+      }
+
+      const sameAsCurrent = await bcrypt.compare(newPassword, user.password);
+      if (sameAsCurrent) {
+        return res.status(400).json({
+          field: "newPassword",
+          message: "New password must be different from your current password.",
+        });
+      }
+
+      const hashedPassword = await bcrypt.hash(newPassword, 12);
+      const now = new Date();
+      const changedAtMs = Math.max(
+        now.getTime(),
+        (user.passwordChangedAt?.getTime() ?? 0) + 1,
+      );
+      const passwordChangedAt = new Date(changedAtMs);
+
+      const updatedUser = await prisma.$transaction(async (tx) => {
+        const saved = await tx.user.update({
+          where: { id: user.id },
+          data: {
+            password: hashedPassword,
+            passwordChangedAt,
+          },
+          include: {
+            facultyProfile: { select: { photo: true, name: true, department: true, email: true } },
+            studentProfile: { select: { photo: true, name: true, studentId: true } },
+          },
+        });
+
+        await tx.passwordResetToken.updateMany({
+          where: { userId: user.id, usedAt: null },
+          data: { usedAt: now },
+        });
+
+        return saved;
+      });
+
+      await changePasswordWrongCurrentStore.resetKey(`change-pw-user:${user.id}`);
+
+      await new Promise((resolve, reject) => {
+        req.session.regenerate((regenError) => {
+          if (regenError) return reject(regenError);
+          req.session.userId = updatedUser.id;
+          req.session.role = updatedUser.role;
+          req.session.issuedAt = Math.max(Date.now(), passwordChangedAt.getTime() + 1);
+          req.session.save((saveError) => {
+            if (saveError) return reject(saveError);
+            resolve();
+          });
+        });
+      });
+
+      void sendMail(
+        buildPasswordChangedEmail({
+          to: updatedUser.email,
+          name: updatedUser.name,
+          loginUrl: `${getClientUrl()}/login`,
+        }),
+      );
+
+      return res.json({
+        message: "Your password has been updated.",
+        user: publicUser(updatedUser),
+      });
+    } catch (error) {
+      console.error("Change password failed:", error);
+      return res.status(500).json({ message: "Unable to change password." });
+    }
+  },
+);
 
 app.get("/api/auth/me", requireAuth, async (req, res) => {
   try {
