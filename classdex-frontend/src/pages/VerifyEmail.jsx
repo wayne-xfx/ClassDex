@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { AuthLayout } from "../components/AuthLayout";
 import { Skeleton } from "../components/DesignSystem";
@@ -56,6 +56,11 @@ export default function VerifyEmail() {
   const [resending, setResending] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [resendFeedback, setResendFeedback] = useState(null);
+  const refreshUserRef = useRef(refreshUser);
+
+  useEffect(() => {
+    refreshUserRef.current = refreshUser;
+  }, [refreshUser]);
 
   useEffect(() => {
     if (!rawToken) return undefined;
@@ -64,7 +69,7 @@ export default function VerifyEmail() {
     verifyTokenOnce(rawToken).then(async (outcome) => {
       if (cancelled) return;
       if (outcome.ok) {
-        await refreshUser();
+        await refreshUserRef.current();
         if (!cancelled) {
           setVerification({ checkedToken: rawToken, status: "success" });
         }
@@ -79,7 +84,7 @@ export default function VerifyEmail() {
     return () => {
       cancelled = true;
     };
-  }, [rawToken, refreshUser]);
+  }, [rawToken]);
 
   const isCountingDown = cooldown > 0;
 
