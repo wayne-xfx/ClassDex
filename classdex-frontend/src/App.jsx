@@ -9,6 +9,7 @@ import JoinClass from "./pages/JoinClass";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import ResetPassword from "./pages/ResetPassword";
 import StudentClassRecord from "./pages/StudentClassRecord";
 import StudentDashboard from "./pages/StudentDashboard";
 import StudentProfile from "./pages/StudentProfile";
@@ -18,6 +19,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route element={<GuestRoute />}>
         <Route path="/register" element={<Register />} />
         <Route path="/login" element={<Login />} />

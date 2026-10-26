@@ -6219,5 +6219,81 @@ textarea {
   }
 }
 
+.reset-skeleton-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.password-checklist {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--royal) 4%, var(--card));
+}
+
+.password-checklist-title {
+  margin: 0 0 8px;
+  color: var(--navy);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.password-checklist-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.password-checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  transition: color 140ms ease;
+}
+
+.password-checklist-item.is-pending {
+  color: var(--muted);
+}
+
+.password-checklist-item.is-passed {
+  color: var(--accent-present);
+  font-weight: 560;
+}
+
+.password-checklist-item.is-failed {
+  color: var(--accent-red);
+  font-weight: 560;
+}
+
+.password-checklist-indicator {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 999px;
+}
+
+.password-checklist-item.is-passed .password-checklist-indicator {
+  background: color-mix(in srgb, var(--accent-present) 15%, var(--card));
+}
+
+.password-checklist-item.is-failed .password-checklist-indicator {
+  background: color-mix(in srgb, var(--accent-red) 15%, var(--card));
+}
+
+.password-checklist-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+
+
 
 
