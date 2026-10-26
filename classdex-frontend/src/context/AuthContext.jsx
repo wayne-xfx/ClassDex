@@ -25,6 +25,14 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  useEffect(() => {
+    function handleUnauthorized() {
+      setUser(null);
+    }
+    window.addEventListener("classdex:unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("classdex:unauthorized", handleUnauthorized);
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
@@ -42,6 +50,15 @@ export function AuthProvider({ children }) {
       async logout() {
         await api.logout();
         setUser(null);
+      },
+      async refreshUser() {
+        try {
+          const data = await api.me();
+          setUser(data.user);
+          return data.user;
+        } catch {
+          return null;
+        }
       },
       updateUser(patch) {
         setUser((current) => (current ? { ...current, ...patch } : current));

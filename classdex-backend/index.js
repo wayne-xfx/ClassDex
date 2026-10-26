@@ -24,10 +24,12 @@ const {
   createAbsentProjectScores,
 } = require("./gradebook");
 const {
+  validatePassword,
   validatePasswordWithConfirm,
 } = require("./src/utils/passwordValidator");
 const {
   generateToken,
+  hashToken,
   getResetTokenExpiry,
   getResetTokenTtlMinutes,
   normalizeEmail,
@@ -38,6 +40,7 @@ const {
 } = require("./src/services/mailer");
 const {
   buildResetPasswordEmail,
+  buildPasswordChangedEmail,
 } = require("./src/services/emailTemplates");
 
 const FORGOT_PASSWORD_GENERIC_MESSAGE =
@@ -144,11 +147,34 @@ function publicUser(user) {
   };
 }
 
-function requireAuth(req, res, next) {
-  if (!req.session.userId) {
+async function requireAuth(req, res, next) {
+  if (!req.session?.userId) {
     return res.status(401).json({ message: "Please log in to continue." });
   }
-  return next();
+  try {
+    const authUser = await prisma.user.findUnique({
+      where: { id: req.session.userId },
+      select: { id: true, role: true, passwordChangedAt: true },
+    });
+    if (!authUser) {
+      req.session.destroy(() => {});
+      res.clearCookie("classdex.sid");
+      return res.status(401).json({ message: "Session expired. Please log in again." });
+    }
+    if (authUser.passwordChangedAt) {
+      const issuedAt = Number(req.session.issuedAt || 0);
+      if (!issuedAt || issuedAt <= authUser.passwordChangedAt.getTime()) {
+        req.session.destroy(() => {});
+        res.clearCookie("classdex.sid");
+        return res.status(401).json({ message: "Your password was changed. Please log in again." });
+      }
+    }
+    req.session.role = authUser.role;
+    return next();
+  } catch (error) {
+    console.error("Session verification failed:", error);
+    return res.status(500).json({ message: "Unable to verify session." });
+  }
 }
 
 function requireRole(role) {
@@ -527,6 +553,153 @@ app.post(
     }
   },
 );
+
+const RESET_TOKEN_REASON_MESSAGES = {
+  expired: "This password reset link has expired. Please request a new one.",
+  used: "This password reset link has already been used. Please request a new one.",
+  invalid: "This password reset link is invalid. Please request a new one.",
+};
+
+async function inspectResetToken(rawToken, now = new Date()) {
+  const cleaned = String(rawToken || "").trim();
+  if (!cleaned) {
+    return { valid: false, reason: "invalid" };
+  }
+  const tokenHash = hashToken(cleaned);
+  const record = await prisma.passwordResetToken.findUnique({
+    where: { tokenHash },
+  });
+  if (!record) {
+    return { valid: false, reason: "invalid" };
+  }
+  if (record.usedAt !== null) {
+    return { valid: false, reason: "used", record };
+  }
+  if (record.expiresAt.getTime() <= now.getTime()) {
+    return { valid: false, reason: "expired", record };
+  }
+  return { valid: true, record };
+}
+
+app.get("/api/auth/reset-password/validate", async (req, res) => {
+  try {
+    const check = await inspectResetToken(req.query?.token);
+    if (!check.valid) {
+      return res.json({ valid: false, reason: check.reason });
+    }
+    return res.json({ valid: true });
+  } catch (error) {
+    console.error("Reset token validation failed:", error);
+    return res.status(500).json({ message: "Unable to validate reset link." });
+  }
+});
+
+app.post("/api/auth/reset-password", async (req, res) => {
+  try {
+    const rawToken = String(req.body?.token || "").trim();
+    const password = String(req.body?.password || "");
+    const hasConfirm = req.body?.confirmPassword !== undefined;
+
+    const initialCheck = await inspectResetToken(rawToken);
+    if (!initialCheck.valid) {
+      return res.status(400).json({
+        valid: false,
+        reason: initialCheck.reason,
+        message: RESET_TOKEN_REASON_MESSAGES[initialCheck.reason],
+      });
+    }
+
+    const passwordCheck = hasConfirm
+      ? validatePasswordWithConfirm(password, req.body?.confirmPassword)
+      : validatePassword(password);
+    if (!passwordCheck.valid) {
+      return res.status(400).json({ message: passwordCheck.message });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const now = new Date();
+
+    const txResult = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.passwordResetToken.updateMany({
+        where: {
+          id: initialCheck.record.id,
+          usedAt: null,
+          expiresAt: { gt: now },
+        },
+        data: { usedAt: now },
+      });
+
+      if (claimed.count === 0) {
+        const latest = await tx.passwordResetToken.findUnique({
+          where: { id: initialCheck.record.id },
+        });
+        const reason = !latest ? "invalid" : latest.usedAt ? "used" : "expired";
+        return { ok: false, reason };
+      }
+
+      const currentUser = await tx.user.findUnique({
+        where: { id: initialCheck.record.userId },
+        select: { id: true, name: true, email: true, passwordChangedAt: true },
+      });
+      if (!currentUser) {
+        return { ok: false, reason: "invalid" };
+      }
+
+      const changedAtMs = Math.max(
+        now.getTime(),
+        (currentUser.passwordChangedAt?.getTime() ?? 0) + 1,
+      );
+      const passwordChangedAt = new Date(changedAtMs);
+
+      const updatedUser = await tx.user.update({
+        where: { id: currentUser.id },
+        data: {
+          password: hashedPassword,
+          passwordChangedAt,
+        },
+        select: { id: true, name: true, email: true },
+      });
+
+      await tx.passwordResetToken.updateMany({
+        where: {
+          userId: currentUser.id,
+          usedAt: null,
+        },
+        data: { usedAt: now },
+      });
+
+      return { ok: true, user: updatedUser };
+    });
+
+    if (!txResult.ok) {
+      return res.status(400).json({
+        valid: false,
+        reason: txResult.reason,
+        message: RESET_TOKEN_REASON_MESSAGES[txResult.reason],
+      });
+    }
+
+    if (req.session?.userId === txResult.user.id) {
+      await new Promise((resolve) => req.session.destroy(() => resolve()));
+      res.clearCookie("classdex.sid");
+    }
+
+    void sendMail(
+      buildPasswordChangedEmail({
+        to: txResult.user.email,
+        name: txResult.user.name,
+        loginUrl: `${getClientUrl()}/login`,
+      }),
+    );
+
+    return res.json({
+      message: "Your password has been reset. Sign in with your new password.",
+    });
+  } catch (error) {
+    console.error("Reset password failed:", error);
+    return res.status(500).json({ message: "Unable to reset password." });
+  }
+});
 
 app.get("/api/auth/me", requireAuth, async (req, res) => {
   try {
