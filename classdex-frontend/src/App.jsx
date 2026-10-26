@@ -4,6 +4,7 @@ import CreateClass from "./pages/CreateClass";
 import FacultyClass from "./pages/FacultyClass";
 import FacultyDashboard from "./pages/FacultyDashboard";
 import FacultyProfile from "./pages/FacultyProfile";
+import ForgotPassword from "./pages/ForgotPassword";
 import JoinClass from "./pages/JoinClass";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
@@ -16,6 +17,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route element={<GuestRoute />}>
         <Route path="/register" element={<Register />} />
         <Route path="/login" element={<Login />} />
