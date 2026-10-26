@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { AuthLayout } from "../components/AuthLayout";
+import Icon from "../components/Icon";
 import PasswordField from "../components/PasswordField";
 import { useAuth } from "../context/AuthContext";
 
@@ -11,6 +12,7 @@ export default function Login() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const statusNotice = location.state?.notice || "";
 
   function update(field) {
     return (event) => setForm((prev) => ({ ...prev, [field]: event.target.value }));
@@ -32,7 +34,7 @@ export default function Login() {
       navigate(
         safeRequestedPath || (user.role === "FACULTY" ? "/faculty" : "/student"),
         {
-        replace: true,
+          replace: true,
         },
       );
     } catch (err) {
@@ -59,10 +61,22 @@ export default function Login() {
         </>
       }
     >
+      {statusNotice ? (
+        <div
+          className="auth-status-banner auth-status-success mb-4"
+          role="status"
+          aria-live="polite"
+        >
+          <Icon name="check" size={16} />
+          <span>{statusNotice}</span>
+        </div>
+      ) : null}
+
       <form className="space-y-4" onSubmit={handleSubmit}>
-        <label className="block text-sm font-medium text-navy">
+        <label htmlFor="login-email" className="block text-sm font-medium text-navy">
           Email
           <input
+            id="login-email"
             required
             type="email"
             value={form.email}
@@ -72,24 +86,37 @@ export default function Login() {
           />
         </label>
 
-        <PasswordField
-          label="Password"
-          name="password"
-          value={form.password}
-          onChange={update("password")}
-          autoComplete="current-password"
-        />
+        <div>
+          <PasswordField
+            id="login-password"
+            label="Password"
+            name="password"
+            value={form.password}
+            onChange={update("password")}
+            autoComplete="current-password"
+          />
+          <div className="mt-2 flex justify-end">
+            <Link
+              to="/forgot-password"
+              className="auth-inline-link text-xs font-semibold text-royal hover:underline"
+            >
+              Forgot password?
+            </Link>
+          </div>
+        </div>
 
-        {error ? (
-          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
-          </p>
-        ) : null}
+        <div aria-live="polite">
+          {error ? (
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </div>
 
         <button
           type="submit"
           disabled={submitting}
-          className="w-full rounded-lg bg-navy py-2.5 text-sm font-semibold text-white hover:bg-royal disabled:opacity-70"
+          className="auth-submit-btn w-full rounded-lg bg-navy py-2.5 text-sm font-semibold text-white hover:bg-royal disabled:opacity-70"
         >
           {submitting ? "Signing in…" : "Log in"}
         </button>
