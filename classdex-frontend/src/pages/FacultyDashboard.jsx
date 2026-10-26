@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import AppShell from "../components/AppShell";
+import EmailVerificationBanner from "../components/EmailVerificationBanner";
 import Icon from "../components/Icon";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
@@ -117,6 +118,8 @@ export default function FacultyDashboard() {
 
         {notice ? <p className="notice notice-success" role="status"><Icon name="check" /> {notice}</p> : null}
         {error ? <p className="notice notice-error" role="alert">{error}</p> : null}
+
+        <EmailVerificationBanner />
 
         {!loading && !profileCompleted && !profilePromptDismissed ? (
           <section className="profile-banner-compact" aria-label="Complete faculty profile">

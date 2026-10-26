@@ -11,7 +11,6 @@ const { eligibleCandidates, selectRecitationCandidate } = require("./recitation"
 const { verifyRecaptchaToken } = require("./recaptcha");
 const { buildExcelWorkbook, buildCsvExport, sanitizeExportValue, buildStudentListRows, buildAttendanceRows, buildRecitationRows, buildActivityRows, buildProjectRows, buildQuizRows } = require("./export");
 const {
-  buildVerificationEmail,
   buildJoinEmail,
   buildFacultyJoinEmail,
   buildDecisionEmail,
@@ -32,6 +31,8 @@ const {
   hashToken,
   getResetTokenExpiry,
   getResetTokenTtlMinutes,
+  getVerifyTokenExpiry,
+  getVerifyTokenTtlHours,
   normalizeEmail,
 } = require("./src/utils/tokens");
 const {
@@ -41,6 +42,7 @@ const {
 const {
   buildResetPasswordEmail,
   buildPasswordChangedEmail,
+  buildVerifyEmail,
 } = require("./src/services/emailTemplates");
 
 const FORGOT_PASSWORD_GENERIC_MESSAGE =
@@ -72,6 +74,15 @@ const FORGOT_CAPTCHA_ERROR_MESSAGE = "We couldn't verify you're human. Please tr
 
 const forgotPasswordIpStore = new MemoryStore();
 const forgotPasswordEmailStore = new MemoryStore();
+const verifyResendCooldownByUser = new Map();
+
+function getVerifyResendCooldownSeconds() {
+  const parsed = Number(process.env.VERIFY_RESEND_COOLDOWN_SECONDS);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return Math.round(parsed);
+  }
+  return 60;
+}
 
 const forgotPasswordIpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -96,6 +107,7 @@ const forgotPasswordEmailLimiter = rateLimit({
 function resetRateLimitersForTests() {
   forgotPasswordIpStore.resetAll();
   forgotPasswordEmailStore.resetAll();
+  verifyResendCooldownByUser.clear();
 }
 
 app.use(
@@ -417,7 +429,11 @@ app.post("/api/auth/register", async (req, res) => {
     req.session.userId = user.id;
     req.session.role = user.role;
     req.session.issuedAt = Date.now();
-    queueEmail(buildVerificationEmail(user), "registration verification");
+    try {
+      await createAndSendVerificationEmail(user);
+    } catch (verifyError) {
+      console.error("Registration verification email setup failed:", verifyError);
+    }
     return res.status(201).json({ user: publicUser(user) });
   } catch (error) {
     console.error("Register failed:", error);
@@ -698,6 +714,187 @@ app.post("/api/auth/reset-password", async (req, res) => {
   } catch (error) {
     console.error("Reset password failed:", error);
     return res.status(500).json({ message: "Unable to reset password." });
+  }
+});
+
+const VERIFY_TOKEN_REASON_MESSAGES = {
+  expired: "This verification link has expired. Request a new verification email to continue.",
+  used: "This verification link has already been used.",
+  invalid: "This verification link is invalid or incomplete.",
+};
+
+async function createAndSendVerificationEmail(user) {
+  const now = new Date();
+  const { raw, hash } = generateToken();
+  const expiresAt = getVerifyTokenExpiry(now);
+  const ttlHours = getVerifyTokenTtlHours();
+
+  await prisma.$transaction([
+    prisma.emailVerificationToken.updateMany({
+      where: { userId: user.id, usedAt: null },
+      data: { usedAt: now },
+    }),
+    prisma.emailVerificationToken.create({
+      data: {
+        userId: user.id,
+        tokenHash: hash,
+        expiresAt,
+      },
+    }),
+  ]);
+
+  const verifyUrl = `${getClientUrl()}/verify-email?token=${encodeURIComponent(raw)}`;
+  await sendMail(
+    buildVerifyEmail({
+      to: user.email,
+      name: user.name,
+      verifyUrl,
+      ttlHours,
+    }),
+  );
+  return { raw, expiresAt };
+}
+
+async function inspectVerifyToken(rawToken, now = new Date()) {
+  const cleaned = String(rawToken || "").trim();
+  if (!cleaned) {
+    return { valid: false, reason: "invalid" };
+  }
+  const tokenHash = hashToken(cleaned);
+  const record = await prisma.emailVerificationToken.findUnique({
+    where: { tokenHash },
+  });
+  if (!record) {
+    return { valid: false, reason: "invalid" };
+  }
+  if (record.usedAt !== null) {
+    return { valid: false, reason: "used", record };
+  }
+  if (record.expiresAt.getTime() <= now.getTime()) {
+    return { valid: false, reason: "expired", record };
+  }
+  return { valid: true, record };
+}
+
+app.post("/api/auth/verify-email", async (req, res) => {
+  try {
+    const rawToken = String(req.body?.token || "").trim();
+    const initialCheck = await inspectVerifyToken(rawToken);
+    if (!initialCheck.valid) {
+      return res.status(400).json({
+        valid: false,
+        reason: initialCheck.reason,
+        message: VERIFY_TOKEN_REASON_MESSAGES[initialCheck.reason],
+      });
+    }
+
+    const now = new Date();
+    const txResult = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.emailVerificationToken.updateMany({
+        where: {
+          id: initialCheck.record.id,
+          usedAt: null,
+          expiresAt: { gt: now },
+        },
+        data: { usedAt: now },
+      });
+
+      if (claimed.count === 0) {
+        const latest = await tx.emailVerificationToken.findUnique({
+          where: { id: initialCheck.record.id },
+        });
+        const reason = !latest ? "invalid" : latest.usedAt ? "used" : "expired";
+        return { ok: false, reason };
+      }
+
+      const existingUser = await tx.user.findUnique({
+        where: { id: initialCheck.record.userId },
+        select: { id: true, emailVerifiedAt: true },
+      });
+      if (!existingUser) {
+        return { ok: false, reason: "invalid" };
+      }
+
+      await tx.user.update({
+        where: { id: existingUser.id },
+        data: {
+          emailVerified: true,
+          emailVerifiedAt: existingUser.emailVerifiedAt || now,
+        },
+      });
+
+      await tx.emailVerificationToken.updateMany({
+        where: {
+          userId: existingUser.id,
+          usedAt: null,
+        },
+        data: { usedAt: now },
+      });
+
+      return { ok: true };
+    });
+
+    if (!txResult.ok) {
+      return res.status(400).json({
+        valid: false,
+        reason: txResult.reason,
+        message: VERIFY_TOKEN_REASON_MESSAGES[txResult.reason],
+      });
+    }
+
+    return res.json({
+      verified: true,
+      message: "Your email address has been verified.",
+    });
+  } catch (error) {
+    console.error("Email verification failed:", error);
+    return res.status(500).json({ message: "Unable to verify email address." });
+  }
+});
+
+app.post("/api/auth/resend-verification", requireAuth, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.session.userId },
+      select: { id: true, name: true, email: true, emailVerified: true },
+    });
+
+    if (!user) {
+      return res.status(401).json({ message: "Session expired. Please log in again." });
+    }
+
+    if (user.emailVerified) {
+      return res.json({
+        alreadyVerified: true,
+        message: "Your email address is already verified.",
+      });
+    }
+
+    const cooldownSeconds = getVerifyResendCooldownSeconds();
+    const cooldownMs = cooldownSeconds * 1000;
+    const nowMs = Date.now();
+    const lastSentMs = verifyResendCooldownByUser.get(user.id) || 0;
+    const elapsedMs = nowMs - lastSentMs;
+
+    if (lastSentMs > 0 && elapsedMs < cooldownMs) {
+      const retryAfter = Math.max(1, Math.ceil((cooldownMs - elapsedMs) / 1000));
+      res.setHeader("Retry-After", String(retryAfter));
+      return res.status(429).json({
+        message: `Please wait ${retryAfter}s before requesting another verification email.`,
+        retryAfter,
+      });
+    }
+
+    verifyResendCooldownByUser.set(user.id, nowMs);
+    await createAndSendVerificationEmail(user);
+
+    return res.json({
+      message: "Verification email sent. Check your inbox.",
+      retryAfter: cooldownSeconds,
+    });
+  } catch (error) {
+    console.error("Resend verification email failed:", error);
+    return res.status(500).json({ message: "Unable to resend verification email." });
   }
 });
 

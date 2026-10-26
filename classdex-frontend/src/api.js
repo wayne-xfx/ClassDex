@@ -77,6 +77,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  verifyEmail: (payload) =>
+    request("/auth/verify-email", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  resendVerification: () =>
+    request("/auth/resend-verification", {
+      method: "POST",
+    }),
   facultyProfile: (options = {}) =>
     request(`/faculty/profile${options.summary ? "?summary=1" : ""}`),
   saveFacultyProfile: (payload) =>
