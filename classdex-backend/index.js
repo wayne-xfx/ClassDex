@@ -22,6 +22,12 @@ const {
   createAbsentActivityScores,
   createAbsentProjectScores,
 } = require("./gradebook");
+const {
+  validatePasswordWithConfirm,
+} = require("./src/utils/passwordValidator");
+const {
+  normalizeEmail,
+} = require("./src/utils/tokens");
 
 const SCORE_STUDENT_SELECT = {
   id: true,
@@ -80,6 +86,7 @@ function publicUser(user) {
     name: user.name,
     email: user.email,
     role: user.role,
+    emailVerified: Boolean(user.emailVerified),
     photo,
     profileCompleted,
     createdAt: user.createdAt,
@@ -292,7 +299,7 @@ app.post("/api/auth/register", async (req, res) => {
       return;
     }
     const name = String(req.body?.name || "").trim();
-    const email = String(req.body?.email || "").trim().toLowerCase();
+    const email = normalizeEmail(req.body?.email);
     const password = String(req.body?.password || "");
     const confirmPassword = String(req.body?.confirmPassword || "");
     const role = String(req.body?.role || "").toUpperCase();
@@ -303,13 +310,9 @@ app.post("/api/auth/register", async (req, res) => {
     if (!EMAIL_PATTERN.test(email)) {
       return res.status(400).json({ message: "Enter a valid email address." });
     }
-    if (password.length < 8) {
-      return res
-        .status(400)
-        .json({ message: "Password must be at least 8 characters." });
-    }
-    if (password !== confirmPassword) {
-      return res.status(400).json({ message: "Passwords do not match." });
+    const passwordCheck = validatePasswordWithConfirm(password, confirmPassword);
+    if (!passwordCheck.valid) {
+      return res.status(400).json({ message: passwordCheck.message });
     }
     if (!ROLES.has(role)) {
       return res
@@ -336,6 +339,7 @@ app.post("/api/auth/register", async (req, res) => {
 
     req.session.userId = user.id;
     req.session.role = user.role;
+    req.session.issuedAt = Date.now();
     queueEmail(buildVerificationEmail(user), "registration verification");
     return res.status(201).json({ user: publicUser(user) });
   } catch (error) {
@@ -354,7 +358,7 @@ app.post("/api/auth/login", async (req, res) => {
   }, 20_000);
 
   try {
-    const email = String(req.body?.email || "").trim().toLowerCase();
+    const email = normalizeEmail(req.body?.email);
     const password = String(req.body?.password || "");
 
     if (!EMAIL_PATTERN.test(email) || !password) {
@@ -384,6 +388,7 @@ app.post("/api/auth/login", async (req, res) => {
 
     req.session.userId = user.id;
     req.session.role = user.role;
+    req.session.issuedAt = Math.max(Date.now(), (user.passwordChangedAt?.getTime() ?? 0) + 1);
     clearTimeout(timeout);
     return res.json({ user: publicUser(user) });
   } catch (error) {
@@ -3034,6 +3039,10 @@ app.post(
   },
 );
 
-app.listen(PORT, () => {
-  console.log(`ClassDex API running on http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`ClassDex API running on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = { app };
