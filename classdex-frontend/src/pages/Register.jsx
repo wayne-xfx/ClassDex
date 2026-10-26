@@ -4,6 +4,11 @@ import { AuthLayout } from "../components/AuthLayout";
 import RecaptchaWidget from "../components/RecaptchaWidget";
 import PasswordField from "../components/PasswordField";
 import { useAuth } from "../context/AuthContext";
+import {
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_MISMATCH_MESSAGE,
+  validatePasswordWithConfirm,
+} from "../utils/passwordValidator";
 
 const ROLES = [
   {
@@ -47,12 +52,9 @@ export default function Register() {
       setError("Choose an account type and enter your full name.");
       return;
     }
-    if (form.password.length < 8) {
-      setError("Password must be at least 8 characters.");
-      return;
-    }
-    if (form.password !== form.confirmPassword) {
-      setError("Passwords do not match.");
+    const passwordCheck = validatePasswordWithConfirm(form.password, form.confirmPassword);
+    if (!passwordCheck.valid) {
+      setError(passwordCheck.message);
       return;
     }
     setCaptchaOpen(true);
@@ -164,7 +166,7 @@ export default function Register() {
           value={form.password}
           onChange={update("password")}
           autoComplete="new-password"
-          minLength={8}
+          minLength={PASSWORD_MIN_LENGTH}
           hint="At least 8 characters"
         />
 
@@ -174,10 +176,10 @@ export default function Register() {
           value={form.confirmPassword}
           onChange={update("confirmPassword")}
           autoComplete="new-password"
-          minLength={8}
+          minLength={PASSWORD_MIN_LENGTH}
         />
         {form.confirmPassword && form.password !== form.confirmPassword ? (
-          <p className="field-error" role="alert">Passwords do not match.</p>
+          <p className="field-error" role="alert">{PASSWORD_MISMATCH_MESSAGE}</p>
         ) : null}
 
         {error ? (
