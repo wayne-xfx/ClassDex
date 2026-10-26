@@ -13,6 +13,7 @@ import ResetPassword from "./pages/ResetPassword";
 import StudentClassRecord from "./pages/StudentClassRecord";
 import StudentDashboard from "./pages/StudentDashboard";
 import StudentProfile from "./pages/StudentProfile";
+import VerifyEmail from "./pages/VerifyEmail";
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
       <Route path="/" element={<Landing />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
       <Route element={<GuestRoute />}>
         <Route path="/register" element={<Register />} />
         <Route path="/login" element={<Login />} />
