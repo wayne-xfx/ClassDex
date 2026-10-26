@@ -6506,6 +6506,11 @@ textarea {
   box-shadow: var(--focus-ring);
 }
 
+.password-control .password-toggle {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
 .settings-form-actions {
   display: flex;
   justify-content: flex-end;
