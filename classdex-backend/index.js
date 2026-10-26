@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const session = require("express-session");
+const { rateLimit, MemoryStore } = require("express-rate-limit");
 const bcrypt = require("bcryptjs");
 const { randomBytes } = require("node:crypto");
 const { prisma } = require("./db");
@@ -52,10 +53,47 @@ const SCORE_STUDENT_SELECT = {
 };
 
 const app = express();
+const trustProxyHops =
+  process.env.TRUST_PROXY !== undefined && process.env.TRUST_PROXY !== ""
+    ? Number(process.env.TRUST_PROXY)
+    : 1;
+app.set("trust proxy", Number.isNaN(trustProxyHops) ? process.env.TRUST_PROXY : trustProxyHops);
+
 const PORT = process.env.PORT || 5000;
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "http://localhost:5173";
 const ROLES = new Set(["FACULTY", "STUDENT"]);
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const RATE_LIMIT_MESSAGE = "Too many requests. Please try again later.";
+const FORGOT_CAPTCHA_ERROR_MESSAGE = "We couldn't verify you're human. Please try again.";
+
+const forgotPasswordIpStore = new MemoryStore();
+const forgotPasswordEmailStore = new MemoryStore();
+
+const forgotPasswordIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  store: forgotPasswordIpStore,
+  handler: (_req, res) => res.status(429).json({ message: RATE_LIMIT_MESSAGE }),
+});
+
+const forgotPasswordEmailLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  store: forgotPasswordEmailStore,
+  skip: (req) => !normalizeEmail(req.body?.email),
+  keyGenerator: (req) => `forgot-email:${normalizeEmail(req.body?.email)}`,
+  handler: (_req, res) => res.status(429).json({ message: RATE_LIMIT_MESSAGE }),
+});
+
+function resetRateLimitersForTests() {
+  forgotPasswordIpStore.resetAll();
+  forgotPasswordEmailStore.resetAll();
+}
 
 app.use(
   cors({
@@ -430,55 +468,65 @@ app.post("/api/auth/logout", (req, res) => {
   });
 });
 
-app.post("/api/auth/forgot-password", async (req, res) => {
-  try {
-    const email = normalizeEmail(req.body?.email);
-    if (!EMAIL_PATTERN.test(email)) {
-      return res.status(400).json({ message: "Enter a valid email address." });
+app.post(
+  "/api/auth/forgot-password",
+  forgotPasswordIpLimiter,
+  forgotPasswordEmailLimiter,
+  async (req, res) => {
+    try {
+      const captchaResult = await verifyRecaptchaToken(req.body?.recaptchaToken, req.ip);
+      if (!captchaResult.success) {
+        return res.status(400).json({ message: FORGOT_CAPTCHA_ERROR_MESSAGE });
+      }
+
+      const email = normalizeEmail(req.body?.email);
+      if (!EMAIL_PATTERN.test(email)) {
+        return res.status(400).json({ message: "Enter a valid email address." });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { email },
+        select: { id: true, name: true, email: true },
+      });
+
+      if (user) {
+        const now = new Date();
+        const { raw, hash } = generateToken();
+        const expiresAt = getResetTokenExpiry(now);
+        const ttlMinutes = getResetTokenTtlMinutes();
+
+        await prisma.$transaction([
+          prisma.passwordResetToken.updateMany({
+            where: { userId: user.id, usedAt: null },
+            data: { usedAt: now },
+          }),
+          prisma.passwordResetToken.create({
+            data: {
+              userId: user.id,
+              tokenHash: hash,
+              expiresAt,
+            },
+          }),
+        ]);
+
+        const resetUrl = `${getClientUrl()}/reset-password?token=${encodeURIComponent(raw)}`;
+        void sendMail(
+          buildResetPasswordEmail({
+            to: user.email,
+            name: user.name,
+            resetUrl,
+            ttlMinutes,
+          }),
+        );
+      }
+
+      return res.status(200).json({ message: FORGOT_PASSWORD_GENERIC_MESSAGE });
+    } catch (error) {
+      console.error("Forgot password request failed:", error);
+      return res.status(500).json({ message: "Unable to process password reset request." });
     }
-
-    const user = await prisma.user.findUnique({
-      where: { email },
-      select: { id: true, name: true, email: true },
-    });
-
-    if (user) {
-      const now = new Date();
-      const { raw, hash } = generateToken();
-      const expiresAt = getResetTokenExpiry(now);
-      const ttlMinutes = getResetTokenTtlMinutes();
-
-      await prisma.$transaction([
-        prisma.passwordResetToken.updateMany({
-          where: { userId: user.id, usedAt: null },
-          data: { usedAt: now },
-        }),
-        prisma.passwordResetToken.create({
-          data: {
-            userId: user.id,
-            tokenHash: hash,
-            expiresAt,
-          },
-        }),
-      ]);
-
-      const resetUrl = `${getClientUrl()}/reset-password?token=${encodeURIComponent(raw)}`;
-      void sendMail(
-        buildResetPasswordEmail({
-          to: user.email,
-          name: user.name,
-          resetUrl,
-          ttlMinutes,
-        }),
-      );
-    }
-
-    return res.status(200).json({ message: FORGOT_PASSWORD_GENERIC_MESSAGE });
-  } catch (error) {
-    console.error("Forgot password request failed:", error);
-    return res.status(500).json({ message: "Unable to process password reset request." });
-  }
-});
+  },
+);
 
 app.get("/api/auth/me", requireAuth, async (req, res) => {
   try {
@@ -3108,4 +3156,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app };
+module.exports = { app, resetRateLimitersForTests };

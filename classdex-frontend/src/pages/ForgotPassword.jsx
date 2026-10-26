@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { AuthLayout } from "../components/AuthLayout";
 import Icon from "../components/Icon";
+import RecaptchaWidget from "../components/RecaptchaWidget";
 import { api } from "../api";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -15,6 +16,9 @@ export default function ForgotPassword() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [confirmationMessage, setConfirmationMessage] = useState(GENERIC_CONFIRMATION);
+  const [captchaOpen, setCaptchaOpen] = useState(false);
+  const captchaRef = useRef(null);
+  const submitButtonRef = useRef(null);
 
   function handleEmailChange(event) {
     const nextValue = event.target.value;
@@ -27,7 +31,7 @@ export default function ForgotPassword() {
     }
   }
 
-  async function handleSubmit(event) {
+  function handleSubmit(event) {
     event.preventDefault();
     if (submitting) return;
     setError("");
@@ -43,16 +47,34 @@ export default function ForgotPassword() {
       return;
     }
 
+    setCaptchaOpen(true);
+  }
+
+  async function submitWithToken(recaptchaToken) {
+    if (submitting) return;
+    const normalized = email.trim().toLowerCase();
     setSubmitting(true);
     try {
-      const response = await api.forgotPassword({ email: normalized });
+      const response = await api.forgotPassword({
+        email: normalized,
+        recaptchaToken,
+      });
       setConfirmationMessage(response?.message || GENERIC_CONFIRMATION);
       setSubmitted(true);
     } catch (requestError) {
       setError(requestError.message || "Unable to send reset link right now. Please try again.");
     } finally {
       setSubmitting(false);
+      captchaRef.current?.reset();
+      setCaptchaOpen(false);
     }
+  }
+
+  function handleCaptchaChange(token) {
+    if (!token) return;
+    captchaRef.current?.reset();
+    setCaptchaOpen(false);
+    void submitWithToken(token);
   }
 
   return (
@@ -149,6 +171,7 @@ export default function ForgotPassword() {
           </div>
 
           <button
+            ref={submitButtonRef}
             type="submit"
             disabled={submitting}
             className="auth-submit-btn inline-flex w-full items-center justify-center gap-2 rounded-lg bg-navy py-2.5 text-sm font-semibold text-white hover:bg-royal disabled:cursor-not-allowed disabled:opacity-70"
@@ -158,6 +181,14 @@ export default function ForgotPassword() {
           </button>
         </form>
       )}
+      {captchaOpen ? (
+        <RecaptchaWidget
+          ref={captchaRef}
+          onChange={handleCaptchaChange}
+          onClose={() => setCaptchaOpen(false)}
+          returnFocusRef={submitButtonRef}
+        />
+      ) : null}
     </AuthLayout>
   );
 }

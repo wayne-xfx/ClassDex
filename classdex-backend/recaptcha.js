@@ -1,6 +1,11 @@
 const VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify";
 
+let customTestVerifier = null;
+
 async function verifyRecaptchaToken(token, remoteIp) {
+  if (customTestVerifier) {
+    return customTestVerifier(token, remoteIp);
+  }
   if (!token || !String(token).trim()) {
     return { success: false, message: "Captcha token is required." };
   }
@@ -35,6 +40,16 @@ async function verifyRecaptchaToken(token, remoteIp) {
   }
 }
 
+function setRecaptchaVerifierForTests(verifierFn) {
+  customTestVerifier = verifierFn;
+}
+
+function resetRecaptchaVerifierForTests() {
+  customTestVerifier = null;
+}
+
 module.exports = {
   verifyRecaptchaToken,
+  setRecaptchaVerifierForTests,
+  resetRecaptchaVerifierForTests,
 };
