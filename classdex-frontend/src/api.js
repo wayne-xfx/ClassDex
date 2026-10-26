@@ -25,6 +25,9 @@ async function request(path, options = {}) {
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (response.status === 401 && path !== "/auth/login" && path !== "/auth/me") {
+      window.dispatchEvent(new CustomEvent("classdex:unauthorized"));
+    }
     const requestError = new Error(data.message || "Something went wrong.");
     requestError.status = data.status;
     requestError.httpStatus = response.status;
@@ -64,6 +67,13 @@ export const api = {
   me: () => request("/auth/me"),
   forgotPassword: (payload) =>
     request("/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  validateResetToken: (token) =>
+    request(`/auth/reset-password/validate?token=${encodeURIComponent(token || "")}`),
+  resetPassword: (payload) =>
+    request("/auth/reset-password", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
