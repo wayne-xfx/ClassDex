@@ -27,6 +27,10 @@ async function request(path, options = {}) {
   if (!response.ok) {
     const requestError = new Error(data.message || "Something went wrong.");
     requestError.status = data.status;
+    requestError.httpStatus = response.status;
+    requestError.reason = data.reason;
+    requestError.field = data.field;
+    requestError.retryAfter = data.retryAfter;
     requestError.enrollment = data.enrollment;
     throw requestError;
   }
@@ -58,6 +62,11 @@ export const api = {
     }),
   logout: () => request("/auth/logout", { method: "POST" }),
   me: () => request("/auth/me"),
+  forgotPassword: (payload) =>
+    request("/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   facultyProfile: (options = {}) =>
     request(`/faculty/profile${options.summary ? "?summary=1" : ""}`),
   saveFacultyProfile: (payload) =>

@@ -6044,4 +6044,180 @@ textarea {
 .pending-photo-warning { background: color-mix(in srgb, var(--accent-red) 14%, var(--surface-muted)); color: var(--accent-red); }
 .notifications-section-empty { margin: .25rem 0 0; color: var(--text-muted); font-size: .85rem; }
 
+/* Sprint 5: Account recovery & security UI */
+.auth-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.auth-input-wrap input {
+  background-color: var(--input);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.auth-input-wrap input:focus-visible,
+.password-control input:focus-visible,
+.auth-card input:focus-visible {
+  border-color: var(--royal);
+  box-shadow: var(--focus-ring);
+}
+
+.auth-input-icon {
+  position: absolute;
+  left: 12px;
+  display: inline-grid;
+  place-items: center;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.auth-inline-link:focus-visible,
+.auth-back-link:focus-visible,
+.auth-submit-btn:focus-visible,
+.auth-secondary-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: 8px;
+}
+
+.auth-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--royal);
+  font-size: 0.875rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.auth-back-link:hover {
+  text-decoration: underline;
+}
+
+.auth-back-link svg {
+  transform: rotate(180deg);
+}
+
+.auth-secondary-btn {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 14px;
+  background: var(--card);
+  color: var(--navy);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.auth-secondary-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--royal) 40%, var(--line));
+  background: color-mix(in srgb, var(--royal) 7%, var(--card));
+}
+
+.auth-secondary-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auth-status-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  padding: 11px 13px;
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.auth-status-banner svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.auth-status-error {
+  border-color: color-mix(in srgb, var(--accent-red) 34%, var(--line));
+  background: color-mix(in srgb, var(--accent-red) 11%, var(--card));
+  color: var(--accent-red);
+}
+
+.auth-status-success {
+  border-color: color-mix(in srgb, var(--accent-present) 32%, var(--line));
+  background: color-mix(in srgb, var(--accent-present) 11%, var(--card));
+  color: var(--accent-present);
+}
+
+.auth-outcome-panel {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px;
+  background: color-mix(in srgb, var(--royal) 4%, var(--card));
+}
+
+.auth-outcome-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border-radius: 14px;
+}
+
+.auth-outcome-icon-info {
+  background: color-mix(in srgb, var(--royal) 13%, var(--card));
+  color: var(--royal);
+}
+
+.auth-outcome-icon-success {
+  background: color-mix(in srgb, var(--accent-present) 14%, var(--card));
+  color: var(--accent-present);
+}
+
+.auth-outcome-icon-warning {
+  background: color-mix(in srgb, var(--accent-amber) 16%, var(--card));
+  color: color-mix(in srgb, var(--accent-amber) 82%, var(--ink));
+}
+
+.auth-outcome-icon-danger {
+  background: color-mix(in srgb, var(--accent-red) 14%, var(--card));
+  color: var(--accent-red);
+}
+
+.auth-outcome-lead {
+  margin: 0;
+  color: var(--navy);
+  font-size: 0.96rem;
+  font-weight: 650;
+  line-height: 1.55;
+}
+
+.auth-outcome-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.6;
+}
+
+.auth-outcome-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+@media (max-width: 420px) {
+  .auth-outcome-panel {
+    padding: 16px;
+  }
+}
+
+
 
