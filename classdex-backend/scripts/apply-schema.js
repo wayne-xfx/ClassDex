@@ -64,29 +64,32 @@ async function applySchema() {
       }
     }
 
+    const expectedTables = [
+      "User",
+      "FacultyProfile",
+      "StudentProfile",
+      "Class",
+      "ClassEnrollment",
+      "ClassSession",
+      "AttendanceRecord",
+      "RecitationLog",
+      "Activity",
+      "ActivityScore",
+      "Project",
+      "ProjectScore",
+      "PasswordResetToken",
+      "EmailVerificationToken",
+    ];
     const { rows } = await client.query(
       `SELECT table_name
        FROM information_schema.tables
        WHERE table_schema = current_schema()
          AND table_name = ANY($1::text[])
        ORDER BY table_name`,
-      [[
-        "User",
-        "FacultyProfile",
-        "StudentProfile",
-        "Class",
-        "ClassEnrollment",
-        "ClassSession",
-        "AttendanceRecord",
-        "RecitationLog",
-        "Activity",
-        "ActivityScore",
-        "Project",
-        "ProjectScore",
-      ]],
+      [expectedTables],
     );
     const tables = rows.map(({ table_name }) => table_name);
-    if (tables.length !== 12) {
+    if (tables.length !== expectedTables.length) {
       throw new Error(`Schema setup is incomplete. Found tables: ${tables.join(", ")}`);
     }
     const { rowCount: gracePeriodColumn } = await client.query(
@@ -97,6 +100,15 @@ async function applySchema() {
     );
     if (!gracePeriodColumn) {
       throw new Error("Schema setup is incomplete. Class.gracePeriodMinutes is missing.");
+    }
+    const { rowCount: userSecurityColumns } = await client.query(
+      `SELECT 1 FROM information_schema.columns
+       WHERE table_schema = current_schema()
+         AND table_name = 'User'
+         AND column_name IN ('emailVerified', 'emailVerifiedAt', 'passwordChangedAt')`,
+    );
+    if (userSecurityColumns !== 3) {
+      throw new Error("Schema setup is incomplete. User auth security columns are missing.");
     }
     console.log(`Database schema is ready: ${tables.join(", ")}.`);
   } catch (error) {
