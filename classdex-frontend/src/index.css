@@ -6294,6 +6294,149 @@ textarea {
   background: var(--line-strong);
 }
 
+.verify-email-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 13px 16px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent-amber) 34%, var(--line));
+  background: color-mix(in srgb, var(--accent-amber) 8%, var(--card));
+}
+
+.verify-email-banner-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.verify-email-banner-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent-amber) 18%, var(--card));
+  color: color-mix(in srgb, var(--accent-amber) 82%, var(--ink));
+}
+
+.verify-email-banner-copy {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.verify-email-banner-title {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+.verify-email-banner-title strong {
+  color: var(--navy);
+  font-size: 13.5px;
+  font-weight: 740;
+}
+
+.verify-email-banner-title span {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.verify-email-banner-title b {
+  color: var(--navy);
+  font-weight: 640;
+}
+
+.verify-email-banner-feedback {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.verify-email-banner-feedback.is-success {
+  color: var(--accent-present);
+}
+
+.verify-email-banner-feedback.is-error {
+  color: var(--accent-red);
+}
+
+.verify-email-banner-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.verify-email-resend-btn {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, var(--royal) 28%, var(--line));
+  border-radius: 10px;
+  padding: 0 13px;
+  background: var(--card);
+  color: var(--navy);
+  font-size: 12.5px;
+  font-weight: 670;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.verify-email-resend-btn:hover:not(:disabled) {
+  border-color: var(--royal);
+  background: color-mix(in srgb, var(--royal) 8%, var(--card));
+}
+
+.verify-email-resend-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.verify-email-resend-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.verify-email-dismiss-btn {
+  min-height: 38px;
+  padding: 0 8px;
+}
+
+@media (max-width: 720px) {
+  .verify-email-banner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .verify-email-banner-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+
+  .verify-email-resend-btn {
+    flex: 1 1 auto;
+  }
+}
+
 
 
 
