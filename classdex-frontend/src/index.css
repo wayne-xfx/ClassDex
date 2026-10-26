@@ -6044,4 +6044,498 @@ textarea {
 .pending-photo-warning { background: color-mix(in srgb, var(--accent-red) 14%, var(--surface-muted)); color: var(--accent-red); }
 .notifications-section-empty { margin: .25rem 0 0; color: var(--text-muted); font-size: .85rem; }
 
+/* Sprint 5: Account recovery & security UI */
+.auth-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.auth-input-wrap input {
+  background-color: var(--input);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.auth-input-wrap input:focus-visible,
+.password-control input:focus-visible,
+.auth-card input:focus-visible {
+  border-color: var(--royal);
+  box-shadow: var(--focus-ring);
+}
+
+.auth-input-icon {
+  position: absolute;
+  left: 12px;
+  display: inline-grid;
+  place-items: center;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.auth-inline-link:focus-visible,
+.auth-back-link:focus-visible,
+.auth-submit-btn:focus-visible,
+.auth-secondary-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: 8px;
+}
+
+.auth-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--royal);
+  font-size: 0.875rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.auth-back-link:hover {
+  text-decoration: underline;
+}
+
+.auth-back-link svg {
+  transform: rotate(180deg);
+}
+
+.auth-secondary-btn {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 14px;
+  background: var(--card);
+  color: var(--navy);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.auth-secondary-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--royal) 40%, var(--line));
+  background: color-mix(in srgb, var(--royal) 7%, var(--card));
+}
+
+.auth-secondary-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auth-status-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  padding: 11px 13px;
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.auth-status-banner svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.auth-status-error {
+  border-color: color-mix(in srgb, var(--accent-red) 34%, var(--line));
+  background: color-mix(in srgb, var(--accent-red) 11%, var(--card));
+  color: var(--accent-red);
+}
+
+.auth-status-success {
+  border-color: color-mix(in srgb, var(--accent-present) 32%, var(--line));
+  background: color-mix(in srgb, var(--accent-present) 11%, var(--card));
+  color: var(--accent-present);
+}
+
+.auth-outcome-panel {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px;
+  background: color-mix(in srgb, var(--royal) 4%, var(--card));
+}
+
+.auth-outcome-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border-radius: 14px;
+}
+
+.auth-outcome-icon-info {
+  background: color-mix(in srgb, var(--royal) 13%, var(--card));
+  color: var(--royal);
+}
+
+.auth-outcome-icon-success {
+  background: color-mix(in srgb, var(--accent-present) 14%, var(--card));
+  color: var(--accent-present);
+}
+
+.auth-outcome-icon-warning {
+  background: color-mix(in srgb, var(--accent-amber) 16%, var(--card));
+  color: color-mix(in srgb, var(--accent-amber) 82%, var(--ink));
+}
+
+.auth-outcome-icon-danger {
+  background: color-mix(in srgb, var(--accent-red) 14%, var(--card));
+  color: var(--accent-red);
+}
+
+.auth-outcome-lead {
+  margin: 0;
+  color: var(--navy);
+  font-size: 0.96rem;
+  font-weight: 650;
+  line-height: 1.55;
+}
+
+.auth-outcome-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.6;
+}
+
+.auth-outcome-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+@media (max-width: 420px) {
+  .auth-outcome-panel {
+    padding: 16px;
+  }
+}
+
+.reset-skeleton-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.password-checklist {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--royal) 4%, var(--card));
+}
+
+.password-checklist-title {
+  margin: 0 0 8px;
+  color: var(--navy);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.password-checklist-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.password-checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  transition: color 140ms ease;
+}
+
+.password-checklist-item.is-pending {
+  color: var(--muted);
+}
+
+.password-checklist-item.is-passed {
+  color: var(--accent-present);
+  font-weight: 560;
+}
+
+.password-checklist-item.is-failed {
+  color: var(--accent-red);
+  font-weight: 560;
+}
+
+.password-checklist-indicator {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 999px;
+}
+
+.password-checklist-item.is-passed .password-checklist-indicator {
+  background: color-mix(in srgb, var(--accent-present) 15%, var(--card));
+}
+
+.password-checklist-item.is-failed .password-checklist-indicator {
+  background: color-mix(in srgb, var(--accent-red) 15%, var(--card));
+}
+
+.password-checklist-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+
+.verify-email-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 13px 16px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent-amber) 34%, var(--line));
+  background: color-mix(in srgb, var(--accent-amber) 8%, var(--card));
+}
+
+.verify-email-banner-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.verify-email-banner-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent-amber) 18%, var(--card));
+  color: color-mix(in srgb, var(--accent-amber) 82%, var(--ink));
+}
+
+.verify-email-banner-copy {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.verify-email-banner-title {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+.verify-email-banner-title strong {
+  color: var(--navy);
+  font-size: 13.5px;
+  font-weight: 740;
+}
+
+.verify-email-banner-title span {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.verify-email-banner-title b {
+  color: var(--navy);
+  font-weight: 640;
+}
+
+.verify-email-banner-feedback {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.verify-email-banner-feedback.is-success {
+  color: var(--accent-present);
+}
+
+.verify-email-banner-feedback.is-error {
+  color: var(--accent-red);
+}
+
+.verify-email-banner-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.verify-email-resend-btn {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, var(--royal) 28%, var(--line));
+  border-radius: 10px;
+  padding: 0 13px;
+  background: var(--card);
+  color: var(--navy);
+  font-size: 12.5px;
+  font-weight: 670;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.verify-email-resend-btn:hover:not(:disabled) {
+  border-color: var(--royal);
+  background: color-mix(in srgb, var(--royal) 8%, var(--card));
+}
+
+.verify-email-resend-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.verify-email-resend-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.verify-email-dismiss-btn {
+  min-height: 38px;
+  padding: 0 8px;
+}
+
+@media (max-width: 720px) {
+  .verify-email-banner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .verify-email-banner-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+
+  .verify-email-resend-btn {
+    flex: 1 1 auto;
+  }
+}
+
+.settings-layout {
+  padding-bottom: 32px;
+}
+
+.settings-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 24px;
+  background: var(--card);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.04);
+}
+
+.settings-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 22px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-card-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--royal) 12%, var(--card));
+  color: var(--royal);
+}
+
+.settings-card-header h2 {
+  margin: 0 0 4px;
+  color: var(--navy);
+  font-size: 18px;
+  font-weight: 740;
+  letter-spacing: -0.02em;
+}
+
+.settings-card-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.settings-password-form {
+  display: grid;
+  gap: 16px;
+}
+
+.settings-card .password-control input {
+  background-color: var(--input);
+  border-color: var(--line-strong);
+  color: var(--ink);
+  min-height: 42px;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.settings-card .password-control input.input-invalid {
+  border-color: var(--accent-red);
+}
+
+.settings-card .password-control input:focus-visible {
+  border-color: var(--royal);
+  box-shadow: var(--focus-ring);
+}
+
+.password-control .password-toggle {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.settings-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+.settings-submit-btn {
+  min-width: 180px;
+}
+
+@media (max-width: 600px) {
+  .settings-card {
+    padding: 18px 16px;
+    border-radius: 16px;
+  }
+
+  .settings-form-actions {
+    justify-content: stretch;
+  }
+
+  .settings-submit-btn {
+    width: 100%;
+  }
+}
+
+
+
 

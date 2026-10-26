@@ -25,8 +25,15 @@ async function request(path, options = {}) {
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (response.status === 401 && path !== "/auth/login" && path !== "/auth/me") {
+      window.dispatchEvent(new CustomEvent("classdex:unauthorized"));
+    }
     const requestError = new Error(data.message || "Something went wrong.");
     requestError.status = data.status;
+    requestError.httpStatus = response.status;
+    requestError.reason = data.reason;
+    requestError.field = data.field;
+    requestError.retryAfter = data.retryAfter;
     requestError.enrollment = data.enrollment;
     throw requestError;
   }
@@ -58,6 +65,32 @@ export const api = {
     }),
   logout: () => request("/auth/logout", { method: "POST" }),
   me: () => request("/auth/me"),
+  forgotPassword: (payload) =>
+    request("/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  validateResetToken: (token) =>
+    request(`/auth/reset-password/validate?token=${encodeURIComponent(token || "")}`),
+  resetPassword: (payload) =>
+    request("/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  verifyEmail: (payload) =>
+    request("/auth/verify-email", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  resendVerification: () =>
+    request("/auth/resend-verification", {
+      method: "POST",
+    }),
+  changePassword: (payload) =>
+    request("/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   facultyProfile: (options = {}) =>
     request(`/faculty/profile${options.summary ? "?summary=1" : ""}`),
   saveFacultyProfile: (payload) =>
