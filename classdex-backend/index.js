@@ -297,9 +297,6 @@ async function ensureApprovedEnrollmentsInRoster(classId) {
       where: {
         classId,
         status: "APPROVED",
-        studentProfile: {
-          studentId: { not: null },
-        },
       },
       include: { studentProfile: true },
     });
