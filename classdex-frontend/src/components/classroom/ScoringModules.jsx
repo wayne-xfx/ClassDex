@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Avatar from "../Avatar";
 import Icon from "../Icon";
-import { Badge, Button, Card, Modal, PageHeader, Skeleton, StatusPill } from "../DesignSystem";
+import { Badge, Button, Card, Modal, PageHeader, StatusPill } from "../DesignSystem";
+import ModuleSkeleton from "./ModuleSkeleton";
 import { ConfirmDialog, EmptyState } from "./ClassroomComponents";
 import { formatStudentName } from "./studentNames";
 import { api } from "../../api";
@@ -37,20 +38,6 @@ function parseOptionalInteger(value) {
   if (value === "") return null;
   if (!/^\d+$/.test(value)) return undefined;
   return Number(value);
-}
-
-function ScoreSkeleton() {
-  return (
-    <div className="scoring-skeleton-list" aria-label="Loading scores">
-      {Array.from({ length: 6 }, (_, index) => (
-        <Card key={index} className="scoring-skeleton-row">
-          <Skeleton className="scoring-skeleton-avatar" />
-          <Skeleton className="scoring-skeleton-name" />
-          <Skeleton className="scoring-skeleton-input" />
-        </Card>
-      ))}
-    </div>
-  );
 }
 
 function AbsenceBanner({ count }) {
@@ -484,7 +471,7 @@ export function ActivitiesModule({ sessionId, students = [], tabCache }) {
       <>
         {error ? <div className="notice notice-error" role="alert">{error}<button type="button" onClick={() => { setScoresLoading(true); setError(""); loadScores(active); }}>Retry</button></div> : null}
         {feedback ? <div className="notice notice-error" role="alert">{feedback}<button type="button" onClick={() => setFeedback("")}>Dismiss</button></div> : null}
-        {scoresLoading ? <ScoreSkeleton /> : (
+        {scoresLoading ? <ModuleSkeleton aria-label="Loading activity scores" /> : (
           <ScoringSheet
             title={active.title}
             maxScore={active.maxScore}
@@ -525,7 +512,7 @@ export function ActivitiesModule({ sessionId, students = [], tabCache }) {
       {error ? <div className="notice notice-error" role="alert">{error}<button type="button" onClick={() => { setLoading(true); setError(""); reloadActivities(); }}>Retry</button></div> : null}
       {feedback ? <div className="notice notice-error" role="alert">{feedback}<button type="button" onClick={() => setFeedback("")}>Dismiss</button></div> : null}
       <AbsenceBanner count={rosterAbsentCount} />
-      {loading ? <ScoreSkeleton /> : activities.length ? (
+      {loading ? <ModuleSkeleton aria-label="Loading activities" /> : activities.length ? (
         <div className="activity-list">
           {activities.map((activity) => (
             <Card key={activity.id} className="activity-card">
@@ -702,7 +689,7 @@ export function ProjectsModule({ classId, sessionId, students = [], tabCache }) 
           </label>
           <Button variant="secondary" onClick={saveMaxScore} disabled={savingMaxScore}>{savingMaxScore ? "Saving…" : "Save maximum"}</Button>
         </div>
-        {scoresLoading ? <ScoreSkeleton /> : (
+        {scoresLoading ? <ModuleSkeleton aria-label="Loading project scores" /> : (
           <ScoringSheet
             title={active.type === "MIDTERM" ? "Midterm Project" : "Finals Project"}
             maxScore={active.maxScore}
@@ -722,7 +709,7 @@ export function ProjectsModule({ classId, sessionId, students = [], tabCache }) 
       <PageHeader eyebrow="Class projects" icon="book" title="Projects" description="A shared scoring sheet for your two term projects." />
       {error ? <div className="notice notice-error" role="alert">{error}<button type="button" onClick={() => { setLoading(true); setError(""); loadProjects(); }}>Retry</button></div> : null}
       <AbsenceBanner count={rosterAbsentCount} />
-      {loading ? <ScoreSkeleton /> : (
+      {loading ? <ModuleSkeleton aria-label="Loading projects" /> : (
         <div className="project-card-grid">
           {["MIDTERM", "FINALS"].map((type) => {
             const project = projects.find((item) => item.type === type);

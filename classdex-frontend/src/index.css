@@ -1502,6 +1502,40 @@ textarea {
   box-shadow: 0 2px 7px rgba(20, 38, 70, 0.09);
 }
 
+.scoring-skeleton-list {
+  display: grid;
+  gap: 8px;
+}
+
+.scoring-skeleton-row {
+  display: flex;
+  min-height: 78px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 10px 14px;
+}
+
+.scoring-skeleton-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.scoring-skeleton-name {
+  height: 18px;
+  width: min(220px, 50%);
+  flex-grow: 1;
+}
+
+.scoring-skeleton-input {
+  width: 68px;
+  height: 40px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
 .scoring-list {
   display: grid;
   gap: 8px;
