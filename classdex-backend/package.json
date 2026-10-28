@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node --test",
+    "test": "node --test --test-concurrency=1",
     "start": "node index.js",
     "dev": "node index.js",
     "db:setup": "prisma generate && node scripts/apply-schema.js"

@@ -106,12 +106,12 @@ export default function FacultyClass() {
   useEffect(() => {
     let cancelled = false;
     api
-      .todaySession(id)
-      .then(() => api.classDeck(id))
+      .classDeck(id)
       .then((deck) => {
         if (!cancelled) {
           setClassRecord({ ...deck.class, session: deck.session, students: deck.students });
           setGracePeriodMinutes(deck.class.gracePeriodMinutes);
+          setStudentListCount(deck.rosterCount ?? 0);
           setAttendanceOverrides({});
           setRecitationCall(null);
           setRecitationHistory((deck.recitationHistory || []).map(toRecitationCall));
@@ -163,20 +163,51 @@ export default function FacultyClass() {
     };
   }, [inviteLink]);
 
-  useEffect(() => { let cancelled = false; api.classRoster(id).then(({ roster }) => { if (!cancelled) setStudentListCount(roster.length); }).catch(() => {}); return () => { cancelled = true; }; }, [id]);
+  // Roster count initialized from classDeck response (P3)
+  const tabCacheRef = useRef(new Map());
+  const tabCache = useMemo(() => ({
+    get: (key) => tabCacheRef.current.get(key),
+    set: (key, val) => tabCacheRef.current.set(key, val),
+    invalidate: (prefix) => {
+      if (!prefix) {
+        tabCacheRef.current.clear();
+        return;
+      }
+      for (const k of tabCacheRef.current.keys()) {
+        if (k.includes(prefix)) {
+          tabCacheRef.current.delete(k);
+        }
+      }
+    },
+  }), []);
+
+  const lastPendingFetchRef = useRef(0);
   const refreshPending = useCallback(
-    () =>
-      api
+    (isFocus = false) => {
+      const now = Date.now();
+      if (isFocus && now - lastPendingFetchRef.current < 10000) return Promise.resolve();
+      lastPendingFetchRef.current = now;
+      return api
         .pendingEnrollments(id)
         .then(({ pending, autoApproved, absenceWarnings: warnings }) => {
           setPendingEnrollments(pending || []);
           setAutoApprovedNotifications(autoApproved || []);
           setAbsenceWarnings(warnings || []);
         })
-        .catch(() => {}),
+        .catch(() => {});
+    },
     [id],
   );
-  useEffect(() => { refreshPending(); const interval = window.setInterval(refreshPending, 30000); window.addEventListener("focus", refreshPending); return () => { window.clearInterval(interval); window.removeEventListener("focus", refreshPending); }; }, [refreshPending]);
+  useEffect(() => {
+    refreshPending();
+    const interval = window.setInterval(() => refreshPending(false), 30000);
+    const onFocus = () => refreshPending(true);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [refreshPending]);
 
   const dismissToast = useCallback(() => {
     setNotice("");
@@ -197,8 +228,10 @@ export default function FacultyClass() {
       setPendingEnrollments((current) => current.filter((item) => item.id !== enrollmentId));
       if (status === "APPROVED") {
         try {
+          tabCache.invalidate();
           const deck = await api.classDeck(id);
           setClassRecord({ ...deck.class, session: deck.session, students: deck.students });
+          setStudentListCount(deck.rosterCount ?? 0);
         } catch {
           showToast("Student approved, but the class list could not refresh.", "error");
           return;
@@ -257,10 +290,12 @@ export default function FacultyClass() {
   }
   async function refreshAfterRosterApproval() {
     try {
+      tabCache.invalidate();
       await Promise.all([
         refreshPending(),
         api.classDeck(id).then((deck) => {
           setClassRecord({ ...deck.class, session: deck.session, students: deck.students });
+          setStudentListCount(deck.rosterCount ?? 0);
         }),
       ]);
     } catch {
@@ -337,6 +372,9 @@ export default function FacultyClass() {
   }
 
   async function updateAttendance(student, requestedStatus, notify = true) {
+    tabCache.invalidate("activities");
+    tabCache.invalidate("projects");
+    tabCache.invalidate("quizzes");
     const previousStatus = student.status;
     const effectiveGraceMinutes =
       Number.isInteger(gracePeriodMinutes) && gracePeriodMinutes >= 0
@@ -409,11 +447,7 @@ export default function FacultyClass() {
 
   async function copyInvite() {
     if (!classRecord) return;
-    try {
-      const { roster } = await api.classRoster(id);
-      if (!roster.length && !window.confirm("You haven't added a student list yet. Join requests that don't match a list entry will need your manual approval. Share the invite anyway?")) return;
-    } catch (rosterError) {
-      showToast(rosterError.message, "error");
+    if (studentListCount === 0 && !window.confirm("You haven't added a student list yet. Join requests that don't match a list entry will need your manual approval. Share the invite anyway?")) {
       return;
     }
     try {
@@ -654,7 +688,7 @@ export default function FacultyClass() {
               aria-labelledby={activeModule === "deck" ? "module-deck-link" : `module-tab-${activeModule}`}
               className="classroom-module"
             >
-              {activeModule === "student-list" ? <StudentListManager classId={id} onCountChange={setStudentListCount} onAutoApproved={refreshAfterRosterApproval} onClose={() => setActiveModule("deck")} /> : activeModule === "deck" ? (
+              {activeModule === "student-list" ? <StudentListManager classId={id} onCountChange={setStudentListCount} onAutoApproved={refreshAfterRosterApproval} onClose={() => setActiveModule("deck")} tabCache={tabCache} /> : activeModule === "deck" ? (
                 <>
                   <div className="deck-toolbar">
                     <div className="deck-title">
@@ -761,13 +795,13 @@ export default function FacultyClass() {
                   onAnimationChange={setRecitationAnimationEnabled}
                 />
               ) : activeModule === "activities" ? (
-                <ActivitiesModule key={classRecord.session.id} sessionId={classRecord.session.id} students={sortedStudents} />
+                <ActivitiesModule key={classRecord.session.id} sessionId={classRecord.session.id} students={sortedStudents} tabCache={tabCache} />
               ) : activeModule === "projects" ? (
-                <ProjectsModule key={id} classId={id} sessionId={classRecord.session.id} students={sortedStudents} />
+                <ProjectsModule key={id} classId={id} sessionId={classRecord.session.id} students={sortedStudents} tabCache={tabCache} />
               ) : activeModule === "export" ? (
                 <ExportModule classRecord={classRecord} students={sortedStudents} pendingEnrollments={pendingEnrollments} onExcel={downloadExcelExport} onCsv={downloadCsvExport} />
               ) : activeModule === "quiz" ? (
-                <QuizModule classId={id} students={sortedStudents} attendanceTaken={students.some((student) => student.status !== "UNMARKED")} onTakeAttendance={() => setActiveModule("attendance")} />
+                <QuizModule classId={id} students={sortedStudents} attendanceTaken={students.some((student) => student.status !== "UNMARKED")} onTakeAttendance={() => setActiveModule("attendance")} tabCache={tabCache} />
               ) : null}
             </section>
             {selectedStudent ? (

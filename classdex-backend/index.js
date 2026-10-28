@@ -48,14 +48,30 @@ const {
 const FORGOT_PASSWORD_GENERIC_MESSAGE =
   "If an account exists for that email, we've sent a reset link.";
 
+const { studentPhotoUrl } = require("./src/utils/studentPhotoUrl");
+const { manilaDate } = require("./src/utils/dates");
+
 const SCORE_STUDENT_SELECT = {
   id: true,
   name: true,
-  photo: true,
   studentId: true,
   program: true,
   section: true,
+  updatedAt: true,
 };
+
+function attachPhotoUrl(item) {
+  if (!item) return item;
+  if (item.studentProfile) {
+    const photoUrl = studentPhotoUrl(item.studentProfile);
+    item.studentProfile = {
+      ...item.studentProfile,
+      photo: photoUrl,
+      photoUrl,
+    };
+  }
+  return item;
+}
 
 const app = express();
 const trustProxyHops =
@@ -324,16 +340,7 @@ async function autoApproveRosterMatches(classId) {
   return approvedCount;
 }
 
-function manilaDate(now = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Manila",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(now);
-  const dateParts = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
-  return new Date(`${dateParts.year}-${dateParts.month}-${dateParts.day}T00:00:00.000Z`);
-}
+// manilaDate imported from ./src/utils/dates
 
 async function findOwnedSession(sessionId, facultyId) {
   return prisma.classSession.findFirst({
@@ -1266,7 +1273,7 @@ async function getActiveAbsenceWarningsForClass(classId, sectionName = "") {
             studentId: true,
             program: true,
             section: true,
-            photo: true,
+            updatedAt: true,
           },
         },
       },
@@ -1318,7 +1325,8 @@ async function getActiveAbsenceWarningsForClass(classId, sectionName = "") {
         studentName: student.name,
         program: student.program,
         section: student.section,
-        photo: student.photo,
+        photo: studentPhotoUrl(student),
+        photoUrl: studentPhotoUrl(student),
         absentCount,
         isRead: absentCount <= readAbsenceCount,
         threshold: ABSENCE_WARNING_THRESHOLD,
@@ -1590,13 +1598,18 @@ async function enrichRosterWithPhotos(roster) {
   const studentIds = [...new Set(roster.map((entry) => entry.studentId).filter(Boolean))];
   const profiles = await prisma.studentProfile.findMany({
     where: { studentId: { in: studentIds } },
-    select: { studentId: true, photo: true },
+    select: { id: true, studentId: true, updatedAt: true },
   });
-  const photoByStudentId = new Map(profiles.map((p) => [p.studentId, p.photo]));
-  return roster.map((entry) => ({
-    ...entry,
-    photo: photoByStudentId.get(entry.studentId) || null,
-  }));
+  const profileByStudentId = new Map(profiles.map((p) => [p.studentId, p]));
+  return roster.map((entry) => {
+    const profile = profileByStudentId.get(entry.studentId);
+    const photoUrl = profile ? studentPhotoUrl(profile) : null;
+    return {
+      ...entry,
+      photo: photoUrl,
+      photoUrl,
+    };
+  });
 }
 
 app.get(
@@ -1702,7 +1715,7 @@ app.get("/api/classes/:id/pending", requireAuth, requireRole("FACULTY"), async (
               studentId: true,
               program: true,
               section: true,
-              photo: true,
+              updatedAt: true,
             },
           },
         },
@@ -1712,26 +1725,40 @@ app.get("/api/classes/:id/pending", requireAuth, requireRole("FACULTY"), async (
         where: { classId: ownedClass.id, autoApprovedAt: { not: null } },
         include: {
           studentProfile: {
-            select: { id: true, name: true, studentId: true, program: true, section: true, photo: true },
+            select: { id: true, name: true, studentId: true, program: true, section: true, updatedAt: true },
           },
         },
         orderBy: { autoApprovedAt: "desc" },
       }),
       getActiveAbsenceWarningsForClass(ownedClass.id, ownedClass.sectionName),
     ]);
+    const formatEnrollment = (enrollment) => {
+      const photoUrl = studentPhotoUrl(enrollment.studentProfile);
+      return {
+        ...enrollment,
+        studentProfile: enrollment.studentProfile
+          ? {
+              ...enrollment.studentProfile,
+              photo: photoUrl,
+              photoUrl,
+            }
+          : null,
+      };
+    };
     const approvedNotifications = autoApproved.map((enrollment) => ({
-      ...enrollment,
+      ...formatEnrollment(enrollment),
       isRead: Boolean(enrollment.autoApprovalReadAt),
     }));
+    const formattedPending = pending.map(formatEnrollment);
     const unreadAutoApproved = approvedNotifications.filter((enrollment) => !enrollment.isRead).length;
     const unreadWarnings = absenceWarnings.filter((warning) => !warning.isRead).length;
     return res.json({
-      pending,
+      pending: formattedPending,
       autoApproved: approvedNotifications,
       absenceWarnings,
       threshold: ABSENCE_WARNING_THRESHOLD,
-      unreadNotificationCount: pending.length + unreadAutoApproved + unreadWarnings,
-      totalNotifications: pending.length + unreadAutoApproved + unreadWarnings,
+      unreadNotificationCount: formattedPending.length + unreadAutoApproved + unreadWarnings,
+      totalNotifications: formattedPending.length + unreadAutoApproved + unreadWarnings,
     });
   } catch (error) {
     return res.status(500).json({ message: "Unable to load pending requests." });
@@ -1893,11 +1920,49 @@ app.get("/api/classes/:id/quizzes", requireAuth, requireRole("FACULTY"), async (
   try {
     if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
     const sessions = await prisma.quizSession.findMany({ where: { classId: req.params.id }, include: { scores: true }, orderBy: { date: "desc" } });
-    const enriched = await Promise.all(sessions.map(async (session) => {
-      const attendanceSession = await prisma.classSession.findUnique({ where: { classId_date: { classId: req.params.id, date: new Date(new Date(session.date).toISOString().slice(0, 10)) } }, select: { attendance: { select: { studentId: true, status: true } } } });
-      const absentIds = new Set((attendanceSession?.attendance || []).filter((record) => record.status === "ABSENT").map((record) => record.studentId));
-      return { ...session, scores: session.scores.map((score) => ({ ...score, isAbsent: score.isAbsent || absentIds.has(score.studentId), score: absentIds.has(score.studentId) ? null : score.score })) };
-    }));
+    if (!sessions.length) return res.json({ sessions: [] });
+
+    const dateMap = new Map();
+    for (const s of sessions) {
+      const dStr = new Date(s.date).toISOString().slice(0, 10);
+      if (!dateMap.has(dStr)) dateMap.set(dStr, new Date(dStr));
+    }
+    const distinctDates = [...dateMap.values()];
+
+    const attendanceSessions = await prisma.classSession.findMany({
+      where: {
+        classId: req.params.id,
+        date: { in: distinctDates },
+      },
+      select: {
+        date: true,
+        attendance: { select: { studentId: true, status: true } },
+      },
+    });
+
+    const absentIdsByDate = new Map();
+    for (const attSession of attendanceSessions) {
+      const dStr = attSession.date.toISOString().slice(0, 10);
+      const absentIds = new Set(
+        attSession.attendance
+          .filter((record) => record.status === "ABSENT")
+          .map((record) => record.studentId),
+      );
+      absentIdsByDate.set(dStr, absentIds);
+    }
+
+    const enriched = sessions.map((session) => {
+      const dStr = new Date(session.date).toISOString().slice(0, 10);
+      const absentIds = absentIdsByDate.get(dStr) || new Set();
+      return {
+        ...session,
+        scores: session.scores.map((score) => ({
+          ...score,
+          isAbsent: score.isAbsent || absentIds.has(score.studentId),
+          score: absentIds.has(score.studentId) ? null : score.score,
+        })),
+      };
+    });
     return res.json({ sessions: enriched });
   } catch (error) { return res.status(500).json({ message: "Unable to load quiz sessions." }); }
 });
@@ -1934,6 +1999,85 @@ app.delete("/api/quizzes/:sessionId", requireAuth, requireRole("FACULTY"), async
     await prisma.quizSession.delete({ where: { id: session.id } });
     return res.status(204).end();
   } catch (error) { return res.status(500).json({ message: "Unable to delete quiz session." }); }
+});
+
+app.put("/api/quizzes/:sessionId/scores", requireAuth, requireRole("FACULTY"), async (req, res) => {
+  const rawItems = Array.isArray(req.body) ? req.body : req.body?.scores;
+  if (!Array.isArray(rawItems)) {
+    return res.status(400).json({ message: "Scores list must be an array of { studentId, score }." });
+  }
+  try {
+    const session = await prisma.quizSession.findFirst({
+      where: { id: req.params.sessionId, class: { is: { facultyId: req.session.userId } } },
+    });
+    if (!session) return res.status(404).json({ message: "Quiz session not found." });
+
+    for (const item of rawItems) {
+      if (!item || typeof item.studentId !== "string" || !item.studentId.trim()) {
+        return res.status(400).json({ message: "Every item must have a valid studentId." });
+      }
+      const score = Number(item.score);
+      if (!Number.isInteger(score) || score < 0) {
+        return res.status(400).json({ message: "Score must be a non-negative whole number." });
+      }
+      if (score > session.totalItems) {
+        return res.status(400).json({ message: `Score cannot be higher than ${session.totalItems}.` });
+      }
+    }
+
+    const studentIds = rawItems.map((item) => item.studentId.trim());
+
+    const attendanceSession = await prisma.classSession.findUnique({
+      where: {
+        classId_date: {
+          classId: session.classId,
+          date: new Date(new Date(session.date).toISOString().slice(0, 10)),
+        },
+      },
+      select: {
+        attendance: {
+          where: { studentId: { in: studentIds } },
+          select: { studentId: true, status: true },
+        },
+      },
+    });
+
+    const absentSet = new Set(
+      (attendanceSession?.attendance || [])
+        .filter((r) => r.status === "ABSENT")
+        .map((r) => r.studentId),
+    );
+
+    const savedScores = await prisma.$transaction(
+      rawItems.map((item) => {
+        const studentId = item.studentId.trim();
+        const isAbsent = absentSet.has(studentId);
+        const score = isAbsent ? null : Number(item.score);
+        return prisma.quizScore.upsert({
+          where: {
+            sessionId_studentId: {
+              sessionId: session.id,
+              studentId,
+            },
+          },
+          create: {
+            sessionId: session.id,
+            studentId,
+            score,
+            isAbsent,
+          },
+          update: {
+            score,
+            isAbsent,
+          },
+        });
+      }),
+    );
+    return res.json({ scores: savedScores });
+  } catch (error) {
+    console.error("Bulk quiz scores update failed:", error);
+    return res.status(500).json({ message: "Unable to save quiz scores." });
+  }
 });
 
 app.put("/api/quizzes/:sessionId/scores/:studentId", requireAuth, requireRole("FACULTY"), async (req, res) => {
@@ -1981,6 +2125,76 @@ app.get(
   },
 );
 
+app.get("/api/students/:profileId/photo", requireAuth, async (req, res) => {
+  try {
+    const profile = await prisma.studentProfile.findUnique({
+      where: { id: req.params.profileId },
+      select: {
+        id: true,
+        userId: true,
+        studentId: true,
+        photo: true,
+        updatedAt: true,
+      },
+    });
+    if (!profile || !profile.photo) {
+      return res.status(404).json({ message: "Photo not found." });
+    }
+
+    const isSelf = profile.userId === req.session.userId;
+    if (!isSelf) {
+      if (req.session.role === "FACULTY") {
+        const allowed = await prisma.class.findFirst({
+          where: {
+            facultyId: req.session.userId,
+            OR: [
+              { enrollments: { some: { studentProfileId: profile.id } } },
+              { roster: { some: { studentId: profile.studentId } } },
+            ],
+          },
+          select: { id: true },
+        });
+        if (!allowed) {
+          return res.status(403).json({ message: "You do not have permission to view this photo." });
+        }
+      } else {
+        return res.status(403).json({ message: "You do not have permission to view this photo." });
+      }
+    }
+
+    if (/^https?:\/\//i.test(profile.photo.trim())) {
+      res.setHeader("Cache-Control", "private, max-age=86400");
+      return res.redirect(302, profile.photo.trim());
+    }
+
+    const etag = `"${profile.updatedAt ? new Date(profile.updatedAt).getTime() : 'photo'}"`;
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    res.setHeader("ETag", etag);
+
+    if (req.headers["if-none-match"] === etag) {
+      return res.status(304).end();
+    }
+
+    let mimeType = "image/jpeg";
+    let base64Data = profile.photo;
+    const matches = profile.photo.match(/^data:([^;]+);base64,(.+)$/);
+    if (matches) {
+      mimeType = matches[1];
+      base64Data = matches[2];
+    } else if (profile.photo.startsWith("data:")) {
+      return res.status(400).json({ message: "Invalid photo format." });
+    }
+
+    const buffer = Buffer.from(base64Data, "base64");
+    res.setHeader("Content-Type", mimeType);
+    res.setHeader("Content-Length", buffer.length);
+    return res.end(buffer);
+  } catch (error) {
+    console.error("Student photo fetch failed:", error);
+    return res.status(500).json({ message: "Unable to retrieve student photo." });
+  }
+});
+
 app.get(
   "/api/classes/:id/deck",
   requireAuth,
@@ -1999,7 +2213,7 @@ app.get(
                   name: true,
                   address: true,
                   email: true,
-                  photo: true,
+                  updatedAt: true,
                   studentId: true,
                   program: true,
                   section: true,
@@ -2014,7 +2228,7 @@ app.get(
         return res.status(404).json({ message: "Class not found." });
       }
 
-      const session = await prisma.classSession.findUnique({
+      let session = await prisma.classSession.findUnique({
         where: {
           classId_date: {
             classId: classRecord.id,
@@ -2032,7 +2246,7 @@ app.get(
                 select: {
                   id: true,
                   name: true,
-                  photo: true,
+                  updatedAt: true,
                   studentId: true,
                   program: true,
                   section: true,
@@ -2043,6 +2257,43 @@ app.get(
           },
         },
       });
+
+      if (!session) {
+        session = await prisma.classSession.create({
+          data: {
+            classId: classRecord.id,
+            date: manilaDate(),
+            startedAt: null,
+          },
+          include: {
+            attendance: {
+              select: { studentId: true, status: true, markedAt: true },
+              orderBy: { markedAt: "asc" },
+            },
+            recitations: {
+              include: {
+                studentProfile: {
+                  select: {
+                    id: true,
+                    name: true,
+                    updatedAt: true,
+                    studentId: true,
+                    program: true,
+                    section: true,
+                  },
+                },
+              },
+              orderBy: { calledAt: "desc" },
+            },
+          },
+        });
+      }
+
+      const [rosterCount, pendingCount] = await Promise.all([
+        prisma.classRoster.count({ where: { classId: classRecord.id } }),
+        prisma.classEnrollment.count({ where: { classId: classRecord.id, status: "PENDING" } }),
+      ]);
+
       const { enrollments, ...classData } = classRecord;
       const attendanceByStudent = new Map(
         (session?.attendance || []).map((record) => [
@@ -2052,11 +2303,18 @@ app.get(
       );
       return res.json({
         class: classData,
-        students: enrollments.map(({ studentProfile }) => ({
-          ...studentProfile,
-          studentProfileId: studentProfile.id,
-          attendanceStatus: attendanceByStudent.get(studentProfile.id) || null,
-        })),
+        rosterCount,
+        pendingCount,
+        students: enrollments.map(({ studentProfile }) => {
+          const photoUrl = studentPhotoUrl(studentProfile);
+          return {
+            ...studentProfile,
+            photo: photoUrl,
+            photoUrl,
+            studentProfileId: studentProfile.id,
+            attendanceStatus: attendanceByStudent.get(studentProfile.id) || null,
+          };
+        }),
         session: session
           ? {
               id: session.id,
@@ -2066,7 +2324,19 @@ app.get(
               endedAt: session.endedAt,
             }
           : null,
-        recitationHistory: session?.recitations || [],
+        recitationHistory: (session?.recitations || []).map((r) => {
+          const photoUrl = studentPhotoUrl(r.studentProfile);
+          return {
+            ...r,
+            studentProfile: r.studentProfile
+              ? {
+                  ...r.studentProfile,
+                  photo: photoUrl,
+                  photoUrl,
+                }
+              : null,
+          };
+        }),
       });
     } catch (error) {
       console.error("Class deck lookup failed:", error);
@@ -2100,7 +2370,7 @@ app.get(
             select: {
               id: true,
               name: true,
-              photo: true,
+              updatedAt: true,
               studentId: true,
               program: true,
               section: true,
@@ -2142,8 +2412,10 @@ app.get(
         }),
       ]);
 
+      const recProfile = enrollment.studentProfile;
+      const recPhotoUrl = studentPhotoUrl(recProfile);
       return res.json({
-        student: enrollment.studentProfile,
+        student: { ...recProfile, photo: recPhotoUrl, photoUrl: recPhotoUrl },
         attendance: attendanceRecords,
         recitations: recitationRecords,
       });
@@ -2278,14 +2550,53 @@ app.get(
       }
       const activities = await prisma.activity.findMany({
         where: { sessionId: sessionRecord.id },
-        include: {
-          scores: {
-            include: { studentProfile: { select: SCORE_STUDENT_SELECT } },
-          },
+        select: {
+          id: true,
+          classId: true,
+          sessionId: true,
+          title: true,
+          maxScore: true,
+          createdAt: true,
         },
         orderBy: { createdAt: "asc" },
       });
-      return res.json({ activities });
+
+      if (!activities.length) {
+        return res.json({ activities: [] });
+      }
+
+      const activityIds = activities.map((a) => a.id);
+      const [scoredGroups, absentGroups] = await Promise.all([
+        prisma.activityScore.groupBy({
+          by: ["activityId"],
+          where: {
+            activityId: { in: activityIds },
+            score: { not: null },
+            isAbsent: false,
+          },
+          _count: { _all: true },
+        }),
+        prisma.activityScore.groupBy({
+          by: ["activityId"],
+          where: {
+            activityId: { in: activityIds },
+            isAbsent: true,
+          },
+          _count: { _all: true },
+        }),
+      ]);
+
+      const scoredMap = new Map(scoredGroups.map((g) => [g.activityId, g._count._all]));
+      const absentMap = new Map(absentGroups.map((g) => [g.activityId, g._count._all]));
+
+      return res.json({
+        activities: activities.map((a) => ({
+          ...a,
+          scoredCount: scoredMap.get(a.id) || 0,
+          absentCount: absentMap.get(a.id) || 0,
+          scores: [],
+        })),
+      });
     } catch (error) {
       console.error("Session activities lookup failed:", error);
       return res.status(500).json({ message: "Unable to load activities." });
@@ -2459,13 +2770,18 @@ app.get(
       });
       const scores = enrollments.map(({ studentProfile }) => {
         const { activityScores, ...profile } = studentProfile;
-        return activityScores[0] || {
+        const photoUrl = studentPhotoUrl(profile);
+        const profileWithPhoto = { ...profile, photo: photoUrl, photoUrl };
+        if (activityScores[0]) {
+          return { ...activityScores[0], studentProfile: profileWithPhoto };
+        }
+        return {
           id: null,
           activityId: activity.id,
           studentId: profile.id,
           score: null,
           isAbsent: false,
-          studentProfile: profile,
+          studentProfile: profileWithPhoto,
         };
       });
       return res.json({ scores });
@@ -2541,7 +2857,7 @@ app.put(
         update: { score, isAbsent: false },
         include: { studentProfile: { select: SCORE_STUDENT_SELECT } },
       });
-      return res.json({ score: activityScore });
+      return res.json({ score: attachPhotoUrl(activityScore) });
     } catch (error) {
       console.error("Activity score update failed:", error);
       return res.status(500).json({ message: "Unable to update the activity score." });
@@ -2562,56 +2878,82 @@ app.get(
       if (!classRecord) {
         return res.status(404).json({ message: "Class not found." });
       }
-      const projects = await prisma.$transaction(async (transaction) => {
-        const existingTypes = new Set(
-          (await transaction.project.findMany({
-            where: { classId: classRecord.id },
-            select: { type: true },
-          })).map(({ type }) => type),
-        );
-        const todaySession = await transaction.classSession.findUnique({
-          where: {
-            classId_date: {
-              classId: classRecord.id,
-              date: manilaDate(),
-            },
-          },
-          select: { id: true },
-        });
-        for (const type of ["MIDTERM", "FINALS"]) {
-          await transaction.project.upsert({
-            where: { classId_type: { classId: classRecord.id, type } },
-            create: { classId: classRecord.id, type },
-            update: {},
-          });
-        }
-        for (const type of ["MIDTERM", "FINALS"]) {
-          if (!existingTypes.has(type) && todaySession) {
-            const project = await transaction.project.findUnique({
-              where: { classId_type: { classId: classRecord.id, type } },
-              select: { id: true },
-            });
-            await createAbsentProjectScores(
-              transaction,
-              project.id,
-              todaySession.id,
-            );
-          }
-        }
-        return transaction.project.findMany({
-          where: { classId: classRecord.id },
-          include: {
-            scores: {
-              include: {
-                studentProfile: { select: SCORE_STUDENT_SELECT },
-                session: { select: { id: true, date: true } },
+
+      const existingCount = await prisma.project.count({
+        where: { classId: classRecord.id },
+      });
+
+      if (existingCount < 2) {
+        await prisma.$transaction(async (transaction) => {
+          const existingTypes = new Set(
+            (await transaction.project.findMany({
+              where: { classId: classRecord.id },
+              select: { type: true },
+            })).map(({ type }) => type),
+          );
+          const todaySession = await transaction.classSession.findUnique({
+            where: {
+              classId_date: {
+                classId: classRecord.id,
+                date: manilaDate(),
               },
             },
-          },
-          orderBy: { type: "asc" },
+            select: { id: true },
+          });
+          for (const type of ["MIDTERM", "FINALS"]) {
+            await transaction.project.upsert({
+              where: { classId_type: { classId: classRecord.id, type } },
+              create: { classId: classRecord.id, type },
+              update: {},
+            });
+          }
+          for (const type of ["MIDTERM", "FINALS"]) {
+            if (!existingTypes.has(type) && todaySession) {
+              const project = await transaction.project.findUnique({
+                where: { classId_type: { classId: classRecord.id, type } },
+                select: { id: true },
+              });
+              await createAbsentProjectScores(
+                transaction,
+                project.id,
+                todaySession.id,
+              );
+            }
+          }
         });
+      }
+
+      const projects = await prisma.project.findMany({
+        where: { classId: classRecord.id },
+        include: {
+          scores: {
+            include: {
+              studentProfile: { select: SCORE_STUDENT_SELECT },
+              session: { select: { id: true, date: true } },
+            },
+          },
+        },
+        orderBy: { type: "asc" },
       });
-      return res.json({ projects });
+
+      const formattedProjects = projects.map((p) => ({
+        ...p,
+        scores: (p.scores || []).map((s) => {
+          const photoUrl = studentPhotoUrl(s.studentProfile);
+          return {
+            ...s,
+            studentProfile: s.studentProfile
+              ? {
+                  ...s.studentProfile,
+                  photo: photoUrl,
+                  photoUrl,
+                }
+              : null,
+          };
+        }),
+      }));
+
+      return res.json({ projects: formattedProjects });
     } catch (error) {
       console.error("Class projects lookup failed:", error);
       return res.status(500).json({ message: "Unable to load this class's projects." });
@@ -2704,7 +3046,12 @@ app.get(
       });
       const scores = enrollments.map(({ studentProfile }) => {
         const { projectScores, ...profile } = studentProfile;
-        return projectScores[0] || {
+        const photoUrl = studentPhotoUrl(profile);
+        const profileWithPhoto = { ...profile, photo: photoUrl, photoUrl };
+        if (projectScores[0]) {
+          return { ...projectScores[0], studentProfile: profileWithPhoto };
+        }
+        return {
           id: null,
           projectId: project.id,
           studentId: profile.id,
@@ -2712,7 +3059,7 @@ app.get(
           score: null,
           isAbsent: false,
           session: null,
-          studentProfile: profile,
+          studentProfile: profileWithPhoto,
         };
       });
       return res.json({ scores });
@@ -2830,7 +3177,7 @@ app.put(
           },
         });
       });
-      return res.json({ score: projectScore });
+      return res.json({ score: attachPhotoUrl(projectScore) });
     } catch (error) {
       console.error("Project score update failed:", error);
       return res.status(500).json({ message: "Unable to update the project score." });
@@ -2986,7 +3333,7 @@ app.post(
             select: {
               id: true,
               name: true,
-              photo: true,
+              updatedAt: true,
               studentId: true,
               program: true,
               section: true,
@@ -3034,7 +3381,7 @@ app.post(
             select: {
               id: true,
               name: true,
-              photo: true,
+              updatedAt: true,
               studentId: true,
               program: true,
               section: true,
@@ -3042,7 +3389,7 @@ app.post(
           },
         },
       });
-      return res.json({ recitation: log });
+      return res.json({ recitation: attachPhotoUrl(log) });
     } catch (error) {
       console.error("Recitation shuffle failed:", error);
       return res.status(500).json({ message: "Unable to select a student for recitation." });
@@ -3082,7 +3429,7 @@ app.patch(
             select: {
               id: true,
               name: true,
-              photo: true,
+              updatedAt: true,
               studentId: true,
               program: true,
               section: true,
@@ -3090,7 +3437,7 @@ app.patch(
           },
         },
       });
-      return res.json({ recitation: updatedLog });
+      return res.json({ recitation: attachPhotoUrl(updatedLog) });
     } catch (error) {
       console.error("Recitation score update failed:", error);
       return res.status(500).json({ message: "Unable to update the recitation score." });

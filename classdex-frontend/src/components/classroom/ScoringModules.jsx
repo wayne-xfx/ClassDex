@@ -333,11 +333,13 @@ function ActivityForm({ activity, onClose, onSubmit, saving }) {
   );
 }
 
-export function ActivitiesModule({ sessionId, students }) {
-  const [activities, setActivities] = useState([]);
+export function ActivitiesModule({ sessionId, students = [], tabCache }) {
+  const cacheKey = `activities:${sessionId}`;
+  const cachedActivities = tabCache?.get(cacheKey);
+  const [activities, setActivities] = useState(cachedActivities || []);
   const [active, setActive] = useState(null);
-  const [entries, setEntries] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [rawScores, setRawScores] = useState([]);
+  const [loading, setLoading] = useState(!cachedActivities);
   const [scoresLoading, setScoresLoading] = useState(false);
   const [error, setError] = useState("");
   const [formActivity, setFormActivity] = useState(undefined);
@@ -349,18 +351,22 @@ export function ActivitiesModule({ sessionId, students }) {
     try {
       const response = await api.sessionActivities(sessionId);
       setActivities(response.activities || []);
+      tabCache?.set(cacheKey, response.activities || []);
     } catch (loadError) {
       setError(loadError.message);
     } finally {
       setLoading(false);
     }
-  }, [sessionId]);
+  }, [sessionId, cacheKey, tabCache]);
 
   useEffect(() => {
     let cancelled = false;
     api.sessionActivities(sessionId)
       .then((response) => {
-        if (!cancelled) setActivities(response.activities || []);
+        if (!cancelled) {
+          setActivities(response.activities || []);
+          tabCache?.set(cacheKey, response.activities || []);
+        }
       })
       .catch((loadError) => {
         if (!cancelled) setError(loadError.message);
@@ -369,27 +375,33 @@ export function ActivitiesModule({ sessionId, students }) {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [sessionId]);
+  }, [sessionId, cacheKey, tabCache]);
 
   const loadScores = useCallback(async (activity) => {
     if (!activity) return;
     try {
       const response = await api.activityScores(activity.id);
-      setEntries(formatScoreRows(response, students));
+      setRawScores(response);
+      tabCache?.set(`activityScores:${activity.id}`, response);
     } catch (loadError) {
       setError(loadError.message);
     } finally {
       setScoresLoading(false);
     }
-  }, [students]);
+  }, [tabCache]);
 
   const activeActivityId = active?.id;
+  const studentIdsKey = useMemo(() => (students || []).map((s) => s.id).sort().join(","), [students]);
+
   useEffect(() => {
     if (!activeActivityId) return undefined;
     let cancelled = false;
     api.activityScores(activeActivityId)
       .then((response) => {
-        if (!cancelled) setEntries(formatScoreRows(response, students));
+        if (!cancelled) {
+          setRawScores(response);
+          tabCache?.set(`activityScores:${activeActivityId}`, response);
+        }
       })
       .catch((loadError) => {
         if (!cancelled) setError(loadError.message);
@@ -398,7 +410,11 @@ export function ActivitiesModule({ sessionId, students }) {
         if (!cancelled) setScoresLoading(false);
       });
     return () => { cancelled = true; };
-  }, [activeActivityId, students]);
+  }, [activeActivityId, sessionId, studentIdsKey, tabCache]);
+
+  const entries = useMemo(() => {
+    return formatScoreRows(rawScores, students);
+  }, [rawScores, students]);
 
   async function saveActivity(payload) {
     setSaving(true);
@@ -436,16 +452,29 @@ export function ActivitiesModule({ sessionId, students }) {
 
   function openActivity(activity) {
     setError("");
-    setScoresLoading(true);
+    const cached = tabCache?.get(`activityScores:${activity.id}`);
+    if (cached) {
+      setRawScores(cached);
+      setScoresLoading(false);
+    } else {
+      setScoresLoading(true);
+    }
     setActive(activity);
   }
 
   async function saveScore(studentId, score) {
     const { score: savedScore } = await api.setActivityScore(active.id, studentId, score);
-    setEntries((current) => current.map((entry) => entry.student.id === studentId ? { ...entry, score } : entry));
-    setActivities((current) => current.map((item) => item.id === active.id
-      ? { ...item, scores: [...(item.scores || []).filter((row) => row.studentId !== studentId), savedScore] }
-      : item));
+    setRawScores((current) => {
+      const rows = getRows(current);
+      const exists = rows.some((r) => getRelatedStudentId(r) === studentId);
+      const updatedRows = exists
+        ? rows.map((r) => (getRelatedStudentId(r) === studentId ? savedScore : r))
+        : [...rows, savedScore];
+      const nextScores = Array.isArray(current) ? updatedRows : { ...current, scores: updatedRows };
+      tabCache?.set(`activityScores:${active.id}`, nextScores);
+      return nextScores;
+    });
+    tabCache?.invalidate(`activities:${sessionId}`);
   }
 
   const rosterAbsentCount = students.filter((student) => student.status === "ABSENT").length;
@@ -505,7 +534,7 @@ export function ActivitiesModule({ sessionId, students }) {
                 <h2>{activity.title}</h2>
                 <p>{activity.maxScore == null ? "No maximum score" : `Out of ${activity.maxScore}`}</p>
               </div>
-              <Badge tone="neutral">{(activity.scores || []).filter((row) => row.score != null && !row.isAbsent && !row.absent).length}/{students.length} scored</Badge>
+              <Badge tone="neutral">{activity.scoredCount ?? (activity.scores || []).filter((row) => row.score != null && !row.isAbsent && !row.absent).length}/{students.length} scored</Badge>
               <Button variant="secondary" onClick={() => openActivity(activity)}>Open scoring <Icon name="arrow" /></Button>
             </Card>
           ))}
@@ -523,12 +552,14 @@ export function ActivitiesModule({ sessionId, students }) {
   );
 }
 
-export function ProjectsModule({ classId, sessionId, students }) {
-  const [projects, setProjects] = useState([]);
+export function ProjectsModule({ classId, sessionId, students = [], tabCache }) {
+  const cacheKey = `projects:${classId}`;
+  const cachedProjects = tabCache?.get(cacheKey);
+  const [projects, setProjects] = useState(cachedProjects || []);
   const [active, setActive] = useState(null);
-  const [entries, setEntries] = useState([]);
+  const [rawScores, setRawScores] = useState([]);
   const [maxScoreInput, setMaxScoreInput] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cachedProjects);
   const [scoresLoading, setScoresLoading] = useState(false);
   const [savingMaxScore, setSavingMaxScore] = useState(false);
   const [error, setError] = useState("");
@@ -537,18 +568,22 @@ export function ProjectsModule({ classId, sessionId, students }) {
     try {
       const response = await api.classProjects(classId);
       setProjects(response.projects || []);
+      tabCache?.set(cacheKey, response.projects || []);
     } catch (loadError) {
       setError(loadError.message);
     } finally {
       setLoading(false);
     }
-  }, [classId]);
+  }, [classId, cacheKey, tabCache]);
 
   useEffect(() => {
     let cancelled = false;
     api.classProjects(classId)
       .then((response) => {
-        if (!cancelled) setProjects(response.projects || []);
+        if (!cancelled) {
+          setProjects(response.projects || []);
+          tabCache?.set(cacheKey, response.projects || []);
+        }
       })
       .catch((loadError) => {
         if (!cancelled) setError(loadError.message);
@@ -557,27 +592,33 @@ export function ProjectsModule({ classId, sessionId, students }) {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [classId]);
+  }, [classId, cacheKey, tabCache]);
 
   const loadScores = useCallback(async (project) => {
     if (!project) return;
     try {
       const response = await api.projectScores(project.id);
-      setEntries(formatScoreRows(response, students, sessionId ?? null));
+      setRawScores(response);
+      tabCache?.set(`projectScores:${project.id}`, response);
     } catch (loadError) {
       setError(loadError.message);
     } finally {
       setScoresLoading(false);
     }
-  }, [students, sessionId]);
+  }, [tabCache]);
 
   const activeProjectId = active?.id;
+  const studentIdsKey = useMemo(() => (students || []).map((s) => s.id).sort().join(","), [students]);
+
   useEffect(() => {
     if (!activeProjectId) return undefined;
     let cancelled = false;
     api.projectScores(activeProjectId)
       .then((response) => {
-        if (!cancelled) setEntries(formatScoreRows(response, students, sessionId ?? null));
+        if (!cancelled) {
+          setRawScores(response);
+          tabCache?.set(`projectScores:${activeProjectId}`, response);
+        }
       })
       .catch((loadError) => {
         if (!cancelled) setError(loadError.message);
@@ -586,21 +627,38 @@ export function ProjectsModule({ classId, sessionId, students }) {
         if (!cancelled) setScoresLoading(false);
       });
     return () => { cancelled = true; };
-  }, [activeProjectId, students, sessionId]);
+  }, [activeProjectId, sessionId, studentIdsKey, tabCache]);
+
+  const entries = useMemo(() => {
+    return formatScoreRows(rawScores, students, sessionId ?? null);
+  }, [rawScores, students, sessionId]);
 
   function openProject(project) {
     setError("");
     setMaxScoreInput(project.maxScore == null ? "" : String(project.maxScore));
-    setScoresLoading(true);
+    const cached = tabCache?.get(`projectScores:${project.id}`);
+    if (cached) {
+      setRawScores(cached);
+      setScoresLoading(false);
+    } else {
+      setScoresLoading(true);
+    }
     setActive(project);
   }
 
   async function saveProjectScore(studentId, score) {
     const { score: savedScore } = await api.setProjectScore(active.id, studentId, score, sessionId);
-    setEntries((current) => current.map((entry) => entry.student.id === studentId ? { ...entry, score } : entry));
-    setProjects((current) => current.map((item) => item.id === active.id
-      ? { ...item, scores: [...(item.scores || []).filter((row) => row.studentId !== studentId), savedScore] }
-      : item));
+    setRawScores((current) => {
+      const rows = getRows(current);
+      const exists = rows.some((r) => getRelatedStudentId(r) === studentId);
+      const updatedRows = exists
+        ? rows.map((r) => (getRelatedStudentId(r) === studentId ? savedScore : r))
+        : [...rows, savedScore];
+      const nextScores = Array.isArray(current) ? updatedRows : { ...current, scores: updatedRows };
+      tabCache?.set(`projectScores:${active.id}`, nextScores);
+      return nextScores;
+    });
+    tabCache?.invalidate(`projects:${classId}`);
   }
 
   async function saveMaxScore() {

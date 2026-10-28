@@ -126,6 +126,7 @@ export const api = {
   createQuizSession: (classId, payload) => request(`/classes/${encodeURIComponent(classId)}/quizzes`, { method: "POST", body: JSON.stringify(payload) }),
   updateQuizSession: (sessionId, payload) => request(`/quizzes/${encodeURIComponent(sessionId)}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteQuizSession: (sessionId) => request(`/quizzes/${encodeURIComponent(sessionId)}`, { method: "DELETE" }),
+  setQuizScoresBulk: (sessionId, scores) => request(`/quizzes/${encodeURIComponent(sessionId)}/scores`, { method: "PUT", body: JSON.stringify(scores) }),
   setQuizScore: (sessionId, studentId, score) => request(`/quizzes/${encodeURIComponent(sessionId)}/scores/${encodeURIComponent(studentId)}`, { method: "PUT", body: JSON.stringify({ score }) }),
   studentClassRecord: (classId) =>
     request(`/student/classes/${encodeURIComponent(classId)}/records`),

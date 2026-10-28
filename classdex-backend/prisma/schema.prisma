@@ -162,6 +162,7 @@ model ClassRoster {
 
   @@unique([classId, studentId])
   @@index([classId])
+  @@index([studentId])
 }
 
 model QuizSession {
@@ -262,6 +263,7 @@ model ActivityScore {
 
   @@unique([activityId, studentId])
   @@index([studentId])
+  @@index([activityId, isAbsent])
 }
 
 model Project {
