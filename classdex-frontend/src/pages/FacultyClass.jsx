@@ -224,7 +224,7 @@ export default function FacultyClass() {
   async function updatePending(enrollmentId, status) {
     setPendingBusyId(enrollmentId);
     try {
-      await api.updatePendingEnrollment(id, enrollmentId, status);
+      const result = await api.updatePendingEnrollment(id, enrollmentId, status);
       setPendingEnrollments((current) => current.filter((item) => item.id !== enrollmentId));
       if (status === "APPROVED") {
         try {
@@ -238,7 +238,15 @@ export default function FacultyClass() {
         }
       }
       refreshPending();
-      showToast(status === "APPROVED" ? "Student approved." : "Request declined.");
+      if (status === "APPROVED") {
+        if (result?.warning === "missing_or_invalid_student_id") {
+          showToast("Student approved, but they have not completed a valid 7-digit student ID for the student list.", "warning");
+        } else {
+          showToast("Student approved.");
+        }
+      } else {
+        showToast("Request declined.");
+      }
     } catch (error) {
       showToast(error.message, "error");
     } finally {

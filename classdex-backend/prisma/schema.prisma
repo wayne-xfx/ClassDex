@@ -149,6 +149,7 @@ model ClassEnrollment {
   class                 Class            @relation(fields: [classId], references: [id], onDelete: Cascade)
   joinedAt              DateTime         @default(now())
   status                EnrollmentStatus @default(APPROVED)
+  droppedAt             DateTime?
   dismissedAbsenceCount Int              @default(0)
   autoApprovedAt        DateTime?
   autoApprovalReadAt    DateTime?
@@ -156,6 +157,7 @@ model ClassEnrollment {
 
   @@unique([studentProfileId, classId])
   @@index([classId, status, studentProfileId])
+  @@index([classId, status, droppedAt])
 }
 
 model ClassRoster {
@@ -168,6 +170,7 @@ model ClassRoster {
   lastName    String?
   suffix      String?
   sortKey     String?
+  droppedAt   DateTime?
   class       Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -177,6 +180,7 @@ model ClassRoster {
   @@index([studentId])
   @@index([sortKey])
   @@index([classId, sortKey])
+  @@index([classId, droppedAt])
 }
 
 model QuizSession {

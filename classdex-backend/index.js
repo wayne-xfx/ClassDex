@@ -50,6 +50,7 @@ const FORGOT_PASSWORD_GENERIC_MESSAGE =
 
 const { studentPhotoUrl } = require("./src/utils/studentPhotoUrl");
 const { manilaDate } = require("./src/utils/dates");
+const path = require("node:path");
 const { parseFullName, compareStudents } = require(path.resolve(__dirname, "../shared/nameParser"));
 
 const SCORE_STUDENT_SELECT = {
@@ -1947,12 +1948,93 @@ app.patch("/api/classes/:id/pending/:enrollmentId", requireAuth, requireRole("FA
       select: { id: true, sectionName: true, classCode: true, faculty: { select: { name: true, email: true } } },
     });
     if (!classRecord) return res.status(404).json({ message: "Class not found." });
-    const updated = await prisma.classEnrollment.updateMany({
+
+    const pendingEnrollment = await prisma.classEnrollment.findFirst({
       where: { id: req.params.enrollmentId, classId: req.params.id, status: "PENDING" },
-      data: { status, autoApprovedAt: null, autoApprovalReadAt: null },
+      include: { studentProfile: true },
     });
-    if (!updated.count) return res.status(404).json({ message: "Pending request not found." });
-    const enrollment = await prisma.classEnrollment.findUnique({ where: { id: req.params.enrollmentId }, include: { studentProfile: true, class: true } });
+    if (!pendingEnrollment) return res.status(404).json({ message: "Pending request not found." });
+
+    let warning = null;
+    let enrollment = null;
+
+    if (status === "APPROVED") {
+      const studentProfile = pendingEnrollment.studentProfile;
+      const validStudentId = studentProfile?.studentId && STUDENT_ID_PATTERN.test(studentProfile.studentId);
+      if (!validStudentId) {
+        warning = "missing_or_invalid_student_id";
+      }
+
+      enrollment = await prisma.$transaction(async (tx) => {
+        const updated = await tx.classEnrollment.update({
+          where: { id: pendingEnrollment.id },
+          data: { status: "APPROVED", droppedAt: null, autoApprovedAt: null, autoApprovalReadAt: null },
+          include: { studentProfile: true, class: true },
+        });
+
+        if (validStudentId) {
+          const parsed = parseFullName(studentProfile.name);
+          const existingRoster = await tx.classRoster.findUnique({
+            where: {
+              classId_studentId: {
+                classId: req.params.id,
+                studentId: studentProfile.studentId,
+              },
+            },
+          });
+
+          if (!existingRoster) {
+            await tx.classRoster.create({
+              data: {
+                classId: req.params.id,
+                studentId: studentProfile.studentId,
+                studentName: studentProfile.name,
+                firstName: parsed.firstName,
+                middleName: parsed.middleName,
+                lastName: parsed.lastName,
+                suffix: parsed.suffix,
+                sortKey: parsed.sortKey,
+                droppedAt: null,
+              },
+            });
+          } else if (existingRoster.droppedAt) {
+            // Approving a student whose roster row is dropped restores it
+            await tx.classRoster.update({
+              where: { id: existingRoster.id },
+              data: {
+                droppedAt: null,
+                studentName: existingRoster.studentName || studentProfile.name,
+                firstName: existingRoster.firstName || parsed.firstName,
+                middleName: existingRoster.middleName || parsed.middleName,
+                lastName: existingRoster.lastName || parsed.lastName,
+                suffix: existingRoster.suffix || parsed.suffix,
+                sortKey: existingRoster.sortKey || parsed.sortKey,
+              },
+            });
+          } else if (!existingRoster.studentName) {
+            await tx.classRoster.update({
+              where: { id: existingRoster.id },
+              data: {
+                studentName: studentProfile.name,
+                firstName: parsed.firstName,
+                middleName: parsed.middleName,
+                lastName: parsed.lastName,
+                suffix: parsed.suffix,
+                sortKey: parsed.sortKey,
+              },
+            });
+          }
+        }
+        return updated;
+      });
+    } else {
+      enrollment = await prisma.classEnrollment.update({
+        where: { id: pendingEnrollment.id },
+        data: { status: "DECLINED", autoApprovedAt: null, autoApprovalReadAt: null },
+        include: { studentProfile: true, class: true },
+      });
+    }
+
     if (enrollment?.studentProfile?.email) {
       queueEmail(buildDecisionEmail({
         studentName: enrollment.studentProfile.name,
@@ -1962,8 +2044,12 @@ app.patch("/api/classes/:id/pending/:enrollmentId", requireAuth, requireRole("FA
         facultyName: classRecord.faculty?.name,
       }), `join ${status.toLowerCase()}`);
     }
-    return res.json({ enrollment });
-  } catch (error) { return res.status(500).json({ message: "Unable to update pending request." }); }
+
+    return res.json({ enrollment, warning });
+  } catch (error) {
+    console.error("Pending request update failed:", error);
+    return res.status(500).json({ message: "Unable to update pending request." });
+  }
 });
 
 app.get("/api/classes/:id/quizzes", requireAuth, requireRole("FACULTY"), async (req, res) => {
