@@ -50,6 +50,7 @@ const FORGOT_PASSWORD_GENERIC_MESSAGE =
 
 const { studentPhotoUrl } = require("./src/utils/studentPhotoUrl");
 const { manilaDate } = require("./src/utils/dates");
+const { parseFullName, compareStudents } = require(path.resolve(__dirname, "../shared/nameParser"));
 
 const SCORE_STUDENT_SELECT = {
   id: true,
@@ -58,6 +59,11 @@ const SCORE_STUDENT_SELECT = {
   program: true,
   section: true,
   updatedAt: true,
+  firstName: true,
+  middleName: true,
+  lastName: true,
+  suffix: true,
+  sortKey: true,
 };
 
 function attachPhotoUrl(item) {
@@ -1190,6 +1196,7 @@ app.put(
     }
 
     try {
+      const parsedName = parseFullName(name);
       const profile = await prisma.studentProfile.upsert({
         where: { userId: req.session.userId },
         create: {
@@ -1202,6 +1209,12 @@ app.put(
           photo,
           email,
           birthdate,
+          firstName: parsedName.firstName,
+          middleName: parsedName.middleName,
+          lastName: parsedName.lastName,
+          suffix: parsedName.suffix,
+          // sortKey is a derived, denormalized column kept only for ordering/indexing
+          sortKey: parsedName.sortKey,
         },
         update: {
           name,
@@ -1212,6 +1225,11 @@ app.put(
           photo,
           email,
           birthdate,
+          firstName: parsedName.firstName,
+          middleName: parsedName.middleName,
+          lastName: parsedName.lastName,
+          suffix: parsedName.suffix,
+          sortKey: parsedName.sortKey,
         },
       });
       return res.json({ profile });
@@ -1619,7 +1637,7 @@ app.get(
   async (req, res) => {
     try {
       if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
-      const roster = await prisma.classRoster.findMany({ where: { classId: req.params.id }, orderBy: [{ studentName: "asc" }, { studentId: "asc" }] });
+      const roster = await prisma.classRoster.findMany({ where: { classId: req.params.id }, orderBy: [{ sortKey: "asc" }, { firstName: "asc" }, { middleName: "asc" }, { studentId: "asc" }] });
       return res.json({ roster: await enrichRosterWithPhotos(roster) });
     } catch (error) {
       console.error("Roster lookup failed:", error);
@@ -1645,11 +1663,31 @@ app.post(
       }).filter((entry) => entry.errors.length);
       if (!incoming.length) return res.status(400).json({ message: "Add at least one student list row." });
       if (invalid.length) return res.status(400).json({ message: "Fix the invalid student list rows before saving.", invalidRows: invalid });
-      const roster = await prisma.$transaction(incoming.map((entry) => prisma.classRoster.upsert({
-        where: { classId_studentId: { classId: req.params.id, studentId: entry.studentId } },
-        create: { classId: req.params.id, studentName: entry.studentName, studentId: entry.studentId },
-        update: { studentName: entry.studentName },
-      })));
+      const roster = await prisma.$transaction(incoming.map((entry) => {
+        const parsedName = parseFullName(entry.studentName);
+        return prisma.classRoster.upsert({
+          where: { classId_studentId: { classId: req.params.id, studentId: entry.studentId } },
+          create: {
+            classId: req.params.id,
+            studentName: entry.studentName,
+            studentId: entry.studentId,
+            firstName: parsedName.firstName,
+            middleName: parsedName.middleName,
+            lastName: parsedName.lastName,
+            suffix: parsedName.suffix,
+            // sortKey is a derived, denormalized column kept only for ordering/indexing
+            sortKey: parsedName.sortKey,
+          },
+          update: {
+            studentName: entry.studentName,
+            firstName: parsedName.firstName,
+            middleName: parsedName.middleName,
+            lastName: parsedName.lastName,
+            suffix: parsedName.suffix,
+            sortKey: parsedName.sortKey,
+          },
+        });
+      }));
       const autoApprovedCount = await autoApproveRosterMatches(req.params.id);
       return res.status(201).json({ roster: await enrichRosterWithPhotos(roster), autoApprovedCount });
     } catch (error) {
@@ -1668,7 +1706,19 @@ app.patch(
     if (entry.errors.length) return res.status(400).json({ message: entry.errors.join("; ") });
     try {
       if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
-      const updated = await prisma.classRoster.updateMany({ where: { id: req.params.entryId, classId: req.params.id }, data: { studentName: entry.studentName, studentId: entry.studentId } });
+      const parsedEntryName = parseFullName(entry.studentName);
+      const updated = await prisma.classRoster.updateMany({
+        where: { id: req.params.entryId, classId: req.params.id },
+        data: {
+          studentName: entry.studentName,
+          studentId: entry.studentId,
+          firstName: parsedEntryName.firstName,
+          middleName: parsedEntryName.middleName,
+          lastName: parsedEntryName.lastName,
+          suffix: parsedEntryName.suffix,
+          sortKey: parsedEntryName.sortKey,
+        },
+      });
       if (!updated.count) return res.status(404).json({ message: "Student list entry not found." });
       const [savedEntry, autoApprovedCount] = await Promise.all([
         prisma.classRoster.findUnique({ where: { id: req.params.entryId } }),
@@ -2217,10 +2267,20 @@ app.get(
                   studentId: true,
                   program: true,
                   section: true,
+                  firstName: true,
+                  middleName: true,
+                  lastName: true,
+                  suffix: true,
+                  sortKey: true,
                 },
               },
             },
-            orderBy: { joinedAt: "asc" },
+            orderBy: [
+              { studentProfile: { sortKey: "asc" } },
+              { studentProfile: { firstName: "asc" } },
+              { studentProfile: { middleName: "asc" } },
+              { studentProfile: { studentId: "asc" } },
+            ],
           },
         },
       });

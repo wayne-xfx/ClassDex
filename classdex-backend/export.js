@@ -1,3 +1,5 @@
+const path = require("node:path");
+const { compareStudents } = require(path.resolve(__dirname, "../shared/nameParser"));
 const XLSX = require("xlsx");
 const { inflateRawSync } = require("node:zlib");
 
@@ -140,8 +142,13 @@ function approvedStudents(classRecord) {
     .map(({ studentProfile }) => ({
       studentId: String(studentProfile.studentId ?? ""),
       studentName: studentProfile.name || "",
+      firstName: studentProfile.firstName || "",
+      middleName: studentProfile.middleName || "",
+      lastName: studentProfile.lastName || "",
+      suffix: studentProfile.suffix || "",
+      sortKey: studentProfile.sortKey || "",
     }))
-    .sort((a, b) => a.studentId.localeCompare(b.studentId));
+    .sort(compareStudents);
 }
 
 function matrixSection(title, students, items, { itemLabel, resultFor }) {

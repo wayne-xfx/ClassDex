@@ -143,9 +143,13 @@ export default function Register() {
             required
             value={form.name}
             onChange={update("name")}
+            placeholder="e.g., Jose P. Rizal"
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-ink outline-none focus:border-royal"
             autoComplete="name"
           />
+          <span className="mt-1 block text-xs text-slate-500">
+            First name, middle initial, surname; add Jr./Sr./III at the end; &ldquo;Dela Cruz, Juan P.&rdquo; also works
+          </span>
         </label>
 
         <label className="block text-sm font-medium text-navy">
