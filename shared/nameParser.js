@@ -64,9 +64,13 @@ function parseFullName(fullName, options = {}) {
       raw = `${segments[0]} ${segments[1]}`;
     } else {
       const seg0Tokens = segments[0].split(" ");
+      const seg1Tokens = segments[1].split(" ");
       if (seg0Tokens.length > 1 && isSuffixToken(seg0Tokens[seg0Tokens.length - 1])) {
         const segSuffix = seg0Tokens.pop();
         raw = `${segments[1]} ${seg0Tokens.join(" ")} ${segSuffix}`;
+      } else if (seg1Tokens.length > 1 && isSuffixToken(seg1Tokens[seg1Tokens.length - 1])) {
+        const segSuffix = seg1Tokens.pop();
+        raw = `${seg1Tokens.join(" ")} ${segments[0]} ${segSuffix}`;
       } else {
         raw = `${segments[1]} ${segments[0]}`;
       }

@@ -10,8 +10,6 @@ import {
   unlockShuffleAudio,
 } from "../../utils/shuffleSound";
 
-const SHUFFLE_DURATION_MS = 2400;
-
 export default function RecitationModule({
   eligibleStudents,
   currentCall,
@@ -25,7 +23,10 @@ export default function RecitationModule({
   savingScore = false,
   animationEnabled = true,
   onAnimationChange,
+  durationSeconds = 3,
+  onDurationChange,
 }) {
+  const durationMs = Math.max(1, Math.min(7, Number(durationSeconds) || 3)) * 1000;
   const student = currentCall?.student || null;
   const count = eligibleStudents.length;
   const [previewIndex, setPreviewIndex] = useState(0);
@@ -66,7 +67,8 @@ export default function RecitationModule({
   }
 
   useEffect(() => {
-    if (!busy || !animationEnabled || !eligibleStudents.length) return undefined;
+    const reduceMotion = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!busy || !animationEnabled || reduceMotion || !eligibleStudents.length) return undefined;
     let cancelled = false;
     let timeoutId = null;
     const startTime = performance.now();
@@ -74,10 +76,10 @@ export default function RecitationModule({
     function step() {
       if (cancelled) return;
       const elapsed = performance.now() - startTime;
-      const progress = Math.min(1, elapsed / SHUFFLE_DURATION_MS);
+      const progress = Math.min(1, elapsed / durationMs);
 
       setPreviewIndex((index) => (index + 1) % eligibleStudents.length);
-      if (userGestureActiveRef.current && !soundMutedRef.current) {
+      if (userGestureActiveRef.current && !soundMutedRef.current && animationEnabled && !reduceMotion) {
         playShuffleTick(progress);
       }
 
@@ -86,7 +88,7 @@ export default function RecitationModule({
       timeoutId = window.setTimeout(step, nextDelay);
     }
 
-    if (userGestureActiveRef.current && !soundMutedRef.current) {
+    if (userGestureActiveRef.current && !soundMutedRef.current && animationEnabled && !reduceMotion) {
       playShuffleTick(0);
     }
     timeoutId = window.setTimeout(step, 55);
@@ -95,19 +97,20 @@ export default function RecitationModule({
       cancelled = true;
       if (timeoutId !== null) window.clearTimeout(timeoutId);
     };
-  }, [animationEnabled, busy, eligibleStudents.length]);
+  }, [animationEnabled, busy, eligibleStudents.length, durationMs]);
 
   useEffect(() => {
     const logId = currentCall?.log?.id || null;
     if (busy || !logId) return;
+    const reduceMotion = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (logId !== lastRevealedLogIdRef.current) {
       lastRevealedLogIdRef.current = logId;
-      if (userGestureActiveRef.current && !soundMutedRef.current) {
+      if (userGestureActiveRef.current && !soundMutedRef.current && animationEnabled && !reduceMotion) {
         playShuffleReveal();
       }
       userGestureActiveRef.current = false;
     }
-  }, [busy, currentCall?.log?.id]);
+  }, [animationEnabled, busy, currentCall?.log?.id]);
 
   const previewStudent = eligibleStudents[previewIndex] || null;
 
@@ -193,6 +196,20 @@ export default function RecitationModule({
             onChange={(event) => onAnimationChange(event.target.checked)}
           />
           <span className="recitation-switch-track" aria-hidden="true" />
+        </label>
+        <label className="recitation-duration-control" title="Shuffle animation duration">
+          <Icon name="timer" size={15} />
+          <span>{durationSeconds} s</span>
+          <input
+            type="range"
+            min="1"
+            max="7"
+            step="1"
+            value={durationSeconds}
+            disabled={!animationEnabled || busy}
+            aria-label="Shuffle animation duration"
+            onChange={(event) => onDurationChange?.(Number(event.target.value))}
+          />
         </label>
       </div>
 

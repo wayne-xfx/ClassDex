@@ -1,5 +1,6 @@
 require("dotenv").config();
 const express = require("express");
+const XLSX = require("xlsx");
 const cors = require("cors");
 const session = require("express-session");
 const { rateLimit, MemoryStore } = require("express-rate-limit");
@@ -290,9 +291,23 @@ async function findOwnedClass(classId, facultyId) {
   return prisma.class.findFirst({ where: { id: classId, facultyId }, select: { id: true } });
 }
 
+// Auto-generated blank placeholder score rows (e.g. from the Projects bootstrap or absence auto-flagging)
+// must not inflate the count; only non-null scores represent meaningful recorded coursework.
+async function countStudentClassRecords(tx, classId, studentProfileId) {
+  if (!studentProfileId) return 0;
+  const [attendanceCount, recitationCount, activityScoresCount, projectScoresCount, quizScoresCount] = await Promise.all([
+    tx.attendanceRecord.count({ where: { studentId: studentProfileId, session: { classId } } }),
+    tx.recitationLog.count({ where: { studentId: studentProfileId, session: { classId } } }),
+    tx.activityScore.count({ where: { studentId: studentProfileId, score: { not: null }, activity: { classId } } }),
+    tx.projectScore.count({ where: { studentId: studentProfileId, score: { not: null }, project: { classId } } }),
+    tx.quizScore.count({ where: { studentId: studentProfileId, score: { not: null }, session: { classId } } }),
+  ]);
+  return attendanceCount + recitationCount + activityScoresCount + projectScoresCount + quizScoresCount;
+}
+
 async function autoApproveRosterMatches(classId) {
   const roster = await prisma.classRoster.findMany({
-    where: { classId },
+    where: { classId, droppedAt: null },
     select: { studentId: true },
   });
   const rosterStudentIds = [...new Set(roster.map((entry) => String(entry.studentId || "").trim()).filter(Boolean))];
@@ -1638,7 +1653,7 @@ app.get(
   async (req, res) => {
     try {
       if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
-      const roster = await prisma.classRoster.findMany({ where: { classId: req.params.id }, orderBy: [{ sortKey: "asc" }, { firstName: "asc" }, { middleName: "asc" }, { studentId: "asc" }] });
+      const roster = await prisma.classRoster.findMany({ where: { classId: req.params.id, droppedAt: null }, orderBy: [{ sortKey: "asc" }, { firstName: "asc" }, { middleName: "asc" }, { studentId: "asc" }] });
       return res.json({ roster: await enrichRosterWithPhotos(roster) });
     } catch (error) {
       console.error("Roster lookup failed:", error);
@@ -1732,6 +1747,35 @@ app.patch(
   },
 );
 
+app.get(
+  "/api/classes/:id/roster/:entryId/impact",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
+      const rosterEntry = await prisma.classRoster.findFirst({
+        where: { id: req.params.entryId, classId: req.params.id },
+      });
+      if (!rosterEntry) return res.status(404).json({ message: "Student list entry not found." });
+
+      const profile = await prisma.studentProfile.findFirst({
+        where: { studentId: rosterEntry.studentId },
+        select: { id: true },
+      });
+
+      const recordCount = profile
+        ? await countStudentClassRecords(prisma, req.params.id, profile.id)
+        : 0;
+
+      return res.json({ recordCount });
+    } catch (error) {
+      console.error("Roster impact lookup failed:", error);
+      return res.status(500).json({ message: "Unable to calculate removal impact." });
+    }
+  },
+);
+
 app.delete(
   "/api/classes/:id/roster/:entryId",
   requireAuth,
@@ -1739,11 +1783,376 @@ app.delete(
   async (req, res) => {
     try {
       if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
-      const deleted = await prisma.classRoster.deleteMany({ where: { id: req.params.entryId, classId: req.params.id } });
-      if (!deleted.count) return res.status(404).json({ message: "Student list entry not found." });
-      return res.status(204).end();
+      const rosterEntry = await prisma.classRoster.findFirst({
+        where: { id: req.params.entryId, classId: req.params.id },
+      });
+      if (!rosterEntry) return res.status(404).json({ message: "Student list entry not found." });
+
+      const profile = await prisma.studentProfile.findFirst({
+        where: { studentId: rosterEntry.studentId },
+        select: { id: true },
+      });
+
+      const outcome = await prisma.$transaction(async (tx) => {
+        const recordCount = profile
+          ? await countStudentClassRecords(tx, req.params.id, profile.id)
+          : 0;
+
+        if (recordCount === 0) {
+          await tx.classRoster.delete({ where: { id: rosterEntry.id } });
+          if (profile) {
+            await tx.classEnrollment.deleteMany({
+              where: { classId: req.params.id, studentProfileId: profile.id },
+            });
+          }
+          return { result: "removed", recordCount: 0 };
+        } else {
+          const now = new Date();
+          await tx.classRoster.update({
+            where: { id: rosterEntry.id },
+            data: { droppedAt: now },
+          });
+          if (profile) {
+            await tx.classEnrollment.updateMany({
+              where: { classId: req.params.id, studentProfileId: profile.id },
+              data: { status: "DROPPED", droppedAt: now },
+            });
+          }
+          return { result: "dropped", recordCount };
+        }
+      });
+
+      return res.json(outcome);
     } catch (error) {
-      return res.status(500).json({ message: "Unable to remove the student list entry." });
+      console.error("Roster delete failed:", error);
+      return res.status(500).json({ message: "Unable to remove student list entry." });
+    }
+  },
+);
+
+app.get(
+  "/api/classes/:id/drop-list",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
+      const droppedRosters = await prisma.classRoster.findMany({
+        where: { classId: req.params.id, droppedAt: { not: null } },
+        orderBy: [
+          { sortKey: "asc" },
+          { firstName: "asc" },
+          { middleName: "asc" },
+          { studentId: "asc" },
+        ],
+      });
+
+      const studentIds = droppedRosters.map((r) => r.studentId);
+      const profiles = await prisma.studentProfile.findMany({
+        where: { studentId: { in: studentIds } },
+        select: { id: true, studentId: true, name: true, updatedAt: true },
+      });
+      const profileMap = new Map(profiles.map((p) => [p.studentId, p]));
+
+      const dropList = await Promise.all(
+        droppedRosters.map(async (entry) => {
+          const profile = profileMap.get(entry.studentId);
+          const photoUrl = profile ? studentPhotoUrl(profile) : null;
+          const recordCount = profile
+            ? await countStudentClassRecords(prisma, req.params.id, profile.id)
+            : 0;
+          return {
+            id: entry.id,
+            studentName: entry.studentName,
+            studentId: entry.studentId,
+            droppedAt: entry.droppedAt,
+            recordCount,
+            photo: photoUrl,
+            photoUrl,
+            firstName: entry.firstName,
+            middleName: entry.middleName,
+            lastName: entry.lastName,
+            suffix: entry.suffix,
+            sortKey: entry.sortKey,
+          };
+        })
+      );
+
+      return res.json({ dropList });
+    } catch (error) {
+      console.error("Drop list lookup failed:", error);
+      return res.status(500).json({ message: "Unable to load drop list." });
+    }
+  },
+);
+
+app.post(
+  "/api/classes/:id/drop-list/:entryId/restore",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
+      const rosterEntry = await prisma.classRoster.findFirst({
+        where: { id: req.params.entryId, classId: req.params.id },
+      });
+      if (!rosterEntry) return res.status(404).json({ message: "Student list entry not found." });
+
+      const profile = await prisma.studentProfile.findFirst({
+        where: { studentId: rosterEntry.studentId },
+        select: { id: true },
+      });
+
+      await prisma.$transaction(async (tx) => {
+        await tx.classRoster.update({
+          where: { id: rosterEntry.id },
+          data: { droppedAt: null },
+        });
+        if (profile) {
+          await tx.classEnrollment.updateMany({
+            where: { classId: req.params.id, studentProfileId: profile.id },
+            data: { status: "APPROVED", droppedAt: null },
+          });
+        }
+      });
+
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("Drop list restore failed:", error);
+      return res.status(500).json({ message: "Unable to restore student." });
+    }
+  },
+);
+
+app.get(
+  "/api/classes/:id/roster/template",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      const classRecord = await prisma.class.findFirst({
+        where: { id: req.params.id, facultyId: req.session.userId },
+        include: {
+          roster: {
+            where: { droppedAt: null },
+            orderBy: [
+              { sortKey: "asc" },
+              { firstName: "asc" },
+              { middleName: "asc" },
+              { studentId: "asc" },
+            ],
+          },
+        },
+      });
+      if (!classRecord) return res.status(404).json({ message: "Class not found." });
+
+      const match = STUDENT_ID_PATTERN.source.match(/\\d\{(\d+)\}/);
+      const digitCount = match ? Number(match[1]) : 7;
+
+      const aoa = [
+        ["CLASS INFORMATION", ""],
+        ["Class Name", sanitizeExportValue(classRecord.sectionName)],
+        ["Class Code", sanitizeExportValue(classRecord.classCode)],
+        ["Description", sanitizeExportValue(classRecord.description || "")],
+        ["Schedule", sanitizeExportValue(classRecord.schedule || "")],
+        ["", ""],
+        ["STUDENTS", ""],
+        ["Full Name (e.g., Jose P. Rizal)", `Student ID (${digitCount} digits)`],
+      ];
+
+      for (const entry of classRecord.roster) {
+        aoa.push([
+          sanitizeExportValue(entry.studentName),
+          sanitizeExportValue(entry.studentId),
+        ]);
+      }
+
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const range = XLSX.utils.decode_range(ws["!ref"] || "A1:B8");
+      for (let R = 7; R <= range.e.r; ++R) {
+        const cellRef = XLSX.utils.encode_cell({ r: R, c: 1 });
+        if (ws[cellRef]) {
+          ws[cellRef].t = "s";
+          ws[cellRef].z = "@";
+        }
+      }
+
+      ws["!cols"] = [{ wch: 35 }, { wch: 25 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Student List");
+
+      const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+      const filename = `${classRecord.classCode}_student_list_template.xlsx`;
+
+      res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(filename)}"`);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      return res.send(buf);
+    } catch (error) {
+      console.error("Template generation failed:", error);
+      return res.status(500).json({ message: "Unable to generate student list template." });
+    }
+  },
+);
+
+app.post(
+  "/api/classes/:id/roster/import",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      if (!(await findOwnedClass(req.params.id, req.session.userId))) {
+        return res.status(404).json({ message: "Class not found." });
+      }
+
+      const { fileName, fileBase64 } = req.body || {};
+      if (!fileName || !fileBase64) {
+        return res.status(400).json({ message: "File name and file content are required." });
+      }
+
+      const ext = path.extname(String(fileName)).toLowerCase();
+      if (![".xlsx", ".xls", ".csv"].includes(ext)) {
+        return res.status(400).json({ message: "Unsupported file type. Use .xlsx, .xls, or .csv." });
+      }
+
+      const buffer = Buffer.from(fileBase64, "base64");
+      if (buffer.length > 2 * 1024 * 1024) {
+        return res.status(400).json({ message: "File exceeds 2 MB limit." });
+      }
+
+      let workbook;
+      try {
+        workbook = XLSX.read(buffer, { type: "buffer", cellFormula: false, cellHTML: false, raw: true });
+      } catch (parseErr) {
+        return res.status(400).json({ message: "Unable to parse file. Ensure it is a valid spreadsheet." });
+      }
+
+      if (!workbook.SheetNames || !workbook.SheetNames.length) {
+        return res.status(400).json({ message: "Spreadsheet contains no sheets." });
+      }
+
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rawMatrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", blankrows: false, raw: true });
+
+      const match = STUDENT_ID_PATTERN.source.match(/\\d\{(\d+)\}/);
+      const digitCount = match ? Number(match[1]) : 7;
+
+      // Locate STUDENTS marker row
+      let studentHeaderRowIdx = -1;
+      let nameColIdx = 0;
+      let idColIdx = 1;
+
+      for (let i = 0; i < rawMatrix.length; i++) {
+        const row = rawMatrix[i];
+        const firstCell = String(row[0] || "").trim().toUpperCase();
+        if (firstCell === "STUDENTS") {
+          // Next non-empty row must be the header
+          if (i + 1 < rawMatrix.length) {
+            studentHeaderRowIdx = i + 1;
+            const headerRow = rawMatrix[studentHeaderRowIdx].map((c) => String(c).trim().toLowerCase());
+            const nIdx = headerRow.findIndex((c) => c.includes("name"));
+            const iIdx = headerRow.findIndex((c) => c.includes("student id") || c.includes("id"));
+            if (nIdx !== -1) nameColIdx = nIdx;
+            if (iIdx !== -1) idColIdx = iIdx;
+          }
+          break;
+        }
+      }
+
+      // Fallback: If no STUDENTS marker, look for first row with Name + Student ID headers
+      if (studentHeaderRowIdx === -1) {
+        for (let i = 0; i < Math.min(rawMatrix.length, 10); i++) {
+          const headerRow = rawMatrix[i].map((c) => String(c).trim().toLowerCase());
+          const nIdx = headerRow.findIndex((c) => c.includes("name"));
+          const iIdx = headerRow.findIndex((c) => c.includes("student id") || c.includes("id"));
+          if (nIdx !== -1 && iIdx !== -1 && nIdx !== iIdx) {
+            studentHeaderRowIdx = i;
+            nameColIdx = nIdx;
+            idColIdx = iIdx;
+            break;
+          }
+        }
+      }
+
+      if (studentHeaderRowIdx === -1) {
+        return res.status(400).json({
+          message: "No STUDENTS section found — download the template and paste your students under the STUDENTS header.",
+        });
+      }
+
+      // Read rows below header until first fully blank row
+      const dataRows = [];
+      for (let i = studentHeaderRowIdx + 1; i < rawMatrix.length; i++) {
+        const row = rawMatrix[i];
+        const isBlank = !row || row.every((c) => String(c || "").trim() === "");
+        if (isBlank) break;
+        dataRows.push({ row, rowNum: i + 1 });
+      }
+
+      if (dataRows.length > 500) {
+        return res.status(400).json({ message: "File exceeds maximum of 500 student rows." });
+      }
+
+      // Fetch existing roster to flag already-enrolled students
+      const existingRoster = await prisma.classRoster.findMany({
+        where: { classId: req.params.id, droppedAt: null },
+        select: { studentId: true, studentName: true },
+      });
+      const existingIds = new Set(existingRoster.map((r) => r.studentId));
+
+      const seenInFile = new Set();
+      const warnings = [];
+      const rows = [];
+
+      for (const { row, rowNum } of dataRows) {
+        let rawName = String(row[nameColIdx] ?? "").trim();
+        let rawIdCell = row[idColIdx];
+        let rawId = String(rawIdCell ?? "").trim();
+
+        // Coerce numeric student IDs to strings and left-pad if cell was numeric
+        if (typeof rawIdCell === "number" && !Number.isNaN(rawIdCell)) {
+          rawId = String(Math.floor(rawIdCell)).padStart(digitCount, "0");
+        }
+
+        // Handle formula prefix stripping / plain text
+        if (rawName.startsWith("'")) rawName = rawName.slice(1);
+        if (rawId.startsWith("'")) rawId = rawId.slice(1);
+
+        // Name parsing: if in "Surname, First M." form, reorder cleanly for display
+        let formattedName = rawName;
+        if (rawName.includes(",")) {
+          const parsed = parseFullName(rawName);
+          if (parsed.lastName) {
+            formattedName = [parsed.firstName, parsed.middleName, parsed.lastName, parsed.suffix].filter(Boolean).join(" ");
+          }
+        }
+
+        const errors = [];
+        if (!rawName) errors.push(`Row ${rowNum}: Missing name`);
+        if (!STUDENT_ID_PATTERN.test(rawId)) {
+          errors.push(`Row ${rowNum}: Student ID must be exactly ${digitCount} digits`);
+        } else {
+          if (seenInFile.has(rawId)) {
+            errors.push(`Row ${rowNum}: Duplicate student ID in file (${rawId})`);
+          } else {
+            seenInFile.add(rawId);
+          }
+
+          if (existingIds.has(rawId)) {
+            warnings.push(`Student ID ${rawId} (${formattedName}) is already on the student list.`);
+          }
+        }
+
+        rows.push({
+          studentName: formattedName,
+          studentId: rawId,
+          errors,
+        });
+      }
+
+      return res.json({ rows, warnings });
+    } catch (error) {
+      console.error("Roster file import failed:", error);
+      return res.status(500).json({ message: "Unable to import student list file." });
     }
   },
 );
@@ -2653,15 +3062,38 @@ app.patch(
   requireAuth,
   requireRole("FACULTY"),
   async (req, res) => {
-    const gracePeriodMinutes = req.body?.gracePeriodMinutes;
-    if (
-      !Number.isInteger(gracePeriodMinutes) ||
-      gracePeriodMinutes < 0 ||
-      gracePeriodMinutes > 1440
-    ) {
-      return res.status(400).json({
-        message: "Grace period must be a whole number from 0 to 1440 minutes.",
-      });
+    const updateData = {};
+
+    if (req.body?.gracePeriodMinutes !== undefined) {
+      const gracePeriodMinutes = req.body.gracePeriodMinutes;
+      if (
+        !Number.isInteger(gracePeriodMinutes) ||
+        gracePeriodMinutes < 0 ||
+        gracePeriodMinutes > 1440
+      ) {
+        return res.status(400).json({
+          message: "Grace period must be a whole number from 0 to 1440 minutes.",
+        });
+      }
+      updateData.gracePeriodMinutes = gracePeriodMinutes;
+    }
+
+    if (req.body?.recitationShuffleSeconds !== undefined) {
+      const recitationShuffleSeconds = req.body.recitationShuffleSeconds;
+      if (
+        !Number.isInteger(recitationShuffleSeconds) ||
+        recitationShuffleSeconds < 1 ||
+        recitationShuffleSeconds > 7
+      ) {
+        return res.status(400).json({
+          message: "Shuffle duration must be a whole number between 1 and 7 seconds.",
+        });
+      }
+      updateData.recitationShuffleSeconds = recitationShuffleSeconds;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ message: "No valid fields to update." });
     }
 
     try {
@@ -2674,11 +3106,11 @@ app.patch(
       }
       const updatedClass = await prisma.class.update({
         where: { id: classRecord.id },
-        data: { gracePeriodMinutes },
+        data: updateData,
       });
       return res.json({ class: updatedClass });
     } catch (error) {
-      console.error("Class grace period update failed:", error);
+      console.error("Class update failed:", error);
       return res.status(500).json({ message: "Unable to update this class." });
     }
   },
@@ -3601,6 +4033,7 @@ app.get(
         where: { userId: req.session.userId },
         include: {
           enrollments: {
+            where: { status: { in: ["APPROVED", "PENDING"] } },
             include: {
               class: {
                 include: {
@@ -4063,7 +4496,7 @@ app.post(
         }
 
         const studentId = String(profile.studentId ?? "").trim();
-        const roster = await tx.classRoster.findMany({ where: { classId: classRecord.id }, select: { studentId: true } });
+        const roster = await tx.classRoster.findMany({ where: { classId: classRecord.id, droppedAt: null }, select: { studentId: true } });
         const rosterStudentIds = new Set(roster.map((entry) => String(entry.studentId ?? "").trim()));
         const matchesRoster = rosterStudentIds.has(studentId);
         if (existingEnrollment?.status === "PENDING" && !matchesRoster) {

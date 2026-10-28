@@ -32,6 +32,7 @@ enum EnrollmentStatus {
   APPROVED
   PENDING
   DECLINED
+  DROPPED
 }
 
 model User {
@@ -127,6 +128,7 @@ model Class {
   scheduleStartTime  String?
   scheduleEndTime    String?
   gracePeriodMinutes Int               @default(15)
+  recitationShuffleSeconds Int         @default(3)
   facultyId          String
   faculty            User              @relation("FacultyClasses", fields: [facultyId], references: [id], onDelete: Cascade)
   enrollments        ClassEnrollment[]

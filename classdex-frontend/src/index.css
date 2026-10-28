@@ -4272,6 +4272,34 @@ textarea {
   outline-offset: 3px;
 }
 
+.recitation-duration-control {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 8px;
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 680;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.recitation-duration-control input[type="range"] {
+  width: 76px;
+  accent-color: var(--royal);
+  cursor: pointer;
+}
+
+.recitation-duration-control:has(input:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.recitation-duration-control input:disabled {
+  cursor: not-allowed;
+}
+
+
 .recitation-shuffling-card {
   display: flex;
   width: min(290px, 100%);

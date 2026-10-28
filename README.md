@@ -13,12 +13,14 @@ ClassDex is an interactive web-based digital index card and classroom record-kee
 
 - **Role-Based Accounts & Dashboards**: Dedicated interfaces for Faculty and Students with secure session-based authentication and role enforcement.
 - **Class Management**: Create classes with unique alphanumeric class codes, sharable invite links, and downloadable QR codes with enlarged display modal.
-- **Student List Management**: Build and maintain official class Student Lists by manual input, bulk copy-paste, or CSV/Excel file upload.
-- **Smart Enrollment & Approval**: Roster-based auto-admission when student ID numbers match the Student List; saving a roster automatically approves matching pending requests. Unmatched requests remain at the top of notifications until faculty approve or decline them; auto-approvals and attendance warnings support read tracking.
+- **Student List Management & Safe Import**: Build and maintain official class Student Lists by manual input, bulk copy-paste, formatted `.xlsx` template download, or safe spreadsheet import (`.xlsx`, `.xls`, `.csv`) with formula injection neutralization, numeric ID left-padding, and name parsing.
+- **Drop List & Safe Student Removal**: Remove unrecorded students permanently or automatically transition recorded students to a dedicated Drop List (`DROPPED` status with `droppedAt` timestamp), safely retaining all academic history and supporting one-click restoration.
+- **Surname-First Sorting**: Official Philippine class list name decomposition into `firstName`, `middleName`, `lastName`, `suffix`, and derived `sortKey`, ordering all modules and exports consistently by surname.
+- **Smart Enrollment & Auto-Add**: Roster-based auto-admission when student ID numbers match the Student List; approving a pending enrollment automatically adds the student to the active Student List and links records.
 - **Classroom Modules**:
-  - **Class Deck**: Searchable student card interface organized like physical index cards, supporting grid and list layouts.
+  - **Class Deck**: Optimized student card interface organized like physical index cards with photo caching (ETag/304) and unified deck loading.
   - **Take Attendance**: Daily Manila-calendar-day attendance sessions (Present, Late, Absent) with configurable class grace periods for Late status and continuous editability.
-  - **Recitation**: Card shuffler supporting random or weighted selection (favoring students with fewer calls) that draws exclusively from Present and Late students, with real-time scoring and called-today history.
+  - **Recitation**: Card shuffler supporting configurable shuffle duration (1–7 seconds), random or weighted selection (favoring students with fewer calls), deceleration animation curves, synchronized audio, and `prefers-reduced-motion` compliance.
   - **Activities**: Per-session classroom activity score entry with automated absence synchronization.
   - **Projects**: Fixed Midterm and Finals project score tracking.
   - **Quiz**: Quiz sessions tracking total items, scores, and absence handling.
@@ -238,12 +240,60 @@ The client starts on `http://localhost:5173`. Open `http://localhost:5173` in yo
 - `npm run dev`: Starts backend development server (`node index.js`).
 - `npm run start`: Starts backend production server (`node index.js`).
 - `npm run db:setup`: Generates Prisma client and applies schema migrations (`prisma generate && node scripts/apply-schema.js`).
+- `node scripts/backfill-name-parts.js [--dry-run] [--batch-size=50]`: Parses and populates `firstName`, `middleName`, `lastName`, `suffix`, and `sortKey` across existing `StudentProfile` and `ClassRoster` records. Run with `--dry-run` to verify name parsing without writing to the database.
 
 ### Frontend (`classdex-frontend`)
 - `npm run dev`: Starts Vite local development server (`vite`).
 - `npm run build`: Bundles production assets into `dist/` (`vite build`).
 - `npm run lint`: Runs `oxlint` static code analysis (`oxlint`).
 - `npm run preview`: Previews built production bundle locally (`vite preview`).
+
+---
+
+## Classroom Enhancements & Data Rules
+
+### 1. Surname Sorting & Name Parser (`shared/nameParser.js`)
+ClassDex decomposes student names into structured components (`firstName`, `middleName`, `lastName`, `suffix`, and `sortKey`) to support official Philippine class list sorting standards:
+- **Formats Handled**: Standard given-first (`Juan Dela Cruz Jr.`), comma-separated registrar lists (`Dela Cruz, Juan Jr.`), and religious abbreviations (`Ma. Cristina Santos`).
+- **Surname Particles**: Preserves Filipino and Spanish compound particles (`de`, `del`, `dela`, `delos`, `delas`, `san`, `santa`, `van`, etc.) as part of the surname.
+- **Sorting Rule**: Sorts ascending by `sortKey` (case-insensitive, diacritics-stripped surname), then `firstName`, `middleName`, and `studentId`.
+
+### 2. Student List Excel Template & Safe Import
+- **Template Download** (`GET /api/classes/:id/roster/template`):
+  - Returns an `.xlsx` workbook named `<ClassCode>_student_list_template.xlsx`.
+  - Includes a reference `CLASS INFORMATION` block and pre-filled current active students.
+  - Forces text formatting (`z: "@"`) for student IDs to preserve leading zeroes.
+  - Applies formula injection neutralization (prefixes cells starting with `=`, `+`, `-`, or `@` with `'`).
+- **Safe Import** (`POST /api/classes/:id/roster/import`):
+  - Accepts `.xlsx`, `.xls`, and `.csv` payloads (max 2 MB, max 500 rows).
+  - Automatically locates the `STUDENTS` marker row or falls back to standard Name/ID headers, ignoring class information rows.
+  - Parses comma-formatted surnames, coerces numeric IDs with zero-padding to institutional length, flags duplicates and existing entries, and returns validation warnings to the frontend preview table before saving.
+
+### 3. Drop List & Safe Student Removal
+- **Safe Removal & Impact Assessment** (`GET /api/classes/:id/roster/:entryId/impact` & `DELETE /api/classes/:id/roster/:entryId`):
+  - When removing a student from the active Student List, ClassDex inspects all associated attendance records, recitation logs, activity scores, project scores, and quiz scores.
+  - **Zero Records**: The roster entry and class enrollment are permanently deleted.
+  - **One or More Records**: The student is transitioned to `DROPPED` status with a `droppedAt` timestamp. Academic history is preserved.
+- **Drop List View & Restoration** (`GET /api/classes/:id/drop-list` & `POST /api/classes/:id/drop-list/:entryId/restore`):
+  - Faculty can view all dropped students with their drop timestamp and historical record counts, and restore them back to the active Student List with one click.
+  - Export matrices include a dedicated "Dropped Students" block.
+
+### 4. Configurable Recitation Shuffle Duration
+- Faculty can adjust the shuffle animation duration between **1 and 7 seconds** (default: 3 seconds) using a duration control in the Recitation interface.
+- Backend validates integer bounds (1–7) on `PATCH /api/classes/:id` and stores `recitationShuffleSeconds` on `Class`.
+- Front-end scales the deceleration preview curve (~55ms fast swaps to ~250ms ease-out) to match the selected duration.
+- Sound effects and animations are automatically silenced and bypassed when animations are disabled or system `prefers-reduced-motion` is enabled.
+
+### 5. Name Parts Backfill Tool
+For existing databases initialized prior to surname sorting:
+```bash
+# Preview changes without modifying data:
+node scripts/backfill-name-parts.js --dry-run
+
+# Execute backfill in batches:
+node scripts/backfill-name-parts.js --batch-size=50
+```
+The script is idempotent and reports processed counts across both `StudentProfile` and `ClassRoster`.
 
 ---
 

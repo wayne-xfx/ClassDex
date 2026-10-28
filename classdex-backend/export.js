@@ -151,7 +151,22 @@ function approvedStudents(classRecord) {
     .sort(compareStudents);
 }
 
-function matrixSection(title, students, items, { itemLabel, resultFor }) {
+function droppedStudents(classRecord) {
+  return (classRecord.enrollments || [])
+    .filter((enrollment) => enrollment.status === "DROPPED")
+    .map(({ studentProfile }) => ({
+      studentId: String(studentProfile.studentId ?? ""),
+      studentName: studentProfile.name || "",
+      firstName: studentProfile.firstName || "",
+      middleName: studentProfile.middleName || "",
+      lastName: studentProfile.lastName || "",
+      suffix: studentProfile.suffix || "",
+      sortKey: studentProfile.sortKey || "",
+    }))
+    .sort(compareStudents);
+}
+
+function matrixSection(title, students, items, { itemLabel, resultFor }, droppedList = []) {
   const headers = ["Student ID", "Student Name", ...items.map(itemLabel)];
   const byId = new Map(students.map((student) => [student.studentId, student]));
   const values = new Map(students.map((student) => [student.studentId, Array(items.length).fill("")]));
@@ -163,6 +178,20 @@ function matrixSection(title, students, items, { itemLabel, resultFor }) {
     }
   });
   const rows = students.map((student) => [student.studentId, student.studentName, ...values.get(student.studentId)]);
+  if (droppedList && droppedList.length) {
+    const droppedValues = new Map(droppedList.map((student) => [student.studentId, Array(items.length).fill("")]));
+    items.forEach((item, columnIndex) => {
+      for (const result of resultFor(item)) {
+        const studentId = String(result.studentId ?? "");
+        if (!droppedValues.has(studentId)) continue;
+        droppedValues.get(studentId)[columnIndex] = result.value ?? "";
+      }
+    });
+    rows.push(["Dropped", ...Array(headers.length - 1).fill("")]);
+    for (const dropped of droppedList) {
+      rows.push([dropped.studentId, dropped.studentName, ...droppedValues.get(dropped.studentId)]);
+    }
+  }
   return { title, headers, rows };
 }
 
@@ -183,6 +212,7 @@ function latestBy(records, timestamp) {
 
 function buildRecordSections(classRecord) {
   const students = approvedStudents(classRecord);
+  const droppedList = droppedStudents(classRecord);
   const sections = [];
   const sessions = [...(classRecord.sessions || [])].sort((a, b) => new Date(a.date) - new Date(b.date));
   const activities = [...(classRecord.activities || [])].sort((a, b) =>
@@ -196,23 +226,23 @@ function buildRecordSections(classRecord) {
   sections.push(matrixSection("Attendance", students, sessions, {
     itemLabel: (session) => dateLabel(session.date),
     resultFor: (session) => latestBy(session.attendance, "markedAt"),
-  }));
+  }, droppedList));
   sections.push(matrixSection("Recitation", students, sessions, {
     itemLabel: (session) => dateLabel(session.date),
     resultFor: (session) => latestBy(session.recitations, "calledAt"),
-  }));
+  }, droppedList));
   sections.push(matrixSection("Activities", students, activities, {
     itemLabel: (activity) => `${activity.title} - ${dateLabel(activity.session?.date)}`,
     resultFor: (activity) => latestBy(activity.scores, "updatedAt"),
-  }));
+  }, droppedList));
   sections.push(matrixSection("Projects", students, projects, {
     itemLabel: (project) => project.type === "MIDTERM" ? "Midterm Project" : "Finals Project",
     resultFor: (project) => latestBy(project.scores, "updatedAt"),
-  }));
+  }, droppedList));
   sections.push(matrixSection("Quiz", students, quizzes, {
     itemLabel: (quiz) => `${quiz.title} - ${dateLabel(quiz.date)} (/${quiz.totalItems})`,
     resultFor: (quiz) => latestBy(quiz.scores, "updatedAt"),
-  }));
+  }, droppedList));
   return sections;
 }
 

@@ -69,6 +69,7 @@ export default function FacultyClass() {
   const [toastType, setToastType] = useState("success");
   const [pendingStudentIds, setPendingStudentIds] = useState([]);
   const [savingGracePeriod, setSavingGracePeriod] = useState(false);
+  const [recitationShuffleSeconds, setRecitationShuffleSeconds] = useState(3);
   const [recitationMode, setRecitationMode] = useState("RANDOM");
   const [recitationCall, setRecitationCall] = useState(null);
   const [recitationHistory, setRecitationHistory] = useState([]);
@@ -111,6 +112,7 @@ export default function FacultyClass() {
         if (!cancelled) {
           setClassRecord({ ...deck.class, session: deck.session, students: deck.students });
           setGracePeriodMinutes(deck.class.gracePeriodMinutes);
+          setRecitationShuffleSeconds(deck.class.recitationShuffleSeconds ?? 3);
           setStudentListCount(deck.rosterCount ?? 0);
           setAttendanceOverrides({});
           setRecitationCall(null);
@@ -437,6 +439,22 @@ export default function FacultyClass() {
     }
   }
 
+  async function saveShuffleDuration(seconds) {
+    const previous = recitationShuffleSeconds;
+    setRecitationShuffleSeconds(seconds);
+    try {
+      const result = await api.updateClass(id, { recitationShuffleSeconds: seconds });
+      setRecitationShuffleSeconds(result.class.recitationShuffleSeconds);
+      setClassRecord((current) => ({ ...current, recitationShuffleSeconds: result.class.recitationShuffleSeconds }));
+      showToast(`Shuffle duration set to ${result.class.recitationShuffleSeconds} s.`);
+      return true;
+    } catch (saveError) {
+      setRecitationShuffleSeconds(previous);
+      showToast(saveError.message, "error");
+      return false;
+    }
+  }
+
   async function saveGracePeriod(minutes) {
     setSavingGracePeriod(true);
     try {
@@ -511,8 +529,9 @@ export default function FacultyClass() {
       setRecitationBusy(true);
       try {
         const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const durationMs = (recitationShuffleSeconds || 3) * 1000;
         if (animate && !reduceMotion) {
-          await new Promise((resolve) => window.setTimeout(resolve, 2400));
+          await new Promise((resolve) => window.setTimeout(resolve, durationMs));
         }
         const excludeStudentId = skipCurrent ? recitationCall?.student.id : null;
         const { recitation } = await api.shuffleRecitation(
@@ -801,6 +820,8 @@ export default function FacultyClass() {
                   savingScore={savingRecitationScore}
                   animationEnabled={recitationAnimationEnabled}
                   onAnimationChange={setRecitationAnimationEnabled}
+                  durationSeconds={recitationShuffleSeconds}
+                  onDurationChange={saveShuffleDuration}
                 />
               ) : activeModule === "activities" ? (
                 <ActivitiesModule key={classRecord.session.id} sessionId={classRecord.session.id} students={sortedStudents} tabCache={tabCache} />
