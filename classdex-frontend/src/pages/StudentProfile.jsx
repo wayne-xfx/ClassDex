@@ -115,10 +115,7 @@ export default function StudentProfile() {
               <div className="form-grid">
                 <label className="field">
                   <span>Full name <b>*</b></span>
-                  <input className="input" required value={form.name || ""} onChange={update("name")} placeholder="e.g., Jose P. Rizal" autoComplete="name" />
-                  <span className="field-hint">
-                    First name, middle initial, surname; add Jr./Sr./III at the end; &ldquo;Dela Cruz, Juan P.&rdquo; also works
-                  </span>
+                  <input className="input" required value={form.name || ""} onChange={update("name")} placeholder="e.g., Juan Dela Cruz" autoComplete="name" />
                 </label>
                 <label className="field">
                   <span>Student ID <b>*</b></span>

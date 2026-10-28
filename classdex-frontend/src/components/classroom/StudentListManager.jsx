@@ -277,11 +277,8 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
                   className="input"
                   value={name}
                   onChange={(event) => setName(event.target.value)}
-                  placeholder="e.g., Jose P. Rizal"
+                  placeholder="e.g., Juan Dela Cruz"
                 />
-                <span className="field-hint">
-                  First name, middle initial, surname; add Jr./Sr./III at the end; &ldquo;Dela Cruz, Juan P.&rdquo; also works
-                </span>
               </label>
               <label className="field">
                 <span>7-digit student ID</span>
