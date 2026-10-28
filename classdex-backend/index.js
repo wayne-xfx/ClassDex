@@ -291,6 +291,60 @@ async function findOwnedClass(classId, facultyId) {
   return prisma.class.findFirst({ where: { id: classId, facultyId }, select: { id: true } });
 }
 
+async function ensureApprovedEnrollmentsInRoster(classId) {
+  try {
+    const unrosteredEnrollments = await prisma.classEnrollment.findMany({
+      where: {
+        classId,
+        status: "APPROVED",
+        studentProfile: {
+          studentId: { not: null },
+        },
+      },
+      include: { studentProfile: true },
+    });
+
+    if (!unrosteredEnrollments.length) return;
+
+    for (const enrollment of unrosteredEnrollments) {
+      const profile = enrollment.studentProfile;
+      if (!profile?.studentId) continue;
+
+      const parsed = parseFullName(profile.name);
+      await prisma.classRoster.upsert({
+        where: {
+          classId_studentId: {
+            classId,
+            studentId: profile.studentId,
+          },
+        },
+        update: {
+          droppedAt: null,
+          studentName: profile.name,
+          firstName: parsed.firstName || profile.firstName || "",
+          middleName: parsed.middleName || profile.middleName || "",
+          lastName: parsed.lastName || profile.lastName || "",
+          suffix: parsed.suffix || profile.suffix || "",
+          sortKey: parsed.sortKey || profile.sortKey || "",
+        },
+        create: {
+          classId,
+          studentId: profile.studentId,
+          studentName: profile.name,
+          firstName: parsed.firstName || profile.firstName || "",
+          middleName: parsed.middleName || profile.middleName || "",
+          lastName: parsed.lastName || profile.lastName || "",
+          suffix: parsed.suffix || profile.suffix || "",
+          sortKey: parsed.sortKey || profile.sortKey || "",
+          droppedAt: null,
+        },
+      });
+    }
+  } catch (err) {
+    console.error("Auto-syncing approved enrollments to roster failed:", err);
+  }
+}
+
 // Auto-generated blank placeholder score rows (e.g. from the Projects bootstrap or absence auto-flagging)
 // must not inflate the count; only non-null scores represent meaningful recorded coursework.
 async function countStudentClassRecords(tx, classId, studentProfileId) {
@@ -1653,6 +1707,7 @@ app.get(
   async (req, res) => {
     try {
       if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
+      await ensureApprovedEnrollmentsInRoster(req.params.id);
       const roster = await prisma.classRoster.findMany({ where: { classId: req.params.id, droppedAt: null }, orderBy: [{ sortKey: "asc" }, { firstName: "asc" }, { middleName: "asc" }, { studentId: "asc" }] });
       return res.json({ roster: await enrichRosterWithPhotos(roster) });
     } catch (error) {
@@ -2844,8 +2899,10 @@ app.get(
         });
       }
 
+      await ensureApprovedEnrollmentsInRoster(classRecord.id);
+
       const [rosterCount, pendingCount] = await Promise.all([
-        prisma.classRoster.count({ where: { classId: classRecord.id } }),
+        prisma.classRoster.count({ where: { classId: classRecord.id, droppedAt: null } }),
         prisma.classEnrollment.count({ where: { classId: classRecord.id, status: "PENDING" } }),
       ]);
 
