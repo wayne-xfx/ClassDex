@@ -3397,6 +3397,8 @@ app.get(
             select: {
               id: true,
               name: true,
+              address: true,
+              email: true,
               updatedAt: true,
               studentId: true,
               program: true,
@@ -3413,7 +3415,13 @@ app.get(
         return res.status(404).json({ message: "Student not found in this class." });
       }
 
-      const [attendanceRecords, recitationRecords] = await Promise.all([
+      const [
+        attendanceRecords,
+        recitationRecords,
+        quizScores,
+        rawActivityScores,
+        projectScores,
+      ] = await Promise.all([
         prisma.attendanceRecord.findMany({
           where: {
             studentId: enrollment.studentProfile.id,
@@ -3441,7 +3449,84 @@ app.get(
           },
           orderBy: { calledAt: "desc" },
         }),
+        prisma.quizScore.findMany({
+          where: {
+            studentId: enrollment.studentProfile.id,
+            session: { is: { classId: classRecord.id } },
+          },
+          select: {
+            id: true,
+            score: true,
+            isAbsent: true,
+            createdAt: true,
+            session: { select: { id: true, date: true, title: true, totalItems: true } },
+          },
+          orderBy: { createdAt: "desc" },
+        }),
+        prisma.activityScore.findMany({
+          where: {
+            studentId: enrollment.studentProfile.id,
+            activity: { is: { classId: classRecord.id } },
+          },
+          select: {
+            id: true,
+            score: true,
+            isAbsent: true,
+            createdAt: true,
+            activity: {
+              select: {
+                id: true,
+                title: true,
+                maxScore: true,
+                session: { select: { id: true, date: true } },
+              },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+        }),
+        prisma.projectScore.findMany({
+          where: {
+            studentId: enrollment.studentProfile.id,
+            project: { is: { classId: classRecord.id } },
+          },
+          select: {
+            id: true,
+            score: true,
+            isAbsent: true,
+            createdAt: true,
+            project: { select: { id: true, type: true, maxScore: true } },
+            session: { select: { id: true, date: true } },
+          },
+          orderBy: { createdAt: "desc" },
+        }),
       ]);
+
+      const quizzes = [...quizScores].sort((a, b) => {
+        const timeA = new Date(a.session?.date || a.createdAt).getTime();
+        const timeB = new Date(b.session?.date || b.createdAt).getTime();
+        return timeB - timeA;
+      });
+
+      const activities = rawActivityScores
+        .map((item) => ({
+          ...item,
+          session: item.activity?.session || null,
+        }))
+        .sort((a, b) => {
+          const timeA = new Date(a.session?.date || a.createdAt).getTime();
+          const timeB = new Date(b.session?.date || b.createdAt).getTime();
+          return timeB - timeA;
+        });
+
+      const projectTypeOrder = { MIDTERM: 0, FINALS: 1 };
+      const projects = [...projectScores].sort((a, b) => {
+        const rankA = projectTypeOrder[a.project?.type] ?? 99;
+        const rankB = projectTypeOrder[b.project?.type] ?? 99;
+        if (rankA !== rankB) return rankA - rankB;
+        const timeA = new Date(a.session?.date || a.createdAt).getTime();
+        const timeB = new Date(b.session?.date || b.createdAt).getTime();
+        return timeB - timeA;
+      });
 
       const recProfile = enrollment.studentProfile;
       const recPhotoUrl = studentPhotoUrl(recProfile);
@@ -3449,6 +3534,9 @@ app.get(
         student: { ...recProfile, photo: recPhotoUrl, photoUrl: recPhotoUrl },
         attendance: attendanceRecords,
         recitations: recitationRecords,
+        quizzes,
+        activities,
+        projects,
       });
     } catch (error) {
       console.error("Student class records lookup failed:", error);
