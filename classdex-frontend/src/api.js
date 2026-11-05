@@ -266,6 +266,7 @@ export const api = {
       body: JSON.stringify({ score }),
     }),
   sessionActivities: (sessionId) => request(`/sessions/${encodeURIComponent(sessionId)}/activities`),
+  classActivities: (classId) => request(`/classes/${encodeURIComponent(classId)}/activities`),
   createActivity: (sessionId, payload) =>
     request(`/sessions/${encodeURIComponent(sessionId)}/activities`, {
       method: "POST",

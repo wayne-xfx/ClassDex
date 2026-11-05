@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import Avatar from "../Avatar";
 import Icon from "../Icon";
 import { Button, Modal } from "../DesignSystem";
+import { EmptyState } from "./ClassroomComponents";
 import { ModuleHeader } from "./ClassShell";
 import ModuleSkeleton from "./ModuleSkeleton";
 import { formatProgramSection, formatStudentDisplayName } from "./studentNames";
@@ -290,10 +291,10 @@ export default function QuizModule({
               : "Browse saved quiz sessions or open a new one."
           }
           actions={
-            !readOnly ? (
-              <button type="button" className="button button-primary" onClick={beginNewQuiz}>
-                <Icon name="plus" /> New Quiz
-              </button>
+            !readOnly && sessions.length > 0 ? (
+              <Button onClick={beginNewQuiz}>
+                <Icon name="plus" /> New quiz
+              </Button>
             ) : null
           }
         />
@@ -326,15 +327,22 @@ export default function QuizModule({
             ))}
           </div>
         ) : (
-          <div className="empty-state">
-            <Icon name="brain" />
-            <strong>No quizzes yet</strong>
-            <span>
-              {readOnly
+          <EmptyState
+            title="No quizzes yet"
+            description={
+              readOnly
                 ? "No quiz sessions were recorded for this class."
-                : "Open a new quiz session to start scoring."}
-            </span>
-          </div>
+                : "A dated, item-counted quiz sheet with automatic absence locking."
+            }
+            icon="brain"
+            action={
+              !readOnly ? (
+                <Button onClick={beginNewQuiz}>
+                  <Icon name="plus" /> New quiz
+                </Button>
+              ) : null
+            }
+          />
         )}
         {error ? (
           <p className="notice notice-error" role="alert">

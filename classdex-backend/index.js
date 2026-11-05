@@ -3318,6 +3318,53 @@ app.get(
 );
 
 app.get(
+  "/api/classes/:id/activities",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      const classRecord = await prisma.class.findFirst({
+        where: { id: req.params.id, facultyId: req.session.userId },
+        select: { id: true },
+      });
+      if (!classRecord) {
+        return res.status(404).json({ message: "Class not found." });
+      }
+
+      const activities = await prisma.activity.findMany({
+        where: { classId: classRecord.id },
+        include: {
+          session: { select: { id: true, date: true } },
+          scores: {
+            where: { score: { not: null }, isAbsent: false },
+            select: { id: true },
+          },
+        },
+        orderBy: [
+          { session: { date: "desc" } },
+          { createdAt: "desc" },
+        ],
+      });
+
+      const formatted = activities.map((act) => ({
+        id: act.id,
+        title: act.title,
+        maxScore: act.maxScore,
+        createdAt: act.createdAt,
+        sessionId: act.sessionId,
+        sessionDate: act.session?.date ? act.session.date.toISOString().slice(0, 10) : null,
+        scoredCount: act.scores?.length || 0,
+      }));
+
+      return res.json({ activities: formatted });
+    } catch (error) {
+      console.error("Class activities lookup failed:", error);
+      return res.status(500).json({ message: "Unable to load class activities." });
+    }
+  },
+);
+
+app.get(
   "/api/classes/:id/students/:studentId/records",
   requireAuth,
   requireRole("FACULTY"),

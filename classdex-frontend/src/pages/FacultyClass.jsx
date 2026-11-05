@@ -1085,7 +1085,7 @@ export default function FacultyClass() {
                   readOnly={isArchived}
                 />
               ) : activeModule === "activities" ? (
-                <ActivitiesModule key={classRecord.session?.id || "no-session"} sessionId={classRecord.session?.id || null} students={sortedStudents} tabCache={tabCache} readOnly={isArchived} />
+                <ActivitiesModule key={id} classId={id} sessionId={classRecord.session?.id || null} students={sortedStudents} tabCache={tabCache} readOnly={isArchived} />
               ) : activeModule === "projects" ? (
                 <ProjectsModule key={id} classId={id} sessionId={classRecord.session?.id || null} students={sortedStudents} tabCache={tabCache} readOnly={isArchived} />
               ) : activeModule === "export" ? (

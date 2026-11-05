@@ -23,18 +23,22 @@ function getRelatedStudentId(row) {
     || row.profile?.id;
 }
 
-function formatScoreRows(response, students, sessionId) {
+function formatScoreRows(response, students, currentSessionId, activeSessionId) {
   const rows = getRows(response);
+  const isTodaySession = Boolean(
+    activeSessionId === undefined ||
+      (currentSessionId && activeSessionId === currentSessionId),
+  );
   return students.map((student) => {
     const scoreRow = rows.find((row) => getRelatedStudentId(row) === student.id);
+    const scoreIsAbsent = Boolean(scoreRow?.isAbsent || scoreRow?.absent);
+    const isAbsent = isTodaySession
+      ? Boolean(scoreIsAbsent || student.status === "ABSENT")
+      : scoreIsAbsent;
     return {
       student,
       score: scoreRow?.score ?? null,
-      isAbsent: Boolean(
-        (scoreRow?.isAbsent || scoreRow?.absent)
-          && (sessionId === undefined || scoreRow.sessionId === sessionId)
-        || student.status === "ABSENT",
-      ),
+      isAbsent,
     };
   });
 }
@@ -332,10 +336,14 @@ function ActivityForm({ activity, onClose, onSubmit, saving }) {
   );
 }
 
-export function ActivitiesModule({ sessionId, students = [], tabCache, readOnly = false }) {
+export function ActivitiesModule({ classId, sessionId, students = [], tabCache, readOnly = false }) {
   const cacheKey = sessionId ? `activities:${sessionId}` : null;
   const cachedActivities = cacheKey ? tabCache?.get(cacheKey) : [];
   const [activities, setActivities] = useState(cachedActivities || []);
+  const [viewTab, setViewTab] = useState("today"); // "today" | "past"
+  const [pastActivities, setPastActivities] = useState([]);
+  const [pastLoading, setPastLoading] = useState(false);
+  const [pastLoaded, setPastLoaded] = useState(false);
   const [active, setActive] = useState(null);
   const [rawScores, setRawScores] = useState([]);
   const [loading, setLoading] = useState(Boolean(sessionId) && !cachedActivities);
@@ -382,6 +390,27 @@ export function ActivitiesModule({ sessionId, students = [], tabCache, readOnly 
     return () => { cancelled = true; };
   }, [sessionId, cacheKey, tabCache]);
 
+  useEffect(() => {
+    if (viewTab === "past" && !pastLoaded && classId) {
+      let cancelled = false;
+      setPastLoading(true);
+      api.classActivities(classId)
+        .then((response) => {
+          if (!cancelled) {
+            setPastActivities(response.activities || []);
+            setPastLoaded(true);
+          }
+        })
+        .catch((loadError) => {
+          if (!cancelled) setError(loadError.message);
+        })
+        .finally(() => {
+          if (!cancelled) setPastLoading(false);
+        });
+      return () => { cancelled = true; };
+    }
+  }, [viewTab, pastLoaded, classId]);
+
   const loadScores = useCallback(async (activity) => {
     if (!activity) return;
     try {
@@ -418,8 +447,8 @@ export function ActivitiesModule({ sessionId, students = [], tabCache, readOnly 
   }, [activeActivityId, sessionId, studentIdsKey, tabCache]);
 
   const entries = useMemo(() => {
-    return formatScoreRows(rawScores, students);
-  }, [rawScores, students]);
+    return formatScoreRows(rawScores, students, sessionId, active?.sessionId);
+  }, [rawScores, students, sessionId, active?.sessionId]);
 
   async function saveActivity(payload) {
     setSaving(true);
@@ -427,6 +456,7 @@ export function ActivitiesModule({ sessionId, students = [], tabCache, readOnly 
       if (formActivity) {
         const response = await api.updateActivity(formActivity.id, payload);
         setActivities((current) => current.map((item) => item.id === formActivity.id ? response.activity : item));
+        setPastActivities((current) => current.map((item) => item.id === formActivity.id ? { ...item, ...response.activity } : item));
         if (active?.id === formActivity.id) setActive(response.activity);
       } else {
         const response = await api.createActivity(sessionId, payload);
@@ -446,6 +476,7 @@ export function ActivitiesModule({ sessionId, students = [], tabCache, readOnly 
     try {
       await api.deleteActivity(active.id);
       setActivities((current) => current.filter((item) => item.id !== active.id));
+      setPastActivities((current) => current.filter((item) => item.id !== active.id));
       setActive(null);
       setConfirmDelete(false);
     } catch (deleteError) {
@@ -482,7 +513,11 @@ export function ActivitiesModule({ sessionId, students = [], tabCache, readOnly 
     if (sessionId) tabCache?.invalidate(`activities:${sessionId}`);
   }
 
+  const isTodaySession = Boolean(sessionId && active?.sessionId === sessionId);
   const rosterAbsentCount = students.filter((student) => student.status === "ABSENT").length;
+  const currentAbsentCount = isTodaySession
+    ? rosterAbsentCount
+    : entries.filter((e) => e.isAbsent).length;
 
   if (active) {
     return (
@@ -494,7 +529,7 @@ export function ActivitiesModule({ sessionId, students = [], tabCache, readOnly 
             title={active.title}
             maxScore={active.maxScore}
             entries={entries}
-            absentCount={rosterAbsentCount}
+            absentCount={currentAbsentCount}
             onSave={saveScore}
             readOnly={readOnly}
             back={() => { setActive(null); setError(""); }}
@@ -521,36 +556,142 @@ export function ActivitiesModule({ sessionId, students = [], tabCache, readOnly 
     );
   }
 
+  const displayedPast = pastActivities.filter((a) => !sessionId || a.sessionId !== sessionId);
+  const activitiesToDisplay = viewTab === "today" ? activities : displayedPast;
+  const isViewLoading = viewTab === "today" ? loading : pastLoading;
+  const hasItems = activitiesToDisplay.length > 0;
+
   return (
     <div className="activity-module">
       <ModuleHeader
         title="Activities"
-        subtitle={readOnly ? "View recorded activities and scores from today’s session." : "Create today’s activities and score each admitted student."}
-        actions={readOnly || !sessionId ? null : <Button onClick={() => setFormActivity(null)}><Icon name="plus" /> New activity</Button>}
+        subtitle={readOnly ? "View recorded activities and scores." : "Create today’s activities and score each admitted student."}
+        actions={
+          hasItems && !readOnly && sessionId ? (
+            <Button onClick={() => setFormActivity(null)}>
+              <Icon name="plus" /> New activity
+            </Button>
+          ) : null
+        }
       />
+
+      <div className="activities-view-toggle">
+        <div className="activities-segmented" role="tablist" aria-label="Activities view">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={viewTab === "today"}
+            className={`activities-tab ${viewTab === "today" ? "is-active" : ""}`}
+            onClick={() => setViewTab("today")}
+          >
+            Today
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={viewTab === "past"}
+            className={`activities-tab ${viewTab === "past" ? "is-active" : ""}`}
+            onClick={() => setViewTab("past")}
+          >
+            Past activities
+          </button>
+        </div>
+      </div>
+
       {error ? <div className="notice notice-error" role="alert">{error}<button type="button" onClick={() => { setLoading(true); setError(""); reloadActivities(); }}>Retry</button></div> : null}
       {feedback ? <div className="notice notice-error" role="alert">{feedback}<button type="button" onClick={() => setFeedback("")}>Dismiss</button></div> : null}
-      <AbsenceBanner count={rosterAbsentCount} />
-      {loading ? <ModuleSkeleton aria-label="Loading activities" /> : activities.length ? (
+      {viewTab === "today" ? <AbsenceBanner count={rosterAbsentCount} /> : null}
+
+      {isViewLoading ? (
+        <ModuleSkeleton aria-label="Loading activities" />
+      ) : hasItems ? (
         <div className="activity-list">
-          {activities.map((activity) => (
-            <Card key={activity.id} className="activity-card">
-              <div className="activity-card-icon"><Icon name="book" /></div>
-              <div className="activity-card-copy">
-                <h2>{activity.title}</h2>
-                <p>{activity.maxScore == null ? "No maximum score" : `Out of ${activity.maxScore}`}</p>
-              </div>
-              <Badge tone="neutral">{activity.scoredCount ?? (activity.scores || []).filter((row) => row.score != null && !row.isAbsent && !row.absent).length}/{students.length} scored</Badge>
-              <Button variant="secondary" onClick={() => openActivity(activity)}>{readOnly ? "View scores" : "Open scoring"} <Icon name="arrow" /></Button>
-            </Card>
-          ))}
+          {activitiesToDisplay.map((activity) => {
+            const scoredCount =
+              activity.scoredCount ??
+              (activity.scores || []).filter(
+                (row) => row.score != null && !row.isAbsent && !row.absent
+              ).length;
+            const isAllScored = students.length > 0 && scoredCount >= students.length;
+            const buttonLabel = readOnly || isAllScored
+              ? "View results"
+              : scoredCount > 0
+              ? "Continue scoring"
+              : "Start scoring";
+            const percent =
+              students.length > 0
+                ? Math.min(100, Math.round((scoredCount / students.length) * 100))
+                : 0;
+
+            return (
+              <Card key={activity.id} className="activity-card">
+                <div className="activity-card-icon" aria-hidden="true">
+                  <Icon name="listChecks" size={20} />
+                </div>
+                <div className="activity-card-copy">
+                  <div className="activity-card-header">
+                    <h2 className="activity-card-title">{activity.title}</h2>
+                    {viewTab === "past" && activity.sessionDate && (
+                      <span className="activity-session-date">
+                        {new Date(activity.sessionDate).toLocaleDateString("en-US", {
+                          weekday: "short",
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </span>
+                    )}
+                  </div>
+                  <p className="activity-card-max-score">
+                    {activity.maxScore == null
+                      ? "No max score"
+                      : `Out of ${activity.maxScore}`}
+                  </p>
+                </div>
+                <div className="activity-card-stats-col">
+                  <div className="activity-card-stats-text">
+                    <span>
+                      <strong>{scoredCount}</strong>/{students.length} scored
+                    </span>
+                  </div>
+                  <div
+                    className="activity-progress-track"
+                    aria-label={`${scoredCount} of ${students.length} scored`}
+                  >
+                    <div
+                      className="activity-progress-fill"
+                      style={{ width: `${percent}%` }}
+                    />
+                  </div>
+                </div>
+                <Button
+                  variant="secondary"
+                  onClick={() => openActivity(activity)}
+                  className="activity-card-action-btn"
+                >
+                  {buttonLabel} <Icon name="arrow" size={15} />
+                </Button>
+              </Card>
+            );
+          })}
         </div>
       ) : (
         <EmptyState
-          title="No activities for today"
-          description={readOnly || !sessionId ? "No session or activities were recorded for today." : "Create an activity to start recording student scores."}
+          title={viewTab === "today" ? "No activities for today" : "No past activities"}
+          description={
+            viewTab === "today"
+              ? readOnly || !sessionId
+                ? "No session or activities were recorded for today."
+                : "Create an activity to start recording student scores."
+              : "Activities recorded on earlier session dates will appear here."
+          }
           icon="book"
-          action={readOnly || !sessionId ? null : <Button onClick={() => setFormActivity(null)}><Icon name="plus" /> New activity</Button>}
+          action={
+            readOnly || !sessionId ? null : (
+              <Button onClick={() => setFormActivity(null)}>
+                <Icon name="plus" /> New activity
+              </Button>
+            )
+          }
         />
       )}
       {!readOnly && formActivity !== undefined ? <ActivityForm activity={formActivity} onClose={() => setFormActivity(undefined)} onSubmit={saveActivity} saving={saving} /> : null}
@@ -569,6 +710,8 @@ export function ProjectsModule({ classId, sessionId, students = [], tabCache, re
   const [scoresLoading, setScoresLoading] = useState(false);
   const [savingMaxScore, setSavingMaxScore] = useState(false);
   const [error, setError] = useState("");
+  const [focusMaxScoreOnOpen, setFocusMaxScoreOnOpen] = useState(false);
+  const maxScoreInputRef = useRef(null);
 
   const loadProjects = useCallback(async () => {
     try {
@@ -636,12 +779,13 @@ export function ProjectsModule({ classId, sessionId, students = [], tabCache, re
   }, [activeProjectId, sessionId, studentIdsKey, tabCache]);
 
   const entries = useMemo(() => {
-    return formatScoreRows(rawScores, students, sessionId ?? null);
+    return formatScoreRows(rawScores, students, sessionId, sessionId);
   }, [rawScores, students, sessionId]);
 
-  function openProject(project) {
+  function openProject(project, focusMaxScore = false) {
     setError("");
     setMaxScoreInput(project.maxScore == null ? "" : String(project.maxScore));
+    setFocusMaxScoreOnOpen(focusMaxScore);
     const cached = tabCache?.get(`projectScores:${project.id}`);
     if (cached) {
       setRawScores(cached);
@@ -651,6 +795,13 @@ export function ProjectsModule({ classId, sessionId, students = [], tabCache, re
     }
     setActive(project);
   }
+
+  useEffect(() => {
+    if (active && focusMaxScoreOnOpen) {
+      maxScoreInputRef.current?.focus();
+      setFocusMaxScoreOnOpen(false);
+    }
+  }, [active, focusMaxScoreOnOpen]);
 
   async function saveProjectScore(studentId, score) {
     const { score: savedScore } = await api.setProjectScore(active.id, studentId, score, sessionId);
@@ -697,13 +848,14 @@ export function ProjectsModule({ classId, sessionId, students = [], tabCache, re
             <label className="field">
               <span>Out of</span>
               <input
+                ref={maxScoreInputRef}
                 className="input"
                 type="number"
                 min="1"
                 step="1"
                 inputMode="numeric"
                 value={maxScoreInput}
-                onChange={(event) => /^\d*$/.test(event.target.value) && setMaxScoreInput(event.target.value)}
+                onChange={(event) => /^d*$/.test(event.target.value) && setMaxScoreInput(event.target.value)}
                 onPaste={(event) => { if (!/^\d+$/.test(event.clipboardData.getData("text"))) event.preventDefault(); }}
               />
             </label>
@@ -739,20 +891,104 @@ export function ProjectsModule({ classId, sessionId, students = [], tabCache, re
           {["MIDTERM", "FINALS"].map((type) => {
             const project = projects.find((item) => item.type === type);
             const scoreRows = project?.scores || [];
-            const scored = scoreRows.filter((row) => row.score != null && !row.isAbsent && !row.absent).map((row) => row.score);
+            const scored = scoreRows
+              .filter((row) => row.score != null && !row.isAbsent && !row.absent)
+              .map((row) => row.score);
             const scoredCount = scored.length;
-            const average = scored.length ? (scored.reduce((sum, score) => sum + score, 0) / scored.length).toFixed(1) : "—";
+            const rawAvg = scored.length
+              ? scored.reduce((sum, score) => sum + score, 0) / scored.length
+              : 0;
+            const avgDisplay =
+              scoredCount === 0
+                ? "—"
+                : project?.maxScore != null
+                ? `${Math.round(rawAvg)} / ${project.maxScore} avg`
+                : `${Math.round(rawAvg)} avg`;
+            const percent =
+              students.length > 0
+                ? Math.min(100, Math.round((scoredCount / students.length) * 100))
+                : 0;
+
+            const isAllScored = students.length > 0 && scoredCount >= students.length;
+            const actionLabel = readOnly || isAllScored
+              ? "View results"
+              : scoredCount > 0
+              ? "Continue scoring"
+              : "Start scoring";
+
+            const isMidterm = type === "MIDTERM";
+
             return (
-              <Card className="project-card" key={type}>
-                <span className="project-card-icon"><Icon name="book" /></span>
-                <Badge tone="neutral">{type === "MIDTERM" ? "Midterm" : "Finals"}</Badge>
-                <h2>{type === "MIDTERM" ? "Midterm Project" : "Finals Project"}</h2>
-                <p>{project?.maxScore == null ? (readOnly ? "No maximum score set." : "Set the maximum score in the sheet.") : `Out of ${project.maxScore}`}</p>
-                <div className="project-card-stats">
-                  <span><strong>{scoredCount}/{students.length}</strong> scored</span>
-                  <span><strong>{average}</strong> average</span>
+              <Card
+                className={`project-card ${isMidterm ? "project-card-midterm" : "project-card-finals"}`}
+                key={type}
+              >
+                <div className="project-card-top-row">
+                  <span className="project-card-icon" aria-hidden="true">
+                    <Icon name={isMidterm ? "folderKanban" : "sparkles"} size={20} />
+                  </span>
+                  <Badge tone={isMidterm ? "primary" : "neutral"}>
+                    {isMidterm ? "Midterm" : "Finals"}
+                  </Badge>
                 </div>
-                <Button onClick={() => project && openProject(project)} disabled={!project}>{readOnly ? "View scores" : "Open scoring"} <Icon name="arrow" /></Button>
+
+                <h2 className="project-card-title">
+                  {isMidterm ? "Midterm Project" : "Finals Project"}
+                </h2>
+
+                <div className="project-max-score-row">
+                  {project?.maxScore == null ? (
+                    <>
+                      <span className="project-max-score-empty">Max score not set</span>
+                      {!readOnly && (
+                        <>
+                          <span className="project-max-score-divider" aria-hidden="true">·</span>
+                          <button
+                            type="button"
+                            className="link-button project-set-max-btn"
+                            onClick={() => project && openProject(project, true)}
+                          >
+                            Set max score
+                          </button>
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    <span className="project-max-score-set">
+                      Max score: {project.maxScore} pts
+                    </span>
+                  )}
+                </div>
+
+                <div className="project-card-stats-block">
+                  <div className="project-card-stats-text">
+                    <span>
+                      <strong>{scoredCount}</strong>/{students.length} scored
+                    </span>
+                    <span>
+                      <strong>{avgDisplay}</strong>
+                    </span>
+                  </div>
+                  <div
+                    className="project-progress-track"
+                    aria-label={`${scoredCount} of ${students.length} scored`}
+                  >
+                    <div
+                      className="project-progress-fill"
+                      style={{ width: `${percent}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="project-card-actions">
+                  <Button
+                    variant="secondary"
+                    onClick={() => project && openProject(project, false)}
+                    disabled={!project}
+                  >
+                    {actionLabel} <Icon name="arrow" size={15} />
+                  </Button>
+                </div>
               </Card>
             );
           })}
