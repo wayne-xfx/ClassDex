@@ -293,49 +293,70 @@ async function findOwnedClass(classId, facultyId) {
 
 async function ensureApprovedEnrollmentsInRoster(classId) {
   try {
-    const unrosteredEnrollments = await prisma.classEnrollment.findMany({
-      where: {
-        classId,
-        status: "APPROVED",
-      },
-      include: { studentProfile: true },
-    });
+    const [unrosteredEnrollments, existingRoster] = await Promise.all([
+      prisma.classEnrollment.findMany({
+        where: {
+          classId,
+          status: "APPROVED",
+        },
+        include: { studentProfile: true },
+      }),
+      prisma.classRoster.findMany({
+        where: { classId },
+      }),
+    ]);
 
     if (!unrosteredEnrollments.length) return;
+
+    const rosterByStudentId = new Map(
+      existingRoster.map((entry) => [entry.studentId, entry]),
+    );
 
     for (const enrollment of unrosteredEnrollments) {
       const profile = enrollment.studentProfile;
       if (!profile?.studentId) continue;
 
       const parsed = parseFullName(profile.name);
-      await prisma.classRoster.upsert({
-        where: {
-          classId_studentId: {
+      const existing = rosterByStudentId.get(profile.studentId);
+      if (!existing) {
+        const created = await prisma.classRoster.upsert({
+          where: {
+            classId_studentId: {
+              classId,
+              studentId: profile.studentId,
+            },
+          },
+          update: {
+            droppedAt: null,
+          },
+          create: {
             classId,
             studentId: profile.studentId,
+            studentName: profile.name,
+            firstName: parsed.firstName || profile.firstName || "",
+            middleName: parsed.middleName || profile.middleName || "",
+            lastName: parsed.lastName || profile.lastName || "",
+            suffix: parsed.suffix || profile.suffix || "",
+            sortKey: parsed.sortKey || profile.sortKey || "",
+            droppedAt: null,
           },
-        },
-        update: {
-          droppedAt: null,
-          studentName: profile.name,
-          firstName: parsed.firstName || profile.firstName || "",
-          middleName: parsed.middleName || profile.middleName || "",
-          lastName: parsed.lastName || profile.lastName || "",
-          suffix: parsed.suffix || profile.suffix || "",
-          sortKey: parsed.sortKey || profile.sortKey || "",
-        },
-        create: {
-          classId,
-          studentId: profile.studentId,
-          studentName: profile.name,
-          firstName: parsed.firstName || profile.firstName || "",
-          middleName: parsed.middleName || profile.middleName || "",
-          lastName: parsed.lastName || profile.lastName || "",
-          suffix: parsed.suffix || profile.suffix || "",
-          sortKey: parsed.sortKey || profile.sortKey || "",
-          droppedAt: null,
-        },
-      });
+        });
+        rosterByStudentId.set(profile.studentId, created);
+      } else if (existing.droppedAt !== null || !existing.studentName) {
+        const updated = await prisma.classRoster.update({
+          where: { id: existing.id },
+          data: {
+            droppedAt: null,
+            studentName: existing.studentName || profile.name,
+            firstName: existing.firstName || parsed.firstName || profile.firstName || "",
+            middleName: existing.middleName || parsed.middleName || profile.middleName || "",
+            lastName: existing.lastName || parsed.lastName || profile.lastName || "",
+            suffix: existing.suffix || parsed.suffix || profile.suffix || "",
+            sortKey: existing.sortKey || parsed.sortKey || profile.sortKey || "",
+          },
+        });
+        rosterByStudentId.set(profile.studentId, updated);
+      }
     }
   } catch (err) {
     console.error("Auto-syncing approved enrollments to roster failed:", err);
@@ -1264,41 +1285,87 @@ app.put(
 
     try {
       const parsedName = parseFullName(name);
-      const profile = await prisma.studentProfile.upsert({
-        where: { userId: req.session.userId },
-        create: {
-          userId: req.session.userId,
-          name,
-          address: optionalText(req.body?.address),
-          program: optionalText(req.body?.program),
-          section: optionalText(req.body?.section),
-          studentId,
-          photo,
-          email,
-          birthdate,
-          firstName: parsedName.firstName,
-          middleName: parsedName.middleName,
-          lastName: parsedName.lastName,
-          suffix: parsedName.suffix,
-          // sortKey is a derived, denormalized column kept only for ordering/indexing
-          sortKey: parsedName.sortKey,
-        },
-        update: {
-          name,
-          address: optionalText(req.body?.address),
-          program: optionalText(req.body?.program),
-          section: optionalText(req.body?.section),
-          studentId,
-          photo,
-          email,
-          birthdate,
-          firstName: parsedName.firstName,
-          middleName: parsedName.middleName,
-          lastName: parsedName.lastName,
-          suffix: parsedName.suffix,
-          sortKey: parsedName.sortKey,
-        },
+      const profileData = {
+        name,
+        address: optionalText(req.body?.address),
+        program: optionalText(req.body?.program),
+        section: optionalText(req.body?.section),
+        studentId,
+        photo,
+        email,
+        birthdate,
+        firstName: parsedName.firstName,
+        middleName: parsedName.middleName,
+        lastName: parsedName.lastName,
+        suffix: parsedName.suffix,
+        // sortKey is a derived, denormalized column kept only for ordering/indexing
+        sortKey: parsedName.sortKey,
+      };
+
+      const profile = await prisma.$transaction(async (tx) => {
+        const existingProfile = await tx.studentProfile.findUnique({
+          where: { userId: req.session.userId },
+          select: { id: true, studentId: true },
+        });
+
+        const savedProfile = await tx.studentProfile.upsert({
+          where: { userId: req.session.userId },
+          create: {
+            userId: req.session.userId,
+            ...profileData,
+          },
+          update: profileData,
+        });
+
+        if (existingProfile && existingProfile.studentId && existingProfile.studentId !== studentId) {
+          const enrollments = await tx.classEnrollment.findMany({
+            where: { studentProfileId: existingProfile.id },
+            select: { classId: true, status: true },
+          });
+
+          for (const enrollment of enrollments) {
+            const oldRosterRow = await tx.classRoster.findUnique({
+              where: {
+                classId_studentId: {
+                  classId: enrollment.classId,
+                  studentId: existingProfile.studentId,
+                },
+              },
+            });
+
+            if (!oldRosterRow) continue;
+
+            const existingNewRosterRow = await tx.classRoster.findUnique({
+              where: {
+                classId_studentId: {
+                  classId: enrollment.classId,
+                  studentId,
+                },
+              },
+            });
+
+            if (existingNewRosterRow) {
+              if (enrollment.status === "APPROVED" && existingNewRosterRow.droppedAt !== null) {
+                await tx.classRoster.update({
+                  where: { id: existingNewRosterRow.id },
+                  data: { droppedAt: null },
+                });
+              }
+              await tx.classRoster.delete({
+                where: { id: oldRosterRow.id },
+              });
+            } else {
+              await tx.classRoster.update({
+                where: { id: oldRosterRow.id },
+                data: { studentId },
+              });
+            }
+          }
+        }
+
+        return savedProfile;
       });
+
       return res.json({ profile });
     } catch (error) {
       if (error.code === "P2002") {

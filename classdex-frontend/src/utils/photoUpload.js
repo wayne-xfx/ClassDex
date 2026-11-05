@@ -41,22 +41,37 @@ export async function uploadPhoto(file) {
     throw new Error("Choose an image smaller than 5 MB.");
   }
 
-  const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-  const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+  const cloudName = String(import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || "").trim();
+  const uploadPreset = String(import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || "").trim();
   if (cloudName && uploadPreset) {
     const form = new FormData();
     form.append("file", file);
     form.append("upload_preset", uploadPreset);
+    let response;
     try {
-      const response = await fetch(
+      response = await fetch(
         `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/image/upload`,
         { method: "POST", body: form },
       );
-      const result = await response.json();
-      if (response.ok && result.secure_url) return result.secure_url;
     } catch {
-      // Fall back to storing the photo in the profile if the optional host is unavailable.
+      throw new Error("Unable to upload photo right now. Please try again.");
     }
+    let result = null;
+    try {
+      result = await response.json();
+    } catch {
+      result = null;
+    }
+    if (!response.ok || !result?.secure_url) {
+      throw new Error("Unable to upload photo right now. Please try again.");
+    }
+    return result.secure_url;
+  }
+
+  if (import.meta.env.DEV) {
+    console.warn(
+      "Cloudinary is not configured (VITE_CLOUDINARY_CLOUD_NAME / VITE_CLOUDINARY_UPLOAD_PRESET). Using local data URL photo fallback for development.",
+    );
   }
 
   return new Promise((resolve, reject) => {
