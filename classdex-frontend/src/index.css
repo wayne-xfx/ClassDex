@@ -6672,6 +6672,145 @@ textarea {
   }
 }
 
+/* SCRUM-58: Edit and Archive Class */
+.classroom-meta-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
 
+.classroom-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
 
+.class-edit-form {
+  border: 0;
+  box-shadow: none;
+  padding: 4px 0 0;
+  background: transparent;
+}
+
+.class-code-change-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 6px;
+  border: 1px solid color-mix(in srgb, var(--accent-amber) 42%, var(--line));
+  border-radius: 10px;
+  padding: 9px 11px;
+  background: color-mix(in srgb, var(--accent-amber) 12%, var(--card));
+  color: color-mix(in srgb, var(--accent-amber) 76%, var(--ink));
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.class-code-change-warning svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--accent-amber);
+}
+
+[data-theme="dark"] .class-code-change-warning {
+  color: #fde68a;
+}
+
+.archived-class-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  border-color: color-mix(in srgb, var(--royal) 30%, var(--line));
+  background: color-mix(in srgb, var(--royal) 7%, var(--card));
+  padding: 16px 20px;
+}
+
+.archived-class-banner-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.archived-class-banner-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.archived-class-badge {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--royal) 28%, var(--line));
+  border-radius: 999px;
+  padding: 4px 11px;
+  background: var(--card);
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 740;
+}
+
+.dashboard-archive-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 4px;
+  background: var(--card);
+}
+
+.class-card-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.enrolled-pill-archived {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid color-mix(in srgb, var(--navy) 22%, var(--line));
+  background: color-mix(in srgb, var(--navy) 9%, var(--card));
+  color: var(--navy);
+}
+
+[data-theme="dark"] .enrolled-pill-archived {
+  border-color: color-mix(in srgb, var(--royal) 36%, var(--line));
+  background: color-mix(in srgb, var(--royal) 16%, var(--card));
+  color: #dbeafe;
+}
+
+@media (max-width: 720px) {
+  .classroom-meta-stack,
+  .classroom-header-actions {
+    align-items: flex-start;
+    justify-content: flex-start;
+  }
+
+  .archived-class-banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .archived-class-banner > .button {
+    width: 100%;
+  }
+
+  .dashboard-archive-tabs {
+    width: 100%;
+  }
+
+  .dashboard-archive-tabs > .button {
+    flex: 1 1 0;
+  }
+}
 

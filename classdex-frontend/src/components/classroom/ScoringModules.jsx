@@ -50,7 +50,7 @@ function AbsenceBanner({ count }) {
   );
 }
 
-function ScoreRow({ entry, maxScore, onSave, inputRef, onEnter }) {
+function ScoreRow({ entry, maxScore, onSave, inputRef, onEnter, readOnly = false }) {
   const [draftValue, setDraftValue] = useState(null);
   const value = draftValue ?? (entry.score == null ? "" : String(entry.score));
   const [state, setState] = useState("idle");
@@ -58,11 +58,12 @@ function ScoreRow({ entry, maxScore, onSave, inputRef, onEnter }) {
   const timer = useRef(null);
   const currentValue = useRef(value);
   const isAbsent = entry.isAbsent;
+  const isLocked = isAbsent || readOnly;
 
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
   const save = useCallback(async (scoreText) => {
-    if (isAbsent) return;
+    if (isLocked) return;
     const parsed = parseOptionalInteger(scoreText);
     if (parsed === undefined || (parsed !== null && (parsed < 0 || (maxScore != null && parsed > maxScore)))) {
       setErrorMessage(`Enter a whole number from 0${maxScore == null ? " or greater" : ` to ${maxScore}`}.`);
@@ -80,7 +81,7 @@ function ScoreRow({ entry, maxScore, onSave, inputRef, onEnter }) {
       setErrorMessage(saveError.message);
       setState("error");
     }
-  }, [entry.student.id, isAbsent, maxScore, onSave]);
+  }, [entry.student.id, isLocked, maxScore, onSave]);
 
   function changeValue(nextValue) {
     if (!/^\d*$/.test(nextValue)) return;
@@ -140,7 +141,7 @@ function ScoreRow({ entry, maxScore, onSave, inputRef, onEnter }) {
           step="1"
           value={value}
           aria-label={`Score for ${formatStudentName(entry.student.name)}`}
-          disabled={isAbsent}
+          disabled={isLocked}
           onChange={(event) => changeValue(event.target.value)}
           onBlur={handleBlur}
           onKeyDown={(event) => {
@@ -159,13 +160,13 @@ function ScoreRow({ entry, maxScore, onSave, inputRef, onEnter }) {
             if (!/^\d+$/.test(pasted)) event.preventDefault();
           }}
         />
-        {quickScores.length ? (
+        {quickScores.length && !readOnly ? (
           <div className="scoring-quick-scores" aria-label="Quick score">
             {quickScores.map((quick) => (
               <button
                 type="button"
                 key={quick.label}
-                disabled={isAbsent}
+                disabled={isLocked}
                 onClick={() => chooseScore(quick.value)}
                 aria-label={`${quick.label} score, ${quick.value}`}
               >
@@ -187,7 +188,7 @@ function ScoreRow({ entry, maxScore, onSave, inputRef, onEnter }) {
   );
 }
 
-export function ScoringSheet({ title, maxScore, entries, absentCount, onSave, back, backLabel = "Back" }) {
+export function ScoringSheet({ title, maxScore, entries, absentCount, onSave, back, backLabel = "Back", readOnly = false }) {
   const [filter, setFilter] = useState("ALL");
   const inputRefs = useRef([]);
   const scoredCount = entries.filter((entry) => !entry.isAbsent && entry.score != null).length;
@@ -216,7 +217,11 @@ export function ScoringSheet({ title, maxScore, entries, absentCount, onSave, ba
             eyebrow="Scoring sheet"
             icon="book"
             title={title}
-            description={`Scores save automatically as you enter them.${maxScore == null ? "" : ` Maximum score: ${maxScore}.`}`}
+            description={
+              readOnly
+                ? `Read-only view of recorded scores.${maxScore == null ? "" : ` Maximum score: ${maxScore}.`}`
+                : `Scores save automatically as you enter them.${maxScore == null ? "" : ` Maximum score: ${maxScore}.`}`
+            }
           />
         </div>
       </div>
@@ -247,6 +252,7 @@ export function ScoringSheet({ title, maxScore, entries, absentCount, onSave, ba
             entry={entry}
             maxScore={maxScore}
             onSave={onSave}
+            readOnly={readOnly}
             inputRef={(element) => { inputRefs.current[index] = element; }}
             onEnter={(direction = 1) => {
               const nextInput = inputRefs.current[index + direction];
@@ -320,13 +326,13 @@ function ActivityForm({ activity, onClose, onSubmit, saving }) {
   );
 }
 
-export function ActivitiesModule({ sessionId, students = [], tabCache }) {
-  const cacheKey = `activities:${sessionId}`;
-  const cachedActivities = tabCache?.get(cacheKey);
+export function ActivitiesModule({ sessionId, students = [], tabCache, readOnly = false }) {
+  const cacheKey = sessionId ? `activities:${sessionId}` : null;
+  const cachedActivities = cacheKey ? tabCache?.get(cacheKey) : [];
   const [activities, setActivities] = useState(cachedActivities || []);
   const [active, setActive] = useState(null);
   const [rawScores, setRawScores] = useState([]);
-  const [loading, setLoading] = useState(!cachedActivities);
+  const [loading, setLoading] = useState(Boolean(sessionId) && !cachedActivities);
   const [scoresLoading, setScoresLoading] = useState(false);
   const [error, setError] = useState("");
   const [formActivity, setFormActivity] = useState(undefined);
@@ -335,10 +341,15 @@ export function ActivitiesModule({ sessionId, students = [], tabCache }) {
   const [feedback, setFeedback] = useState("");
 
   const reloadActivities = useCallback(async () => {
+    if (!sessionId) {
+      setActivities([]);
+      setLoading(false);
+      return;
+    }
     try {
       const response = await api.sessionActivities(sessionId);
       setActivities(response.activities || []);
-      tabCache?.set(cacheKey, response.activities || []);
+      if (cacheKey) tabCache?.set(cacheKey, response.activities || []);
     } catch (loadError) {
       setError(loadError.message);
     } finally {
@@ -347,12 +358,13 @@ export function ActivitiesModule({ sessionId, students = [], tabCache }) {
   }, [sessionId, cacheKey, tabCache]);
 
   useEffect(() => {
+    if (!sessionId) return undefined;
     let cancelled = false;
     api.sessionActivities(sessionId)
       .then((response) => {
         if (!cancelled) {
           setActivities(response.activities || []);
-          tabCache?.set(cacheKey, response.activities || []);
+          if (cacheKey) tabCache?.set(cacheKey, response.activities || []);
         }
       })
       .catch((loadError) => {
@@ -461,7 +473,7 @@ export function ActivitiesModule({ sessionId, students = [], tabCache }) {
       tabCache?.set(`activityScores:${active.id}`, nextScores);
       return nextScores;
     });
-    tabCache?.invalidate(`activities:${sessionId}`);
+    if (sessionId) tabCache?.invalidate(`activities:${sessionId}`);
   }
 
   const rosterAbsentCount = students.filter((student) => student.status === "ABSENT").length;
@@ -478,15 +490,18 @@ export function ActivitiesModule({ sessionId, students = [], tabCache }) {
             entries={entries}
             absentCount={rosterAbsentCount}
             onSave={saveScore}
+            readOnly={readOnly}
             back={() => { setActive(null); setError(""); }}
           />
         )}
-        <div className="scoring-item-actions">
-          <Button variant="secondary" onClick={() => setFormActivity(active)}><Icon name="edit" /> Edit activity</Button>
-          <Button variant="destructive" onClick={() => setConfirmDelete(true)}><Icon name="trash" /> Delete activity</Button>
-        </div>
-        {formActivity !== undefined ? <ActivityForm activity={formActivity} onClose={() => setFormActivity(undefined)} onSubmit={saveActivity} saving={saving} /> : null}
-        {confirmDelete ? (
+        {!readOnly ? (
+          <div className="scoring-item-actions">
+            <Button variant="secondary" onClick={() => setFormActivity(active)}><Icon name="edit" /> Edit activity</Button>
+            <Button variant="destructive" onClick={() => setConfirmDelete(true)}><Icon name="trash" /> Delete activity</Button>
+          </div>
+        ) : null}
+        {!readOnly && formActivity !== undefined ? <ActivityForm activity={formActivity} onClose={() => setFormActivity(undefined)} onSubmit={saveActivity} saving={saving} /> : null}
+        {!readOnly && confirmDelete ? (
           <ConfirmDialog
             title="Delete this activity?"
             description="Its scores will also be removed. This cannot be undone."
@@ -506,8 +521,8 @@ export function ActivitiesModule({ sessionId, students = [], tabCache }) {
         eyebrow="Class activities"
         icon="book"
         title="Activities"
-        description="Create today’s activities and score each admitted student."
-        action={<Button onClick={() => setFormActivity(null)}><Icon name="plus" /> New activity</Button>}
+        description={readOnly ? "View recorded activities and scores from today’s session." : "Create today’s activities and score each admitted student."}
+        action={readOnly || !sessionId ? null : <Button onClick={() => setFormActivity(null)}><Icon name="plus" /> New activity</Button>}
       />
       {error ? <div className="notice notice-error" role="alert">{error}<button type="button" onClick={() => { setLoading(true); setError(""); reloadActivities(); }}>Retry</button></div> : null}
       {feedback ? <div className="notice notice-error" role="alert">{feedback}<button type="button" onClick={() => setFeedback("")}>Dismiss</button></div> : null}
@@ -522,24 +537,24 @@ export function ActivitiesModule({ sessionId, students = [], tabCache }) {
                 <p>{activity.maxScore == null ? "No maximum score" : `Out of ${activity.maxScore}`}</p>
               </div>
               <Badge tone="neutral">{activity.scoredCount ?? (activity.scores || []).filter((row) => row.score != null && !row.isAbsent && !row.absent).length}/{students.length} scored</Badge>
-              <Button variant="secondary" onClick={() => openActivity(activity)}>Open scoring <Icon name="arrow" /></Button>
+              <Button variant="secondary" onClick={() => openActivity(activity)}>{readOnly ? "View scores" : "Open scoring"} <Icon name="arrow" /></Button>
             </Card>
           ))}
         </div>
       ) : (
         <EmptyState
           title="No activities for today"
-          description="Create an activity to start recording student scores."
+          description={readOnly || !sessionId ? "No session or activities were recorded for today." : "Create an activity to start recording student scores."}
           icon="book"
-          action={<Button onClick={() => setFormActivity(null)}><Icon name="plus" /> New activity</Button>}
+          action={readOnly || !sessionId ? null : <Button onClick={() => setFormActivity(null)}><Icon name="plus" /> New activity</Button>}
         />
       )}
-      {formActivity !== undefined ? <ActivityForm activity={formActivity} onClose={() => setFormActivity(undefined)} onSubmit={saveActivity} saving={saving} /> : null}
+      {!readOnly && formActivity !== undefined ? <ActivityForm activity={formActivity} onClose={() => setFormActivity(undefined)} onSubmit={saveActivity} saving={saving} /> : null}
     </div>
   );
 }
 
-export function ProjectsModule({ classId, sessionId, students = [], tabCache }) {
+export function ProjectsModule({ classId, sessionId, students = [], tabCache, readOnly = false }) {
   const cacheKey = `projects:${classId}`;
   const cachedProjects = tabCache?.get(cacheKey);
   const [projects, setProjects] = useState(cachedProjects || []);
@@ -673,22 +688,24 @@ export function ProjectsModule({ classId, sessionId, students = [], tabCache }) 
     return (
       <div className="project-scoring">
         {error ? <div className="notice notice-error" role="alert">{error}<button type="button" onClick={() => { setScoresLoading(true); setError(""); loadScores(active); }}>Retry</button></div> : null}
-        <div className="project-score-settings">
-          <label className="field">
-            <span>Out of</span>
-            <input
-              className="input"
-              type="number"
-              min="1"
-              step="1"
-              inputMode="numeric"
-              value={maxScoreInput}
-              onChange={(event) => /^\d*$/.test(event.target.value) && setMaxScoreInput(event.target.value)}
-              onPaste={(event) => { if (!/^\d+$/.test(event.clipboardData.getData("text"))) event.preventDefault(); }}
-            />
-          </label>
-          <Button variant="secondary" onClick={saveMaxScore} disabled={savingMaxScore}>{savingMaxScore ? "Saving…" : "Save maximum"}</Button>
-        </div>
+        {!readOnly ? (
+          <div className="project-score-settings">
+            <label className="field">
+              <span>Out of</span>
+              <input
+                className="input"
+                type="number"
+                min="1"
+                step="1"
+                inputMode="numeric"
+                value={maxScoreInput}
+                onChange={(event) => /^\d*$/.test(event.target.value) && setMaxScoreInput(event.target.value)}
+                onPaste={(event) => { if (!/^\d+$/.test(event.clipboardData.getData("text"))) event.preventDefault(); }}
+              />
+            </label>
+            <Button variant="secondary" onClick={saveMaxScore} disabled={savingMaxScore}>{savingMaxScore ? "Saving…" : "Save maximum"}</Button>
+          </div>
+        ) : null}
         {scoresLoading ? <ModuleSkeleton aria-label="Loading project scores" /> : (
           <ScoringSheet
             title={active.type === "MIDTERM" ? "Midterm Project" : "Finals Project"}
@@ -696,6 +713,7 @@ export function ProjectsModule({ classId, sessionId, students = [], tabCache }) 
             entries={entries}
             absentCount={rosterAbsentCount}
             onSave={saveProjectScore}
+            readOnly={readOnly}
             back={() => { setActive(null); setError(""); }}
             backLabel="All projects"
           />
@@ -706,7 +724,7 @@ export function ProjectsModule({ classId, sessionId, students = [], tabCache }) 
 
   return (
     <div className="project-module">
-      <PageHeader eyebrow="Class projects" icon="book" title="Projects" description="A shared scoring sheet for your two term projects." />
+      <PageHeader eyebrow="Class projects" icon="book" title="Projects" description={readOnly ? "View term project scores for this archived class." : "A shared scoring sheet for your two term projects."} />
       {error ? <div className="notice notice-error" role="alert">{error}<button type="button" onClick={() => { setLoading(true); setError(""); loadProjects(); }}>Retry</button></div> : null}
       <AbsenceBanner count={rosterAbsentCount} />
       {loading ? <ModuleSkeleton aria-label="Loading projects" /> : (
@@ -722,12 +740,12 @@ export function ProjectsModule({ classId, sessionId, students = [], tabCache }) 
                 <span className="project-card-icon"><Icon name="book" /></span>
                 <Badge tone="neutral">{type === "MIDTERM" ? "Midterm" : "Finals"}</Badge>
                 <h2>{type === "MIDTERM" ? "Midterm Project" : "Finals Project"}</h2>
-                <p>{project?.maxScore == null ? "Set the maximum score in the sheet." : `Out of ${project.maxScore}`}</p>
+                <p>{project?.maxScore == null ? (readOnly ? "No maximum score set." : "Set the maximum score in the sheet.") : `Out of ${project.maxScore}`}</p>
                 <div className="project-card-stats">
                   <span><strong>{scoredCount}/{students.length}</strong> scored</span>
                   <span><strong>{average}</strong> average</span>
                 </div>
-                <Button onClick={() => project && openProject(project)} disabled={!project}>Open scoring <Icon name="arrow" /></Button>
+                <Button onClick={() => project && openProject(project)} disabled={!project}>{readOnly ? "View scores" : "Open scoring"} <Icon name="arrow" /></Button>
               </Card>
             );
           })}

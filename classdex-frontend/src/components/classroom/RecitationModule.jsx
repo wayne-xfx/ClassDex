@@ -25,6 +25,7 @@ export default function RecitationModule({
   onAnimationChange,
   durationSeconds = 3,
   onDurationChange,
+  readOnly = false,
 }) {
   const durationMs = Math.max(1, Math.min(7, Number(durationSeconds) || 3)) * 1000;
   const student = currentCall?.student || null;
@@ -175,43 +176,45 @@ export default function RecitationModule({
         )}
       </section>
 
-      <div className="recitation-animation-toggle">
-        <button
-          type="button"
-          className={`recitation-sound-toggle${soundMuted ? " is-muted" : ""}`}
-          aria-pressed={!soundMuted}
-          aria-label={soundMuted ? "Unmute shuffle sound" : "Mute shuffle sound"}
-          onClick={toggleSoundMuted}
-        >
-          <Icon name={soundMuted ? "volumeOff" : "volume"} size={16} />
-          <span>{soundMuted ? "Sound muted" : "Sound on"}</span>
-        </button>
-        <label className="recitation-animation-switch">
-          <span>Shuffle animation</span>
-          <input
-            type="checkbox"
-            role="switch"
-            aria-label="Shuffle animation"
-            checked={animationEnabled}
-            onChange={(event) => onAnimationChange(event.target.checked)}
-          />
-          <span className="recitation-switch-track" aria-hidden="true" />
-        </label>
-        <label className="recitation-duration-control" title="Shuffle animation duration">
-          <Icon name="timer" size={15} />
-          <span>{durationSeconds} s</span>
-          <input
-            type="range"
-            min="1"
-            max="7"
-            step="1"
-            value={durationSeconds}
-            disabled={!animationEnabled || busy}
-            aria-label="Shuffle animation duration"
-            onChange={(event) => onDurationChange?.(Number(event.target.value))}
-          />
-        </label>
-      </div>
+      {!readOnly ? (
+        <div className="recitation-animation-toggle">
+          <button
+            type="button"
+            className={`recitation-sound-toggle${soundMuted ? " is-muted" : ""}`}
+            aria-pressed={!soundMuted}
+            aria-label={soundMuted ? "Unmute shuffle sound" : "Mute shuffle sound"}
+            onClick={toggleSoundMuted}
+          >
+            <Icon name={soundMuted ? "volumeOff" : "volume"} size={16} />
+            <span>{soundMuted ? "Sound muted" : "Sound on"}</span>
+          </button>
+          <label className="recitation-animation-switch">
+            <span>Shuffle animation</span>
+            <input
+              type="checkbox"
+              role="switch"
+              aria-label="Shuffle animation"
+              checked={animationEnabled}
+              onChange={(event) => onAnimationChange(event.target.checked)}
+            />
+            <span className="recitation-switch-track" aria-hidden="true" />
+          </label>
+          <label className="recitation-duration-control" title="Shuffle animation duration">
+            <Icon name="timer" size={15} />
+            <span>{durationSeconds} s</span>
+            <input
+              type="range"
+              min="1"
+              max="7"
+              step="1"
+              value={durationSeconds}
+              disabled={!animationEnabled || busy}
+              aria-label="Shuffle animation duration"
+              onChange={(event) => onDurationChange?.(Number(event.target.value))}
+            />
+          </label>
+        </div>
+      ) : null}
 
       <section className="recitation-stage" aria-live="polite" aria-atomic="true">
         {busy && animationEnabled && previewStudent ? (
@@ -241,7 +244,7 @@ export default function RecitationModule({
                     aria-label={`Score ${score}${currentCall.log.score === score ? ", selected; activate to clear" : ""}`}
                     aria-pressed={currentCall.log.score === score}
                     className={currentCall.log.score === score ? "is-active" : ""}
-                    disabled={savingScore}
+                    disabled={savingScore || readOnly}
                     onClick={() => onScoreChange(currentCall.log.score === score ? null : score)}
                   >
                     {score}
@@ -263,24 +266,28 @@ export default function RecitationModule({
         )}
       </section>
 
-      <div className="recitation-actions">
-        <button
-          type="button"
-          className="button button-primary recitation-primary-action"
-          disabled={!count || busy || savingScore}
-          onClick={handleShuffleClick}
-        >
-          <Icon name="shuffle" />
-          {busy ? "Picking…" : student ? "Shuffle again" : "Shuffle"}
-        </button>
-        {student ? (
-          <button type="button" className="button button-secondary" disabled={count < 2 || busy || savingScore} onClick={handleSkipClick}>
-            <Icon name="arrow" /> Skip
-          </button>
-        ) : null}
-      </div>
-      {!count ? (
-        <p className="recitation-pool-hint"><Icon name="clock" size={15} /> The shuffle is disabled until at least one student is marked Present or Late.</p>
+      {!readOnly ? (
+        <>
+          <div className="recitation-actions">
+            <button
+              type="button"
+              className="button button-primary recitation-primary-action"
+              disabled={!count || busy || savingScore}
+              onClick={handleShuffleClick}
+            >
+              <Icon name="shuffle" />
+              {busy ? "Picking…" : student ? "Shuffle again" : "Shuffle"}
+            </button>
+            {student ? (
+              <button type="button" className="button button-secondary" disabled={count < 2 || busy || savingScore} onClick={handleSkipClick}>
+                <Icon name="arrow" /> Skip
+              </button>
+            ) : null}
+          </div>
+          {!count ? (
+            <p className="recitation-pool-hint"><Icon name="clock" size={15} /> The shuffle is disabled until at least one student is marked Present or Late.</p>
+          ) : null}
+        </>
       ) : null}
 
       {history.length ? (

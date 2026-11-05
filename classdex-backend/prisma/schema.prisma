@@ -129,6 +129,7 @@ model Class {
   scheduleEndTime    String?
   gracePeriodMinutes Int               @default(15)
   recitationShuffleSeconds Int         @default(3)
+  archivedAt         DateTime?
   facultyId          String
   faculty            User              @relation("FacultyClasses", fields: [facultyId], references: [id], onDelete: Cascade)
   enrollments        ClassEnrollment[]
@@ -141,6 +142,7 @@ model Class {
   updatedAt          DateTime          @updatedAt
 
   @@index([facultyId, createdAt])
+  @@index([facultyId, archivedAt])
 }
 
 model ClassEnrollment {

@@ -180,10 +180,18 @@ export const api = {
   facultyClasses: () => request("/faculty/classes"),
   facultyPendingCounts: () => request("/faculty/classes/pending-counts"),
   studentClasses: () => request("/student/classes"),
-  checkClassCode: (code) =>
-    request(`/classes/check-code?code=${encodeURIComponent(code)}`),
+  checkClassCode: (code, excludeId = "") =>
+    request(
+      `/classes/check-code?code=${encodeURIComponent(code)}${
+        excludeId ? `&excludeId=${encodeURIComponent(excludeId)}` : ""
+      }`,
+    ),
   createClass: (payload) =>
     request("/classes", { method: "POST", body: JSON.stringify(payload) }),
+  archiveClass: (id) =>
+    request(`/classes/${encodeURIComponent(id)}/archive`, { method: "POST" }),
+  restoreClass: (id) =>
+    request(`/classes/${encodeURIComponent(id)}/restore`, { method: "POST" }),
   classDetails: (id) => request(`/classes/${encodeURIComponent(id)}`),
   classDeck: (id) => request(`/classes/${encodeURIComponent(id)}/deck`),
   classRoster: (id) => request(`/classes/${encodeURIComponent(id)}/roster`),

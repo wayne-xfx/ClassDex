@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import QRCode from "qrcode";
 import AppShell from "../components/AppShell";
+import ClassForm from "../components/ClassForm";
 import Icon from "../components/Icon";
 import {
+  ConfirmDialog,
   EmptyState,
   ModuleTabs,
   StatCounter,
@@ -87,6 +89,10 @@ export default function FacultyClass() {
   const [inviteQrError, setInviteQrError] = useState("");
   const [showLargeQr, setShowLargeQr] = useState(false);
   const [inviteExpanded, setInviteExpanded] = useState(false);
+  const [showEditClassModal, setShowEditClassModal] = useState(false);
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
+  const [archiveBusy, setArchiveBusy] = useState(false);
+  const isArchived = Boolean(classRecord?.archivedAt);
   const studentRecordsLoading = Boolean(selectedStudent && !studentRecords && !studentRecordsError);
 
   useEffect(() => {
@@ -233,6 +239,7 @@ export default function FacultyClass() {
     refreshPending(false, true).finally(() => setPendingRetrying(false));
   }
   useEffect(() => {
+    if (loading || isArchived) return undefined;
     refreshPending();
     const interval = window.setInterval(() => refreshPending(false), 30000);
     const onFocus = () => refreshPending(true);
@@ -241,7 +248,7 @@ export default function FacultyClass() {
       window.clearInterval(interval);
       window.removeEventListener("focus", onFocus);
     };
-  }, [refreshPending]);
+  }, [isArchived, loading, refreshPending]);
 
   const dismissToast = useCallback(() => {
     setNotice("");
@@ -402,10 +409,11 @@ export default function FacultyClass() {
     setSelectedStudent(student);
   }, []);
   const closeStudentProfile = useCallback(() => setSelectedStudent(null), []);
-  const unreadNotificationCount =
-    pendingEnrollments.length +
-    autoApprovedNotifications.filter((item) => !item.isRead).length +
-    absenceWarnings.filter((item) => !item.isRead).length;
+  const unreadNotificationCount = isArchived
+    ? 0
+    : pendingEnrollments.length +
+      autoApprovedNotifications.filter((item) => !item.isRead).length +
+      absenceWarnings.filter((item) => !item.isRead).length;
 
   useEffect(() => {
     if (!selectedStudent || !id) return undefined;
@@ -421,7 +429,7 @@ export default function FacultyClass() {
   }, [id, selectedStudent]);
 
   async function startAttendanceSession() {
-    if (!classRecord?.session?.id || classRecord.session.startedAt) {
+    if (!classRecord?.session?.id || classRecord.session.startedAt || isArchived) {
       return classRecord?.session || null;
     }
     try {
@@ -439,6 +447,7 @@ export default function FacultyClass() {
   }
 
   async function updateAttendance(student, requestedStatus, notify = true) {
+    if (!classRecord?.session?.id || isArchived) return null;
     tabCache.invalidate("activities");
     tabCache.invalidate("projects");
     tabCache.invalidate("quizzes");
@@ -582,7 +591,7 @@ export default function FacultyClass() {
   }
 
   async function shuffleRecitation(skipCurrent = false, animate = recitationAnimationEnabled) {
-      if (!classRecord?.session?.id || !eligibleStudents.length) return;
+      if (!classRecord?.session?.id || !eligibleStudents.length || isArchived) return;
       setRecitationBusy(true);
       try {
         const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -608,7 +617,7 @@ export default function FacultyClass() {
   }
 
   async function updateRecitationScore(score) {
-      if (!recitationCall) return;
+      if (!recitationCall || isArchived) return;
       const previousScore = recitationCall.log.score;
       const optimisticLog = { ...recitationCall.log, score };
       const optimisticCall = toRecitationCall(optimisticLog);
@@ -635,6 +644,53 @@ export default function FacultyClass() {
         setSavingRecitationScore(false);
   }
     }
+
+  async function handleSaveClassEdits(payload) {
+    const { class: updated } = await api.updateClass(id, payload);
+    setClassRecord((current) => (current ? { ...current, ...updated } : updated));
+    setShowEditClassModal(false);
+    showToast("Class details updated.");
+  }
+
+  async function handleArchiveClass() {
+    setArchiveBusy(true);
+    try {
+      const { class: archived } = await api.archiveClass(id);
+      setClassRecord((current) => (current ? { ...current, ...archived } : archived));
+      setShowArchiveConfirm(false);
+      setShowPending(false);
+      setPendingEnrollments([]);
+      setAutoApprovedNotifications([]);
+      setAbsenceWarnings([]);
+      showToast("Class archived. All records remain available in read-only mode.");
+    } catch (archiveError) {
+      showToast(archiveError.message, "error");
+    } finally {
+      setArchiveBusy(false);
+    }
+  }
+
+  async function handleRestoreClass() {
+    setArchiveBusy(true);
+    try {
+      await api.restoreClass(id);
+      tabCache.invalidate();
+      const deck = await api.classDeck(id);
+      setClassRecord({ ...deck.class, session: deck.session, students: deck.students });
+      setGracePeriodMinutes(deck.class.gracePeriodMinutes);
+      setRecitationShuffleSeconds(deck.class.recitationShuffleSeconds ?? 3);
+      setStudentListCount(deck.rosterCount ?? 0);
+      setAttendanceOverrides({});
+      setRecitationCall(null);
+      setRecitationHistory((deck.recitationHistory || []).map(toRecitationCall));
+      await refreshPending();
+      showToast("Class restored. You can take attendance and update records again.");
+    } catch (restoreError) {
+      showToast(restoreError.message, "error");
+    } finally {
+      setArchiveBusy(false);
+    }
+  }
 
   const today = new Intl.DateTimeFormat("en-PH", {
     weekday: "long",
@@ -676,95 +732,167 @@ export default function FacultyClass() {
                 <h1>{classRecord.sectionName}</h1>
                 <p>{classRecord.description || "Your student list, organized like a deck of index cards."}</p>
               </div>
-              <div className="classroom-meta">
-                <span className="class-code-pill"><span>CLASS CODE</span><strong>{classRecord.classCode}</strong></span>
-                <span className="class-schedule-pill"><Icon name="clock" /> {formatClassSchedule(classRecord)}</span>
+              <div className="classroom-meta-stack">
+                <div className="classroom-meta">
+                  {isArchived ? (
+                    <span className="enrolled-pill enrolled-pill-archived">
+                      <Icon name="archive" size={14} /> Archived
+                    </span>
+                  ) : null}
+                  <span className="class-code-pill"><span>CLASS CODE</span><strong>{classRecord.classCode}</strong></span>
+                  <span className="class-schedule-pill"><Icon name="clock" /> {formatClassSchedule(classRecord)}</span>
+                </div>
+                {!isArchived ? (
+                  <div className="classroom-header-actions">
+                    <button
+                      type="button"
+                      className="button button-secondary button-small"
+                      onClick={() => setShowEditClassModal(true)}
+                    >
+                      <Icon name="edit" size={15} /> Edit class
+                    </button>
+                    <button
+                      type="button"
+                      className="button button-quiet button-small"
+                      onClick={() => setShowArchiveConfirm(true)}
+                    >
+                      <Icon name="archive" size={15} /> Archive class
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </header>
 
             <div className="classroom-date"><Icon name="calendar" size={16} /> {today}</div>
-            <section className={`panel class-share-panel${inviteExpanded ? " is-expanded" : ""}`} aria-labelledby="class-share-title">
-              <div className="class-share-row">
-                <button type="button" className="class-share-toggle" aria-expanded={inviteExpanded} aria-controls="class-share-expanded" onClick={toggleInviteExpanded}>
-                  <Icon name="qrCode" />
-                  <span id="class-share-title">Share class invite</span>
-                  <Icon name="chevron" className={inviteExpanded ? "is-rotated" : ""} />
-                </button>
-                <span className="class-share-code">{classRecord.classCode}</span>
-                <button type="button" className="button button-primary" onClick={copyInvite}>
-                  <Icon name="copy" /> Copy invite link
-                </button>
+            {isArchived ? (
+              <section className="panel archived-class-banner" role="status" aria-label="Archived class status">
+                <div className="archived-class-banner-copy">
+                  <span className="archived-class-badge"><Icon name="archive" size={16} /> Archived · Read-only</span>
+                  <p>
+                    This class is archived. Student records, attendance, recitations, activities, projects, quizzes, and exports remain viewable, while edits and new joins are paused.
+                  </p>
+                </div>
                 <button
                   type="button"
-                  className="button button-quiet class-share-pending"
-                  aria-label={`Notifications${unreadNotificationCount ? ` (${unreadNotificationCount})` : ""}`}
-                  title="Notifications"
-                  onClick={() => setShowPending(true)}
+                  className="button button-primary"
+                  onClick={handleRestoreClass}
+                  disabled={archiveBusy}
                 >
-                  <Icon name="bell" size={17} />
-                  {unreadNotificationCount > 0 ? (
-                    <span className="notification-badge">{unreadNotificationCount}</span>
-                  ) : null}
+                  {archiveBusy ? "Restoring…" : "Restore class"}
                 </button>
-              </div>
-              {inviteExpanded ? (
-                <div id="class-share-expanded" className="class-share-expanded">
-                  <div className="class-share-copy">
-                    <h2>Invite students with a link or QR code</h2>
-                    <p>Students can scan the QR code or use the invite link to join this class.</p>
+              </section>
+            ) : (
+              <>
+                <section className={`panel class-share-panel${inviteExpanded ? " is-expanded" : ""}`} aria-labelledby="class-share-title">
+                  <div className="class-share-row">
+                    <button type="button" className="class-share-toggle" aria-expanded={inviteExpanded} aria-controls="class-share-expanded" onClick={toggleInviteExpanded}>
+                      <Icon name="qrCode" />
+                      <span id="class-share-title">Share class invite</span>
+                      <Icon name="chevron" className={inviteExpanded ? "is-rotated" : ""} />
+                    </button>
+                    <span className="class-share-code">{classRecord.classCode}</span>
+                    <button type="button" className="button button-primary" onClick={copyInvite}>
+                      <Icon name="copy" /> Copy invite link
+                    </button>
+                    <button
+                      type="button"
+                      className="button button-quiet class-share-pending"
+                      aria-label={`Notifications${unreadNotificationCount ? ` (${unreadNotificationCount})` : ""}`}
+                      title="Notifications"
+                      onClick={() => setShowPending(true)}
+                    >
+                      <Icon name="bell" size={17} />
+                      {unreadNotificationCount > 0 ? (
+                        <span className="notification-badge">{unreadNotificationCount}</span>
+                      ) : null}
+                    </button>
                   </div>
-                  <div className="class-share-qr">
-                    {inviteQr ? (
-                      <>
-                        <img src={inviteQr} alt={`QR code for joining ${classRecord.sectionName}`} />
-                        <div className="class-share-qr-actions">
-                          <button type="button" className="button button-quiet" onClick={() => setShowLargeQr(true)}>Show larger</button>
-                          <a href={inviteQr} download={`${classRecord.classCode || "class"}-qr.png`} className="button button-quiet">Download QR</a>
-                        </div>
-                      </>
-                    ) : <div className="class-share-qr-placeholder">Generating QR…</div>}
-                    {inviteQrError ? <span className="class-share-error">{inviteQrError}</span> : null}
-                  </div>
-                </div>
-              ) : null}
-            </section>
+                  {inviteExpanded ? (
+                    <div id="class-share-expanded" className="class-share-expanded">
+                      <div className="class-share-copy">
+                        <h2>Invite students with a link or QR code</h2>
+                        <p>Students can scan the QR code or use the invite link to join this class.</p>
+                      </div>
+                      <div className="class-share-qr">
+                        {inviteQr ? (
+                          <>
+                            <img src={inviteQr} alt={`QR code for joining ${classRecord.sectionName}`} />
+                            <div className="class-share-qr-actions">
+                              <button type="button" className="button button-quiet" onClick={() => setShowLargeQr(true)}>Show larger</button>
+                              <a href={inviteQr} download={`${classRecord.classCode || "class"}-qr.png`} className="button button-quiet">Download QR</a>
+                            </div>
+                          </>
+                        ) : <div className="class-share-qr-placeholder">Generating QR…</div>}
+                        {inviteQrError ? <span className="class-share-error">{inviteQrError}</span> : null}
+                      </div>
+                    </div>
+                  ) : null}
+                </section>
 
-            {showLargeQr && inviteQr ? (
+                {showLargeQr && inviteQr ? (
+                  <Modal
+                    title="Class join QR code"
+                    description={`Scan with any mobile camera or QR reader to join ${classRecord.sectionName}.`}
+                    onClose={() => setShowLargeQr(false)}
+                    footer={
+                      <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem" }}>
+                        <button type="button" className="button button-secondary" onClick={() => setShowLargeQr(false)}>Close</button>
+                        <a href={inviteQr} download={`${classRecord.classCode || "class"}-qr.png`} className="button button-primary">Download QR</a>
+                      </div>
+                    }
+                  >
+                    <div style={{ display: "grid", placeItems: "center", padding: "1.25rem", textAlign: "center" }}>
+                      <img src={inviteQr} alt={`Large QR code for ${classRecord.sectionName}`} style={{ width: "260px", height: "260px", borderRadius: "12px", border: "1px solid var(--border-color, #e2e8f0)" }} />
+                      <p style={{ marginTop: "0.75rem", fontWeight: "bold" }}>Class code: {classRecord.classCode}</p>
+                    </div>
+                  </Modal>
+                ) : null}
+                {showPending ? (
+                  <PendingValidationList
+                    enrollments={pendingEnrollments}
+                    autoApproved={autoApprovedNotifications}
+                    absenceWarnings={absenceWarnings}
+                    className={classRecord.sectionName}
+                    loading={pendingLoadedForId !== id || pendingRetrying}
+                    error={pendingError}
+                    onRetry={retryPendingNotifications}
+                    onApprove={(enrollmentId) => updatePending(enrollmentId, "APPROVED")}
+                    onDecline={(enrollmentId) => updatePending(enrollmentId, "DECLINED")}
+                    onMarkAllRead={markAllNotificationsRead}
+                    onViewWarning={viewAbsenceWarning}
+                    onDismissWarning={dismissAbsenceWarning}
+                    onClose={() => setShowPending(false)}
+                    busyId={pendingBusyId}
+                    dismissBusyId={dismissBusyId}
+                    readWarningBusyId={readWarningBusyId}
+                  />
+                ) : null}
+              </>
+            )}
+            {!isArchived && showEditClassModal ? (
               <Modal
-                title="Class join QR code"
-                description={`Scan with any mobile camera or QR reader to join ${classRecord.sectionName}.`}
-                onClose={() => setShowLargeQr(false)}
-                footer={
-                  <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem" }}>
-                    <button type="button" className="button button-secondary" onClick={() => setShowLargeQr(false)}>Close</button>
-                    <a href={inviteQr} download={`${classRecord.classCode || "class"}-qr.png`} className="button button-primary">Download QR</a>
-                  </div>
-                }
+                title="Edit class details"
+                description="Update the section name, invite code, description, or class schedule."
+                onClose={() => setShowEditClassModal(false)}
               >
-                <div style={{ display: "grid", placeItems: "center", padding: "1.25rem", textAlign: "center" }}>
-                  <img src={inviteQr} alt={`Large QR code for ${classRecord.sectionName}`} style={{ width: "260px", height: "260px", borderRadius: "12px", border: "1px solid var(--border-color, #e2e8f0)" }} />
-                  <p style={{ marginTop: "0.75rem", fontWeight: "bold" }}>Class code: {classRecord.classCode}</p>
-                </div>
+                <ClassForm
+                  mode="edit"
+                  initialValues={classRecord}
+                  excludeClassId={classRecord.id}
+                  className="form-panel class-edit-form"
+                  onCancel={() => setShowEditClassModal(false)}
+                  onSubmit={handleSaveClassEdits}
+                />
               </Modal>
             ) : null}
-            {showPending ? (
-              <PendingValidationList
-                enrollments={pendingEnrollments}
-                autoApproved={autoApprovedNotifications}
-                absenceWarnings={absenceWarnings}
-                className={classRecord.sectionName}
-                loading={pendingLoadedForId !== id || pendingRetrying}
-                error={pendingError}
-                onRetry={retryPendingNotifications}
-                onApprove={(enrollmentId) => updatePending(enrollmentId, "APPROVED")}
-                onDecline={(enrollmentId) => updatePending(enrollmentId, "DECLINED")}
-                onMarkAllRead={markAllNotificationsRead}
-                onViewWarning={viewAbsenceWarning}
-                onDismissWarning={dismissAbsenceWarning}
-                onClose={() => setShowPending(false)}
-                busyId={pendingBusyId}
-                dismissBusyId={dismissBusyId}
-                readWarningBusyId={readWarningBusyId}
+            {!isArchived && showArchiveConfirm ? (
+              <ConfirmDialog
+                title={`Archive ${classRecord.sectionName}?`}
+                description="Archiving makes this class read-only and pauses new student joins. 100% of your student list, attendance, recitation, quiz, activity, and project records are kept, and you can restore the class anytime."
+                confirmLabel={archiveBusy ? "Archiving…" : "Archive class"}
+                onConfirm={handleArchiveClass}
+                onCancel={() => setShowArchiveConfirm(false)}
+                busy={archiveBusy}
               />
             ) : null}
             <ModuleTabs active={activeModule} onChange={setActiveModule} studentListCount={studentListCount} />
@@ -782,7 +910,7 @@ export default function FacultyClass() {
               aria-labelledby={activeModule === "deck" ? "module-deck-link" : `module-tab-${activeModule}`}
               className="classroom-module"
             >
-              {activeModule === "student-list" ? <StudentListManager classId={id} onCountChange={setStudentListCount} onAutoApproved={refreshAfterRosterApproval} onRosterChanged={handleRosterChanged} onClose={() => setActiveModule("deck")} tabCache={tabCache} /> : activeModule === "deck" ? (
+              {activeModule === "student-list" ? <StudentListManager classId={id} onCountChange={setStudentListCount} onAutoApproved={refreshAfterRosterApproval} onRosterChanged={handleRosterChanged} onClose={() => setActiveModule("deck")} tabCache={tabCache} readOnly={isArchived} /> : activeModule === "deck" ? (
                 <>
                   <div className="deck-toolbar">
                     <div className="deck-title">
@@ -844,17 +972,17 @@ export default function FacultyClass() {
                     )
                   ) : (
                     <EmptyState
-                      title="Your deck is ready for its first student"
-                      description="Share an invite link or class code and admitted students will appear here as index cards."
+                      title={isArchived ? "No admitted students in this archived class" : "Your deck is ready for its first student"}
+                      description={isArchived ? "Restore this class if you want to invite and admit students." : "Share an invite link or class code and admitted students will appear here as index cards."}
                       icon="users"
-                      action={(
+                      action={!isArchived ? (
                         <div className="empty-state-actions">
                           <button type="button" className="button button-primary" onClick={copyInvite}>
                             <Icon name="copy" /> Copy invite link
                           </button>
                           <span>Or share code <strong>{classRecord.classCode}</strong></span>
                         </div>
-                      )}
+                      ) : null}
                     />
                   )}
                 </>
@@ -871,6 +999,7 @@ export default function FacultyClass() {
                   onSaveGracePeriod={saveGracePeriod}
                   pendingStudentIds={pendingStudentIds}
                   savingGracePeriod={savingGracePeriod}
+                  readOnly={isArchived}
                 />
               ) : activeModule === "recitation" ? (
                 <RecitationModule
@@ -889,15 +1018,16 @@ export default function FacultyClass() {
                   onAnimationChange={setRecitationAnimationEnabled}
                   durationSeconds={recitationShuffleSeconds}
                   onDurationChange={saveShuffleDuration}
+                  readOnly={isArchived}
                 />
               ) : activeModule === "activities" ? (
-                <ActivitiesModule key={classRecord.session.id} sessionId={classRecord.session.id} students={sortedStudents} tabCache={tabCache} />
+                <ActivitiesModule key={classRecord.session?.id || "no-session"} sessionId={classRecord.session?.id || null} students={sortedStudents} tabCache={tabCache} readOnly={isArchived} />
               ) : activeModule === "projects" ? (
-                <ProjectsModule key={id} classId={id} sessionId={classRecord.session.id} students={sortedStudents} tabCache={tabCache} />
+                <ProjectsModule key={id} classId={id} sessionId={classRecord.session?.id || null} students={sortedStudents} tabCache={tabCache} readOnly={isArchived} />
               ) : activeModule === "export" ? (
                 <ExportModule classRecord={classRecord} students={sortedStudents} pendingEnrollments={pendingEnrollments} onExcel={downloadExcelExport} onCsv={downloadCsvExport} />
               ) : activeModule === "quiz" ? (
-                <QuizModule classId={id} students={sortedStudents} attendanceTaken={students.some((student) => student.status !== "UNMARKED")} onTakeAttendance={() => setActiveModule("attendance")} tabCache={tabCache} />
+                <QuizModule classId={id} students={sortedStudents} attendanceTaken={students.some((student) => student.status !== "UNMARKED")} onTakeAttendance={() => setActiveModule("attendance")} tabCache={tabCache} readOnly={isArchived} />
               ) : null}
             </section>
             {selectedStudent ? (

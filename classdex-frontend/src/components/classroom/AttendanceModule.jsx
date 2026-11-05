@@ -17,6 +17,7 @@ export default function AttendanceModule({
   onSaveGracePeriod,
   pendingStudentIds = [],
   savingGracePeriod,
+  readOnly = false,
 }) {
   const [onlyUnmarked, setOnlyUnmarked] = useState(false);
   const [graceValue, setGraceValue] = useState(null);
@@ -104,37 +105,39 @@ export default function AttendanceModule({
           <h2>Attendance</h2>
           <p>Review attendance cards or take attendance one student at a time.</p>
         </div>
-        <form className="grace-control" noValidate onSubmit={saveGracePeriod}>
-          <label htmlFor="grace-period">Grace period</label>
-          <div className="grace-input-row">
-            <input
-              id="grace-period"
-              className={`input${graceError ? " input-invalid" : ""}`}
-              type="number"
-              min="0"
-              max="1440"
-              step="1"
-              required
-              value={inputGraceValue}
-              onChange={(event) => {
-                setGraceValue(event.target.value);
-                if (graceError) setGraceError("");
-              }}
-              aria-invalid={Boolean(graceError)}
-              aria-describedby={graceError ? "grace-period-error grace-period-help" : "grace-period-help"}
-            />
-            <span>min</span>
-            <button className="button button-secondary" type="submit" disabled={savingGracePeriod}>
-              {savingGracePeriod ? "Saving…" : "Save"}
-            </button>
-          </div>
-          {graceError ? (
-            <div id="grace-period-error" className="field-error" role="alert" style={{ marginTop: 6 }}>
-              {graceError}
+        {!readOnly ? (
+          <form className="grace-control" noValidate onSubmit={saveGracePeriod}>
+            <label htmlFor="grace-period">Grace period</label>
+            <div className="grace-input-row">
+              <input
+                id="grace-period"
+                className={`input${graceError ? " input-invalid" : ""}`}
+                type="number"
+                min="0"
+                max="1440"
+                step="1"
+                required
+                value={inputGraceValue}
+                onChange={(event) => {
+                  setGraceValue(event.target.value);
+                  if (graceError) setGraceError("");
+                }}
+                aria-invalid={Boolean(graceError)}
+                aria-describedby={graceError ? "grace-period-error grace-period-help" : "grace-period-help"}
+              />
+              <span>min</span>
+              <button className="button button-secondary" type="submit" disabled={savingGracePeriod}>
+                {savingGracePeriod ? "Saving…" : "Save"}
+              </button>
             </div>
-          ) : null}
-          <span id="grace-period-help">Present is recorded as Late after the session starts plus this time.</span>
-        </form>
+            {graceError ? (
+              <div id="grace-period-error" className="field-error" role="alert" style={{ marginTop: 6 }}>
+                {graceError}
+              </div>
+            ) : null}
+            <span id="grace-period-help">Present is recorded as Late after the session starts plus this time.</span>
+          </form>
+        ) : null}
       </div>
 
       <div className="attendance-stats">
@@ -239,32 +242,36 @@ export default function AttendanceModule({
               <span>Show only Unmarked</span>
               <strong>{counts.UNMARKED}</strong>
             </label>
-            <button
-              type="button"
-              className="button button-primary"
-              disabled={!students.length}
-              onClick={startTakingAttendance}
-            >
-              <Icon name="check" />
-              {counts.UNMARKED ? (completedCount ? "Continue attendance" : "Take attendance") : "Review attendance"}
-            </button>
+            {!readOnly ? (
+              <button
+                type="button"
+                className="button button-primary"
+                disabled={!students.length}
+                onClick={startTakingAttendance}
+              >
+                <Icon name="check" />
+                {counts.UNMARKED ? (completedCount ? "Continue attendance" : "Take attendance") : "Review attendance"}
+              </button>
+            ) : null}
           </div>
 
           {displayedStudents.length ? (
             <div className={`student-grid ${layout === "list" ? "student-grid-list" : ""}`}>
               {displayedStudents.map((student) => (
                 <StudentCard key={student.id} student={student} status={student.status} layout={layout}>
-                  <div className="status-button-row" aria-label={`Attendance status for ${student.name}`}>
-                    {ATTENDANCE_STATUSES.map((status) => (
-                      <StatusButton
-                        key={status}
-                        status={status}
-                        active={student.status === status}
-                        disabled={pendingStudentIds.includes(student.id)}
-                        onClick={() => markStudentFromRoster(student, status)}
-                      />
-                    ))}
-                  </div>
+                  {!readOnly ? (
+                    <div className="status-button-row" aria-label={`Attendance status for ${student.name}`}>
+                      {ATTENDANCE_STATUSES.map((status) => (
+                        <StatusButton
+                          key={status}
+                          status={status}
+                          active={student.status === status}
+                          disabled={pendingStudentIds.includes(student.id)}
+                          onClick={() => markStudentFromRoster(student, status)}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
                 </StudentCard>
               ))}
             </div>

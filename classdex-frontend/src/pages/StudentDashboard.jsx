@@ -162,23 +162,28 @@ export default function StudentDashboard() {
               <article className="class-card" key={classRecord.id} style={{ "--card-accent": index % 2 ? "var(--accent-teal)" : "var(--accent-amber)" }}>
                 <div className="class-card-top">
                   <span className="class-icon"><Icon name="book" /></span>
-                  <span
-                    className={`enrolled-pill${
-                      classRecord.enrollmentStatus === "DROPPED"
-                        ? " enrolled-pill-dropped"
-                        : classRecord.enrollmentStatus !== "APPROVED"
-                        ? " enrolled-pill-pending"
-                        : ""
-                    }`}
-                  >
-                    {classRecord.enrollmentStatus === "DROPPED"
-                      ? "Dropped"
-                      : classRecord.enrollmentStatus === "PENDING"
-                      ? "Pending approval"
-                      : classRecord.enrollmentStatus === "DECLINED"
-                      ? "Declined"
-                      : "Enrolled"}
-                  </span>
+                  <div className="class-card-badges">
+                    {classRecord.archivedAt ? (
+                      <span className="enrolled-pill enrolled-pill-archived">Archived</span>
+                    ) : null}
+                    <span
+                      className={`enrolled-pill${
+                        classRecord.enrollmentStatus === "DROPPED"
+                          ? " enrolled-pill-dropped"
+                          : classRecord.enrollmentStatus !== "APPROVED"
+                          ? " enrolled-pill-pending"
+                          : ""
+                      }`}
+                    >
+                      {classRecord.enrollmentStatus === "DROPPED"
+                        ? "Dropped"
+                        : classRecord.enrollmentStatus === "PENDING"
+                        ? "Pending approval"
+                        : classRecord.enrollmentStatus === "DECLINED"
+                        ? "Declined"
+                        : "Enrolled"}
+                    </span>
+                  </div>
                 </div>
                 <p className="class-label">Section</p>
                 <h3>{classRecord.sectionName}</h3>
