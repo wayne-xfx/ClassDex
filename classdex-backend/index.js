@@ -3170,7 +3170,16 @@ app.get(
         await ensureApprovedEnrollmentsInRoster(classRecord.id);
       }
 
-      const [rosterCount, pendingCount, absentCounts] = await Promise.all([
+      const [
+        rosterCount,
+        pendingCount,
+        absentCounts,
+        sessionsCount,
+        recitationsCount,
+        activitiesCount,
+        projectScoresCount,
+        quizzesCount,
+      ] = await Promise.all([
         prisma.classRoster.count({ where: { classId: classRecord.id, droppedAt: null } }),
         prisma.classEnrollment.count({ where: { classId: classRecord.id, status: "PENDING" } }),
         prisma.attendanceRecord.groupBy({
@@ -3181,6 +3190,16 @@ app.get(
           },
           _count: { id: true },
         }),
+        prisma.classSession.count({ where: { classId: classRecord.id } }),
+        prisma.recitationLog.count({ where: { session: { classId: classRecord.id } } }),
+        prisma.activity.count({ where: { classId: classRecord.id } }),
+        prisma.projectScore.count({
+          where: {
+            project: { classId: classRecord.id },
+            score: { not: null },
+          },
+        }),
+        prisma.quizSession.count({ where: { classId: classRecord.id } }),
       ]);
       const absentCountMap = new Map(
         absentCounts.map((row) => [row.studentId, row._count.id]),
@@ -3197,6 +3216,13 @@ app.get(
         class: classData,
         rosterCount,
         pendingCount,
+        exportCounts: {
+          sessions: sessionsCount,
+          recitations: recitationsCount,
+          activities: activitiesCount,
+          projectScores: projectScoresCount,
+          quizzes: quizzesCount,
+        },
         students: enrollments.map(({ studentProfile }) => {
           const photoUrl = studentPhotoUrl(studentProfile);
           return {
@@ -3234,6 +3260,59 @@ app.get(
     } catch (error) {
       console.error("Class deck lookup failed:", error);
       return res.status(500).json({ message: "Unable to load this class deck." });
+    }
+  },
+);
+
+app.get(
+  "/api/classes/:id/export-summary",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      const classRecord = await prisma.class.findFirst({
+        where: { id: req.params.id, facultyId: req.session.userId },
+        select: { id: true },
+      });
+      if (!classRecord) {
+        return res.status(404).json({ message: "Class not found." });
+      }
+
+      const [
+        studentsCount,
+        pendingCount,
+        sessionsCount,
+        recitationsCount,
+        activitiesCount,
+        projectScoresCount,
+        quizzesCount,
+      ] = await Promise.all([
+        prisma.classRoster.count({ where: { classId: classRecord.id, droppedAt: null } }),
+        prisma.classEnrollment.count({ where: { classId: classRecord.id, status: "PENDING" } }),
+        prisma.classSession.count({ where: { classId: classRecord.id } }),
+        prisma.recitationLog.count({ where: { session: { classId: classRecord.id } } }),
+        prisma.activity.count({ where: { classId: classRecord.id } }),
+        prisma.projectScore.count({
+          where: {
+            project: { classId: classRecord.id },
+            score: { not: null },
+          },
+        }),
+        prisma.quizSession.count({ where: { classId: classRecord.id } }),
+      ]);
+
+      return res.json({
+        students: studentsCount,
+        pending: pendingCount,
+        sessions: sessionsCount,
+        recitations: recitationsCount,
+        activities: activitiesCount,
+        projectScores: projectScoresCount,
+        quizzes: quizzesCount,
+      });
+    } catch (error) {
+      console.error("Export summary lookup failed:", error);
+      return res.status(500).json({ message: "Unable to load export summary." });
     }
   },
 );

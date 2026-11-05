@@ -216,6 +216,8 @@ export const api = {
   setQuizScore: (sessionId, studentId, score) => request(`/quizzes/${encodeURIComponent(sessionId)}/scores/${encodeURIComponent(studentId)}`, { method: "PUT", body: JSON.stringify({ score }) }),
   studentClassRecord: (classId) =>
     request(`/student/classes/${encodeURIComponent(classId)}/records`),
+  exportSummary: (classId) =>
+    request(`/classes/${encodeURIComponent(classId)}/export-summary`),
   exportClassExcel: (classId, types) => {
     const params = types?.length ? `?types=${types.map(encodeURIComponent).join(",")}` : "";
     return requestBlob(`/classes/${encodeURIComponent(classId)}/export/excel${params}`);

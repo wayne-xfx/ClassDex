@@ -133,12 +133,15 @@ export default function FacultyClass() {
   }, [notificationsParam]);
 
   useEffect(() => {
-    if (
-      activeModule !== "student-list" &&
-      (searchParams.has("module") || searchParams.has("focusStudent"))
-    ) {
+    const mod = searchParams.get("module");
+    if (mod && VALID_MODULES.has(mod) && mod !== activeModule) {
+      setActiveModule(mod);
+    }
+  }, [searchParams, activeModule]);
+
+  useEffect(() => {
+    if (activeModule !== "student-list" && searchParams.has("focusStudent")) {
       const nextParams = new URLSearchParams(searchParams);
-      nextParams.delete("module");
       nextParams.delete("focusStudent");
       setSearchParams(nextParams, { replace: true });
     }
@@ -152,7 +155,7 @@ export default function FacultyClass() {
       .then((deck) => {
         if (!cancelled) {
           setError(null);
-          setClassRecord({ ...deck.class, session: deck.session, students: deck.students });
+          setClassRecord({ ...deck.class, session: deck.session, students: deck.students, exportCounts: deck.exportCounts });
           setGracePeriodMinutes(deck.class.gracePeriodMinutes);
           setRecitationShuffleSeconds(deck.class.recitationShuffleSeconds ?? 3);
           setStudentListCount(deck.rosterCount ?? 0);
@@ -301,7 +304,7 @@ export default function FacultyClass() {
         try {
           tabCache.invalidate();
           const deck = await api.classDeck(id);
-          setClassRecord({ ...deck.class, session: deck.session, students: deck.students });
+          setClassRecord({ ...deck.class, session: deck.session, students: deck.students, exportCounts: deck.exportCounts });
           setStudentListCount(deck.rosterCount ?? 0);
         } catch {
           showToast("Student approved, but the class list could not refresh.", "error");
@@ -444,7 +447,7 @@ export default function FacultyClass() {
         refreshPending(),
         api.classDeck(id).then((deck) => {
           const activeStudentIds = new Set((deck.students || []).map((student) => student.id));
-          setClassRecord({ ...deck.class, session: deck.session, students: deck.students });
+          setClassRecord({ ...deck.class, session: deck.session, students: deck.students, exportCounts: deck.exportCounts });
           setStudentListCount(deck.rosterCount ?? 0);
           setAttendanceOverrides((current) => {
             const next = {};
@@ -842,7 +845,7 @@ export default function FacultyClass() {
       await api.restoreClass(id);
       tabCache.invalidate();
       const deck = await api.classDeck(id);
-      setClassRecord({ ...deck.class, session: deck.session, students: deck.students });
+      setClassRecord({ ...deck.class, session: deck.session, students: deck.students, exportCounts: deck.exportCounts });
       setGracePeriodMinutes(deck.class.gracePeriodMinutes);
       setRecitationShuffleSeconds(deck.class.recitationShuffleSeconds ?? 3);
       setStudentListCount(deck.rosterCount ?? 0);
@@ -1086,7 +1089,7 @@ export default function FacultyClass() {
               ) : activeModule === "projects" ? (
                 <ProjectsModule key={id} classId={id} sessionId={classRecord.session?.id || null} students={sortedStudents} tabCache={tabCache} readOnly={isArchived} />
               ) : activeModule === "export" ? (
-                <ExportModule classRecord={classRecord} students={sortedStudents} pendingEnrollments={pendingEnrollments} onExcel={downloadExcelExport} onCsv={downloadCsvExport} />
+                <ExportModule classRecord={classRecord} exportCounts={classRecord?.exportCounts} students={sortedStudents} pendingEnrollments={pendingEnrollments} onExcel={downloadExcelExport} onCsv={downloadCsvExport} />
               ) : activeModule === "quiz" ? (
                 <QuizModule classId={id} students={sortedStudents} attendanceTaken={students.some((student) => student.status !== "UNMARKED")} onTakeAttendance={() => setActiveModule("attendance")} tabCache={tabCache} readOnly={isArchived} />
               ) : null}
