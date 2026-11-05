@@ -3846,10 +3846,20 @@ app.put(
           classId: sessionRecord.classId,
           studentProfileId: req.params.studentId,
         },
-        select: { studentProfileId: true },
+        select: { studentProfileId: true, status: true },
       });
       if (!enrollment) {
         return res.status(404).json({ message: "Student not found in this class." });
+      }
+      if (enrollment.status !== "APPROVED") {
+        const messageByStatus = {
+          DROPPED: "This student was dropped from the class and cannot be marked for attendance.",
+          PENDING: "This student's join request is still pending approval.",
+          DECLINED: "This student's join request was declined and cannot be marked for attendance.",
+        };
+        return res.status(409).json({
+          message: messageByStatus[enrollment.status] || "Student is not approved for this class.",
+        });
       }
 
       const result = await prisma.$transaction(async (transaction) => {
@@ -3957,6 +3967,16 @@ app.post(
         where: {
           sessionId: sessionRecord.id,
           status: { in: ["PRESENT", "LATE"] },
+          studentProfile: {
+            is: {
+              enrollments: {
+                some: {
+                  classId: sessionRecord.classId,
+                  status: "APPROVED",
+                },
+              },
+            },
+          },
         },
         select: {
           studentId: true,
@@ -4087,7 +4107,7 @@ app.get(
         where: { userId: req.session.userId },
         include: {
           enrollments: {
-            where: { status: { in: ["APPROVED", "PENDING"] } },
+            where: { status: { in: ["APPROVED", "PENDING", "DROPPED"] } },
             include: {
               class: {
                 include: {
@@ -4110,6 +4130,7 @@ app.get(
       const enrolledClasses = profile.enrollments.map((item) => ({
         ...item.class,
         enrollmentStatus: item.status,
+        droppedAt: item.droppedAt || null,
         joinedAt: item.joinedAt,
       }));
       const summaryRows = await prisma.$queryRaw`
@@ -4412,7 +4433,7 @@ app.get(
           enrollments: {
             some: {
               studentProfileId: profile.id,
-              status: { in: ["APPROVED", "PENDING"] },
+              status: { in: ["APPROVED", "PENDING", "DROPPED"] },
             },
           },
         },
@@ -4420,7 +4441,7 @@ app.get(
           faculty: { select: { name: true } },
           enrollments: {
             where: { studentProfileId: profile.id },
-            select: { status: true, joinedAt: true },
+            select: { status: true, droppedAt: true, joinedAt: true },
           },
         },
       });
@@ -4488,6 +4509,7 @@ app.get(
         class: {
           ...classData,
           enrollmentStatus: studentEnrollment?.status || "APPROVED",
+          droppedAt: studentEnrollment?.droppedAt || null,
           joinedAt: studentEnrollment?.joinedAt || null,
           recordSummary: summarizeStudentClass({
             attendance,

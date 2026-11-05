@@ -298,19 +298,44 @@ export default function FacultyClass() {
       setReadWarningBusyId(null);
     }
   }
-  async function refreshAfterRosterApproval() {
+  async function refreshDeckAndRoster(failureMessage) {
     try {
       tabCache.invalidate();
       await Promise.all([
         refreshPending(),
         api.classDeck(id).then((deck) => {
+          const activeStudentIds = new Set((deck.students || []).map((student) => student.id));
           setClassRecord({ ...deck.class, session: deck.session, students: deck.students });
           setStudentListCount(deck.rosterCount ?? 0);
+          setAttendanceOverrides((current) => {
+            const next = {};
+            for (const [studentId, status] of Object.entries(current)) {
+              if (activeStudentIds.has(studentId)) next[studentId] = status;
+            }
+            return next;
+          });
+          setSelectedStudent((current) => {
+            if (current && !activeStudentIds.has(current.id)) {
+              setStudentRecords(null);
+              setStudentRecordsError("");
+              return null;
+            }
+            return current;
+          });
+          setRecitationCall((current) =>
+            current?.student?.id && !activeStudentIds.has(current.student.id) ? null : current,
+          );
         }),
       ]);
     } catch {
-      showToast("Students were auto approved, but the class deck could not refresh.", "error");
+      showToast(failureMessage, "error");
     }
+  }
+  function refreshAfterRosterApproval() {
+    return refreshDeckAndRoster("Students were auto approved, but the class deck could not refresh.");
+  }
+  function handleRosterChanged() {
+    return refreshDeckAndRoster("Student list updated, but the class deck could not refresh.");
   }
   const students = useMemo(
     () => (classRecord?.students || classRecord?.enrollments?.map(({ id: enrollmentId, studentProfile }) => ({
@@ -715,7 +740,7 @@ export default function FacultyClass() {
               aria-labelledby={activeModule === "deck" ? "module-deck-link" : `module-tab-${activeModule}`}
               className="classroom-module"
             >
-              {activeModule === "student-list" ? <StudentListManager classId={id} onCountChange={setStudentListCount} onAutoApproved={refreshAfterRosterApproval} onClose={() => setActiveModule("deck")} tabCache={tabCache} /> : activeModule === "deck" ? (
+              {activeModule === "student-list" ? <StudentListManager classId={id} onCountChange={setStudentListCount} onAutoApproved={refreshAfterRosterApproval} onRosterChanged={handleRosterChanged} onClose={() => setActiveModule("deck")} tabCache={tabCache} /> : activeModule === "deck" ? (
                 <>
                   <div className="deck-toolbar">
                     <div className="deck-title">
