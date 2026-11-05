@@ -245,6 +245,11 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ status }),
     }),
+  setBulkAttendance: (sessionId, updates) =>
+    request(`/sessions/${encodeURIComponent(sessionId)}/attendance`, {
+      method: "PUT",
+      body: JSON.stringify({ updates }),
+    }),
   shuffleRecitation: (sessionId, mode, excludeStudentId = null) =>
     request(`/sessions/${encodeURIComponent(sessionId)}/recitation/shuffle`, {
       method: "POST",

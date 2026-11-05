@@ -3170,10 +3170,21 @@ app.get(
         await ensureApprovedEnrollmentsInRoster(classRecord.id);
       }
 
-      const [rosterCount, pendingCount] = await Promise.all([
+      const [rosterCount, pendingCount, absentCounts] = await Promise.all([
         prisma.classRoster.count({ where: { classId: classRecord.id, droppedAt: null } }),
         prisma.classEnrollment.count({ where: { classId: classRecord.id, status: "PENDING" } }),
+        prisma.attendanceRecord.groupBy({
+          by: ["studentId"],
+          where: {
+            session: { classId: classRecord.id },
+            status: "ABSENT",
+          },
+          _count: { id: true },
+        }),
       ]);
+      const absentCountMap = new Map(
+        absentCounts.map((row) => [row.studentId, row._count.id]),
+      );
 
       const { enrollments, ...classData } = classRecord;
       const attendanceByStudent = new Map(
@@ -3194,6 +3205,7 @@ app.get(
             photoUrl,
             studentProfileId: studentProfile.id,
             attendanceStatus: attendanceByStudent.get(studentProfile.id) || null,
+            absentCount: absentCountMap.get(studentProfile.id) || 0,
           };
         }),
         session: session
@@ -4195,6 +4207,170 @@ app.put(
 );
 
 app.put(
+  "/api/sessions/:id/attendance",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    const updates = req.body?.updates;
+    if (!Array.isArray(updates)) {
+      return res.status(400).json({ message: "updates must be an array." });
+    }
+    for (const item of updates) {
+      if (!item || typeof item !== "object" || !item.studentId) {
+        return res.status(400).json({ message: "Each update must include studentId." });
+      }
+      const st = item.status;
+      if (
+        st !== null &&
+        st !== "UNMARKED" &&
+        !["PRESENT", "LATE", "ABSENT"].includes(st)
+      ) {
+        return res.status(400).json({
+          message: "Attendance status must be PRESENT, LATE, ABSENT, or UNMARKED.",
+        });
+      }
+    }
+
+    try {
+      const sessionRecord = await findOwnedSession(req.params.id, req.session.userId);
+      if (!sessionRecord) {
+        return res.status(404).json({ message: "Class session not found." });
+      }
+
+      const studentIds = [...new Set(updates.map((u) => u.studentId))];
+      if (studentIds.length > 0) {
+        const enrollments = await prisma.classEnrollment.findMany({
+          where: {
+            classId: sessionRecord.classId,
+            studentProfileId: { in: studentIds },
+          },
+          select: { studentProfileId: true, status: true },
+        });
+        const enrollmentMap = new Map(enrollments.map((e) => [e.studentProfileId, e.status]));
+        for (const studentId of studentIds) {
+          const status = enrollmentMap.get(studentId);
+          if (!status) {
+            return res.status(404).json({ message: "Student not found in this class." });
+          }
+          if (status !== "APPROVED") {
+            const messageByStatus = {
+              DROPPED: "This student was dropped from the class and cannot be marked for attendance.",
+              PENDING: "This student's join request is still pending approval.",
+              DECLINED: "This student's join request was declined and cannot be marked for attendance.",
+            };
+            return res.status(409).json({
+              message: messageByStatus[status] || "Student is not approved for this class.",
+            });
+          }
+        }
+      }
+
+      const result = await prisma.$transaction(async (transaction) => {
+        const now = new Date();
+        const nonUnmarked = updates.filter(
+          (u) => u.status !== null && u.status !== "UNMARKED",
+        );
+        let effectiveStartedAt = sessionRecord.startedAt;
+        if (nonUnmarked.length > 0 && !effectiveStartedAt) {
+          const updatedSession = await transaction.classSession.update({
+            where: { id: sessionRecord.id },
+            data: { startedAt: now },
+            select: { startedAt: true },
+          });
+          effectiveStartedAt = updatedSession.startedAt || now;
+        }
+
+        const gracePeriodMinutes =
+          Number.isInteger(sessionRecord.class?.gracePeriodMinutes) &&
+          sessionRecord.class.gracePeriodMinutes >= 0
+            ? sessionRecord.class.gracePeriodMinutes
+            : 15;
+
+        const results = [];
+        for (const update of updates) {
+          const requestedStatus = update.status;
+          if (requestedStatus === null || requestedStatus === "UNMARKED") {
+            await transaction.attendanceRecord.deleteMany({
+              where: {
+                sessionId: sessionRecord.id,
+                studentId: update.studentId,
+              },
+            });
+            await syncAttendanceScoreAbsence(
+              transaction,
+              sessionRecord.id,
+              update.studentId,
+              false,
+            );
+            results.push({
+              studentId: update.studentId,
+              appliedStatus: "UNMARKED",
+              lateOverride: false,
+            });
+          } else {
+            const { appliedStatus, lateOverride } = applyGracePeriod(
+              requestedStatus,
+              effectiveStartedAt,
+              gracePeriodMinutes,
+              now.getTime(),
+            );
+            const attendance = await transaction.attendanceRecord.upsert({
+              where: {
+                sessionId_studentId: {
+                  sessionId: sessionRecord.id,
+                  studentId: update.studentId,
+                },
+              },
+              create: {
+                sessionId: sessionRecord.id,
+                studentId: update.studentId,
+                status: appliedStatus,
+                markedAt: now,
+              },
+              update: { status: appliedStatus, markedAt: now },
+            });
+            await syncAttendanceScoreAbsence(
+              transaction,
+              sessionRecord.id,
+              update.studentId,
+              appliedStatus === "ABSENT",
+            );
+            results.push({
+              studentId: update.studentId,
+              appliedStatus,
+              lateOverride,
+              attendance,
+            });
+          }
+        }
+
+        const remainingCount = await transaction.attendanceRecord.count({
+          where: { sessionId: sessionRecord.id },
+        });
+        if (remainingCount === 0 && effectiveStartedAt) {
+          await transaction.classSession.update({
+            where: { id: sessionRecord.id },
+            data: { startedAt: null },
+          });
+          effectiveStartedAt = null;
+        }
+
+        return {
+          success: true,
+          results,
+          sessionStartedAt: effectiveStartedAt,
+        };
+      });
+
+      return res.json(result);
+    } catch (error) {
+      console.error("Bulk attendance update failed:", error);
+      return res.status(500).json({ message: "Unable to update attendance." });
+    }
+  },
+);
+
+app.put(
   "/api/sessions/:id/attendance/:studentId",
   requireAuth,
   requireRole("FACULTY"),
@@ -4253,10 +4429,22 @@ app.put(
             enrollment.studentProfileId,
             false,
           );
+          const remainingCount = await transaction.attendanceRecord.count({
+            where: { sessionId: sessionRecord.id },
+          });
+          let sessionStartedAt = sessionRecord.startedAt;
+          if (remainingCount === 0 && sessionRecord.startedAt) {
+            await transaction.classSession.update({
+              where: { id: sessionRecord.id },
+              data: { startedAt: null },
+            });
+            sessionStartedAt = null;
+          }
           return {
             attendance: null,
             appliedStatus: "UNMARKED",
             lateOverride: false,
+            sessionStartedAt,
           };
         }
 

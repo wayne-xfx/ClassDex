@@ -555,14 +555,14 @@ export default function FacultyClass() {
     try {
       const result = await api.setAttendance(classRecord.session.id, student.id, requestedStatus);
       const appliedStatus = result.appliedStatus || result.attendance?.status || requestedStatus;
-      if (result.sessionStartedAt) {
+      if (result.sessionStartedAt !== undefined) {
         setClassRecord((current) =>
           current?.session
             ? {
                 ...current,
                 session: {
                   ...current.session,
-                  startedAt: current.session.startedAt || result.sessionStartedAt,
+                  startedAt: result.sessionStartedAt,
                 },
               }
             : current,
@@ -582,7 +582,12 @@ export default function FacultyClass() {
         const label = appliedStatus === "UNMARKED"
           ? `${student.name}'s attendance was cleared.`
           : `${student.name} marked ${appliedStatus.toLowerCase()}.`;
-        showToast(label);
+        showToast(
+          label,
+          "success",
+          "Undo",
+          () => updateAttendance({ ...student, status: appliedStatus }, previousStatus),
+        );
       }
       return appliedStatus;
     } catch (attendanceError) {
@@ -591,6 +596,67 @@ export default function FacultyClass() {
       return null;
     } finally {
       setPendingStudentIds((current) => current.filter((studentId) => studentId !== student.id));
+    }
+  }
+
+  async function updateBulkAttendance(updates, previousSnapshot, successMessage) {
+    if (!classRecord?.session?.id || isArchived) return false;
+    tabCache.invalidate("activities");
+    tabCache.invalidate("projects");
+    tabCache.invalidate("quizzes");
+    const studentIds = updates.map((u) => u.studentId);
+    setPendingStudentIds((current) => [...current, ...studentIds]);
+    const optimistic = {};
+    for (const u of updates) {
+      optimistic[u.studentId] = u.status;
+    }
+    setAttendanceOverrides((current) => ({ ...current, ...optimistic }));
+    try {
+      const result = await api.setBulkAttendance(classRecord.session.id, updates);
+      if (result.sessionStartedAt !== undefined) {
+        setClassRecord((current) =>
+          current?.session
+            ? {
+                ...current,
+                session: {
+                  ...current.session,
+                  startedAt: result.sessionStartedAt,
+                },
+              }
+            : current,
+        );
+      }
+      const applied = {};
+      for (const r of result.results || []) {
+        applied[r.studentId] = r.appliedStatus;
+      }
+      setAttendanceOverrides((current) => ({ ...current, ...applied }));
+      refreshPending();
+      if (previousSnapshot && previousSnapshot.length > 0) {
+        showToast(
+          successMessage || "Bulk attendance updated.",
+          "success",
+          "Undo",
+          () => updateBulkAttendance(previousSnapshot, null, "Bulk attendance reverted."),
+        );
+      } else {
+        showToast(successMessage || "Bulk attendance updated.", "success");
+      }
+      return true;
+    } catch (bulkError) {
+      if (previousSnapshot) {
+        const revert = {};
+        for (const s of previousSnapshot) {
+          revert[s.studentId] = s.status;
+        }
+        setAttendanceOverrides((current) => ({ ...current, ...revert }));
+      }
+      showToast(bulkError.message, "error");
+      return false;
+    } finally {
+      setPendingStudentIds((current) =>
+        current.filter((id) => !studentIds.includes(id)),
+      );
     }
   }
 
@@ -979,6 +1045,7 @@ export default function FacultyClass() {
                   sessionStartedAt={classRecord.session?.startedAt || null}
                   onStartAttendance={startAttendanceSession}
                   onStatusChange={updateAttendance}
+                  onBulkStatusChange={updateBulkAttendance}
                   onSaveGracePeriod={saveGracePeriod}
                   pendingStudentIds={pendingStudentIds}
                   savingGracePeriod={savingGracePeriod}
