@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 
 const AuthContext = createContext(null);
@@ -33,6 +33,15 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener("classdex:unauthorized", handleUnauthorized);
   }, []);
 
+  const updateUser = useCallback((patch) => {
+    if (!patch || typeof patch !== "object") return;
+    setUser((current) => {
+      if (!current) return current;
+      const hasChange = Object.keys(patch).some((key) => current[key] !== patch[key]);
+      return hasChange ? { ...current, ...patch } : current;
+    });
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
@@ -60,11 +69,9 @@ export function AuthProvider({ children }) {
           return null;
         }
       },
-      updateUser(patch) {
-        setUser((current) => (current ? { ...current, ...patch } : current));
-      },
+      updateUser,
     }),
-    [user, loading],
+    [user, loading, updateUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
