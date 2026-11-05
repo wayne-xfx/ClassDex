@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import Avatar from "../Avatar";
 import Icon from "../Icon";
 import { Button, Modal } from "../DesignSystem";
@@ -31,11 +32,25 @@ function parseLines(value) {
     .filter((row) => row.name || row.studentId);
 }
 
-export default function StudentListManager({ classId, onClose, onCountChange, onAutoApproved, onRosterChanged, tabCache, readOnly = false }) {
+export default function StudentListManager({
+  classId,
+  onClose,
+  onCountChange,
+  onAutoApproved,
+  onRosterChanged,
+  onDirtyChange,
+  tabCache,
+  readOnly = false,
+}) {
+  const [searchParams] = useSearchParams();
+  const focusStudent = searchParams.get("focusStudent") || "";
+
   const cachedRoster = tabCache?.get(`roster:${classId}`);
   const [activeTab, setActiveTab] = useState("active"); // "active" | "dropList"
   const [rows, setRows] = useState(cachedRoster || []);
+  const initialRosterRef = useRef(cachedRoster ? JSON.stringify(cachedRoster) : "");
   const [dropList, setDropList] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
   const [name, setName] = useState("");
   const [studentId, setStudentId] = useState("");
   const [pasteValue, setPasteValue] = useState("");
@@ -48,8 +63,46 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
   const [removing, setRemoving] = useState(false);
   const [restoringIds, setRestoringIds] = useState([]);
 
+  // Drop list sorting state
+  const [dropSortField, setDropSortField] = useState("droppedAt"); // "name" | "studentId" | "droppedAt" | "recordCount"
+  const [dropSortOrder, setDropSortOrder] = useState("desc"); // "asc" | "desc"
+
   const checkedRows = useMemo(() => validateRows(rows), [rows]);
   const invalidCount = checkedRows.filter((row) => row.errors.length).length;
+
+  // Unsaved changes detection
+  const isDirty = useMemo(() => {
+    if (readOnly || activeTab !== "active") return false;
+    if (!initialRosterRef.current) return false;
+    const currentSimplified = rows.map((r) => ({
+      name: r.name.trim(),
+      studentId: r.studentId.trim(),
+    }));
+    try {
+      const initialParsed = JSON.parse(initialRosterRef.current).map((r) => ({
+        name: r.name.trim(),
+        studentId: r.studentId.trim(),
+      }));
+      return JSON.stringify(currentSimplified) !== JSON.stringify(initialParsed);
+    } catch {
+      return false;
+    }
+  }, [activeTab, readOnly, rows]);
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+
+  // Window beforeunload guard
+  useEffect(() => {
+    if (!isDirty) return;
+    function handleBeforeUnload(e) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirty]);
 
   const loadRoster = useCallback(() => {
     return api
@@ -61,6 +114,7 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
           studentId: entry.studentId,
           photo: entry.photo || entry.photoUrl || "",
         }));
+        initialRosterRef.current = JSON.stringify(mapped);
         tabCache?.set(`roster:${classId}`, mapped);
         setRows(mapped);
         onCountChange?.(roster.length);
@@ -95,6 +149,34 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
     loadDropList();
   }, [loadRoster, loadDropList]);
 
+  // Consume focusStudent query parameter
+  useEffect(() => {
+    if (!focusStudent) return;
+    setSearchTerm(focusStudent);
+    // If student is in drop list, switch to drop list tab
+    const inDropList = dropList.some(
+      (d) =>
+        d.studentId === focusStudent ||
+        d.id === focusStudent ||
+        d.studentName.toLowerCase().includes(focusStudent.toLowerCase()),
+    );
+    if (inDropList) {
+      setActiveTab("dropList");
+    } else {
+      setActiveTab("active");
+    }
+  }, [focusStudent, dropList]);
+
+  function handleClose() {
+    if (isDirty) {
+      const confirmLeave = window.confirm(
+        "You have unsaved changes in the student list. Are you sure you want to leave without saving?",
+      );
+      if (!confirmLeave) return;
+    }
+    onClose?.();
+  }
+
   function addRow(event) {
     event.preventDefault();
     setRows((current) => [...current, { name, studentId, photo: "" }]);
@@ -103,7 +185,9 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
   }
 
   function updateRow(index, field, value) {
-    setRows((current) => current.map((row, rowIndex) => (rowIndex === index ? { ...row, [field]: value } : row)));
+    setRows((current) =>
+      current.map((row, rowIndex) => (rowIndex === index ? { ...row, [field]: value } : row)),
+    );
   }
 
   function importPasted() {
@@ -175,6 +259,7 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
         studentId: entry.studentId,
         photo: entry.photo || entry.photoUrl || "",
       }));
+      initialRosterRef.current = JSON.stringify(mapped);
       tabCache?.set(`roster:${classId}`, mapped);
       setRows(mapped);
       onCountChange?.(roster.length);
@@ -266,6 +351,75 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
     }
   }
 
+  // Filtered rows for active roster
+  const filteredRowsWithIndices = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    return checkedRows
+      .map((row, index) => ({ row, index }))
+      .filter(({ row }) => {
+        if (!q) return true;
+        const statusText = readOnly
+          ? "read-only"
+          : row.errors.length
+          ? row.errors.join(" ")
+          : "ready to save";
+        return (
+          row.name.toLowerCase().includes(q) ||
+          row.studentId.includes(q) ||
+          statusText.toLowerCase().includes(q)
+        );
+      });
+  }, [checkedRows, readOnly, searchTerm]);
+
+  // Sort & filter drop list
+  const filteredAndSortedDropList = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    let list = dropList;
+    if (q) {
+      list = list.filter((entry) => {
+        const droppedDateStr = entry.droppedAt
+          ? new Date(entry.droppedAt).toLocaleDateString().toLowerCase()
+          : "";
+        return (
+          entry.studentName.toLowerCase().includes(q) ||
+          entry.studentId.includes(q) ||
+          droppedDateStr.includes(q) ||
+          String(entry.recordCount).includes(q)
+        );
+      });
+    }
+
+    return [...list].sort((a, b) => {
+      let valA, valB;
+      if (dropSortField === "name") {
+        valA = (a.studentName || "").toLowerCase();
+        valB = (b.studentName || "").toLowerCase();
+      } else if (dropSortField === "studentId") {
+        valA = a.studentId || "";
+        valB = b.studentId || "";
+      } else if (dropSortField === "recordCount") {
+        valA = a.recordCount || 0;
+        valB = b.recordCount || 0;
+      } else {
+        valA = a.droppedAt ? new Date(a.droppedAt).getTime() : 0;
+        valB = b.droppedAt ? new Date(b.droppedAt).getTime() : 0;
+      }
+
+      if (valA < valB) return dropSortOrder === "asc" ? -1 : 1;
+      if (valA > valB) return dropSortOrder === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [dropList, dropSortField, dropSortOrder, searchTerm]);
+
+  function handleDropSort(field) {
+    if (dropSortField === field) {
+      setDropSortOrder((order) => (order === "asc" ? "desc" : "asc"));
+    } else {
+      setDropSortField(field);
+      setDropSortOrder(field === "name" || field === "studentId" ? "asc" : "desc");
+    }
+  }
+
   return (
     <section className="panel student-list-manager" aria-labelledby="student-list-manager-title">
       <ModuleHeader
@@ -277,31 +431,54 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
             : "Use the student list to automatically recognize join requests and maintain official class enrollment."
         }
         actions={
-          <button type="button" className="button button-quiet" onClick={onClose}>
+          <button type="button" className="button button-quiet" onClick={handleClose}>
             Close
           </button>
         }
       />
 
-      <div className="flex gap-2 border-b border-slate-200 dark:border-slate-800 pb-3 mt-4" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === "active"}
-          className={`button ${activeTab === "active" ? "button-primary" : "button-quiet"}`}
-          onClick={() => setActiveTab("active")}
-        >
-          <Icon name="users" /> Student List ({rows.length})
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === "dropList"}
-          className={`button ${activeTab === "dropList" ? "button-primary" : "button-quiet"}`}
-          onClick={() => setActiveTab("dropList")}
-        >
-          <Icon name="userMinus" /> Drop List ({dropList.length})
-        </button>
+      <div className="flex items-center justify-between flex-wrap gap-3 border-b border-slate-200 dark:border-slate-800 pb-3 mt-4">
+        <div className="flex gap-2" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "active"}
+            className={`button ${activeTab === "active" ? "button-primary" : "button-quiet"}`}
+            onClick={() => setActiveTab("active")}
+          >
+            <Icon name="users" size={16} /> Student List ({rows.length})
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "dropList"}
+            className={`button ${activeTab === "dropList" ? "button-primary" : "button-quiet"}`}
+            onClick={() => setActiveTab("dropList")}
+          >
+            <Icon name="userMinus" size={16} /> Drop List ({dropList.length})
+          </button>
+        </div>
+
+        {/* Instant Search Bar */}
+        <label className="student-list-search-bar">
+          <Icon name="search" size={16} className="text-muted" />
+          <input
+            type="search"
+            placeholder="Search name, ID, or status…"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+          {searchTerm ? (
+            <button
+              type="button"
+              className="student-list-search-clear"
+              onClick={() => setSearchTerm("")}
+              aria-label="Clear search"
+            >
+              <Icon name="x" size={13} />
+            </button>
+          ) : null}
+        </label>
       </div>
 
       {errorMessage ? <p className="notice notice-error mt-3" role="alert">{errorMessage}</p> : null}
@@ -374,7 +551,11 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
           <div className="student-list-preview-heading">
             <div>
               <h3>{readOnly ? "Student list" : "Student list preview"}</h3>
-              <span>{rows.length} {rows.length === 1 ? "row" : "rows"}{!readOnly && invalidCount ? ` · ${invalidCount} need${invalidCount === 1 ? "s" : ""} attention` : ""}</span>
+              <span>
+                {filteredRowsWithIndices.length} {filteredRowsWithIndices.length === 1 ? "row" : "rows"}
+                {searchTerm ? ` (filtered from ${rows.length})` : ""}
+                {!readOnly && invalidCount ? ` · ${invalidCount} need${invalidCount === 1 ? "s" : ""} attention` : ""}
+              </span>
             </div>
             {!readOnly ? (
               <button
@@ -402,52 +583,70 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
                   </tr>
                 </thead>
                 <tbody>
-                  {checkedRows.map((row, index) => (
-                    <tr key={`${index}-${row.studentId}`}>
-                      <td>
-                        <div className="student-list-name-cell">
-                          <Avatar src={row.photo} name={row.name} size="sm" className="student-list-avatar" />
+                  {filteredRowsWithIndices.map(({ row, index }) => {
+                    const isFocused =
+                      Boolean(focusStudent) &&
+                      (row.studentId === focusStudent ||
+                        row.id === focusStudent ||
+                        row.name.toLowerCase().includes(focusStudent.toLowerCase()));
+
+                    return (
+                      <tr
+                        key={`${index}-${row.studentId}`}
+                        className={isFocused ? "is-focused-student-row" : ""}
+                        ref={(el) => {
+                          if (el && isFocused) {
+                            el.scrollIntoView({ behavior: "smooth", block: "center" });
+                          }
+                        }}
+                      >
+                        <td>
+                          <div className="student-list-name-cell">
+                            <Avatar src={row.photo} name={row.name} size="sm" className="student-list-avatar" />
+                            <input
+                              className="input"
+                              value={row.name}
+                              disabled={readOnly}
+                              onChange={(event) => updateRow(index, "name", event.target.value)}
+                            />
+                          </div>
+                        </td>
+                        <td>
                           <input
                             className="input"
-                            value={row.name}
+                            inputMode="numeric"
+                            maxLength={7}
+                            value={row.studentId}
                             disabled={readOnly}
-                            onChange={(event) => updateRow(index, "name", event.target.value)}
+                            onChange={(event) =>
+                              updateRow(index, "studentId", event.target.value.replace(/\D/g, "").slice(0, 7))
+                            }
                           />
-                        </div>
-                      </td>
-                      <td>
-                        <input
-                          className="input"
-                          inputMode="numeric"
-                          maxLength={7}
-                          value={row.studentId}
-                          disabled={readOnly}
-                          onChange={(event) => updateRow(index, "studentId", event.target.value.replace(/\D/g, "").slice(0, 7))}
-                        />
-                      </td>
-                      <td>
-                        {readOnly ? (
-                          <span className="student-list-row-valid">Read-only</span>
-                        ) : row.errors.length ? (
-                          <span className="student-list-row-error">{row.errors.join(" · ")}</span>
-                        ) : (
-                          <span className="student-list-row-valid">Ready to save</span>
-                        )}
-                      </td>
-                      {!readOnly ? (
-                        <td>
-                          <button
-                            type="button"
-                            className="icon-button"
-                            aria-label={`Remove ${row.name || "row"}`}
-                            onClick={() => promptRemoveRow(index)}
-                          >
-                            ×
-                          </button>
                         </td>
-                      ) : null}
-                    </tr>
-                  ))}
+                        <td>
+                          {readOnly ? (
+                            <span className="student-list-row-valid">Read-only</span>
+                          ) : row.errors.length ? (
+                            <span className="student-list-row-error">{row.errors.join(" · ")}</span>
+                          ) : (
+                            <span className="student-list-row-valid">Ready to save</span>
+                          )}
+                        </td>
+                        {!readOnly ? (
+                          <td>
+                            <button
+                              type="button"
+                              className="icon-button"
+                              aria-label={`Remove ${row.name || "row"}`}
+                              onClick={() => promptRemoveRow(index)}
+                            >
+                              ×
+                            </button>
+                          </td>
+                        ) : null}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -455,7 +654,11 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
             <div className="empty-state student-list-empty">
               <Icon name="users" />
               <strong>Your student list is empty</strong>
-              <span>{readOnly ? "No students were added to this student list." : "Add students above, paste a class list, or import an Excel/CSV file to begin."}</span>
+              <span>
+                {readOnly
+                  ? "No students were added to this student list."
+                  : "Add students above, paste a class list, or import an Excel/CSV file to begin."}
+              </span>
             </div>
           )}
         </>
@@ -464,7 +667,10 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
           <div className="student-list-preview-heading">
             <div>
               <h3>Drop List</h3>
-              <span>Students who were dropped with recorded coursework</span>
+              <span>
+                {filteredAndSortedDropList.length} dropped {filteredAndSortedDropList.length === 1 ? "student" : "students"} with recorded coursework
+                {searchTerm ? ` (filtered from ${dropList.length})` : ""}
+              </span>
             </div>
           </div>
           {dropLoading && !dropList.length ? (
@@ -474,38 +680,109 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
               <table className="student-list-table">
                 <thead>
                   <tr>
-                    <th>Name</th>
-                    <th>Student ID</th>
-                    <th>Dropped Date</th>
-                    <th>Coursework Records</th>
+                    <th>
+                      <button
+                        type="button"
+                        className="drop-list-sort-btn"
+                        onClick={() => handleDropSort("name")}
+                      >
+                        <span>Name</span>
+                        {dropSortField === "name" ? (
+                          <span aria-hidden="true">{dropSortOrder === "asc" ? "▲" : "▼"}</span>
+                        ) : null}
+                      </button>
+                    </th>
+                    <th>
+                      <button
+                        type="button"
+                        className="drop-list-sort-btn"
+                        onClick={() => handleDropSort("studentId")}
+                      >
+                        <span>Student ID</span>
+                        {dropSortField === "studentId" ? (
+                          <span aria-hidden="true">{dropSortOrder === "asc" ? "▲" : "▼"}</span>
+                        ) : null}
+                      </button>
+                    </th>
+                    <th>
+                      <button
+                        type="button"
+                        className="drop-list-sort-btn"
+                        onClick={() => handleDropSort("droppedAt")}
+                      >
+                        <span>Dropped Date</span>
+                        {dropSortField === "droppedAt" ? (
+                          <span aria-hidden="true">{dropSortOrder === "asc" ? "▲" : "▼"}</span>
+                        ) : null}
+                      </button>
+                    </th>
+                    <th>
+                      <button
+                        type="button"
+                        className="drop-list-sort-btn"
+                        onClick={() => handleDropSort("recordCount")}
+                      >
+                        <span>Coursework Records</span>
+                        {dropSortField === "recordCount" ? (
+                          <span aria-hidden="true">{dropSortOrder === "asc" ? "▲" : "▼"}</span>
+                        ) : null}
+                      </button>
+                    </th>
                     {!readOnly ? <th>Action</th> : null}
                   </tr>
                 </thead>
                 <tbody>
-                  {dropList.map((entry) => (
-                    <tr key={entry.id}>
-                      <td>
-                        <div className="student-list-name-cell">
-                          <Avatar src={entry.photo} name={entry.studentName} size="sm" className="student-list-avatar" />
-                          <span>{formatStudentDisplayName(entry.studentName, entry) || formatStudentName(entry.studentName, entry)}</span>
-                        </div>
-                      </td>
-                      <td>{entry.studentId}</td>
-                      <td>{entry.droppedAt ? new Date(entry.droppedAt).toLocaleDateString() : "—"}</td>
-                      <td>{entry.recordCount} {entry.recordCount === 1 ? "record" : "records"}</td>
-                      {!readOnly ? (
+                  {filteredAndSortedDropList.map((entry) => {
+                    const isFocused =
+                      Boolean(focusStudent) &&
+                      (entry.studentId === focusStudent ||
+                        entry.id === focusStudent ||
+                        entry.studentName.toLowerCase().includes(focusStudent.toLowerCase()));
+
+                    return (
+                      <tr
+                        key={entry.id}
+                        className={isFocused ? "is-focused-student-row" : ""}
+                        ref={(el) => {
+                          if (el && isFocused) {
+                            el.scrollIntoView({ behavior: "smooth", block: "center" });
+                          }
+                        }}
+                      >
                         <td>
-                          <Button
-                            variant="secondary"
-                            disabled={restoringIds.includes(entry.id)}
-                            onClick={() => restoreStudent(entry)}
-                          >
-                            {restoringIds.includes(entry.id) ? "Restoring…" : "Restore"}
-                          </Button>
+                          <div className="student-list-name-cell">
+                            <Avatar src={entry.photo} name={entry.studentName} size="sm" className="student-list-avatar" />
+                            <span>
+                              {formatStudentDisplayName(entry.studentName, entry) ||
+                                formatStudentName(entry.studentName, entry)}
+                            </span>
+                          </div>
                         </td>
-                      ) : null}
-                    </tr>
-                  ))}
+                        <td>{entry.studentId}</td>
+                        <td>
+                          {entry.droppedAt
+                            ? new Intl.DateTimeFormat("en-US", {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                              }).format(new Date(entry.droppedAt))
+                            : "—"}
+                        </td>
+                        <td>{entry.recordCount} {entry.recordCount === 1 ? "record" : "records"}</td>
+                        {!readOnly ? (
+                          <td>
+                            <Button
+                              variant="secondary"
+                              disabled={restoringIds.includes(entry.id)}
+                              onClick={() => restoreStudent(entry)}
+                            >
+                              {restoringIds.includes(entry.id) ? "Restoring…" : "Restore"}
+                            </Button>
+                          </td>
+                        ) : null}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -541,13 +818,28 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
                 </Button>
               </div>
             ) : removalModal.recordCount === 0 ? (
-              <p>
-                <em>{removalModal.row.name}</em> has no records and will be removed from this class.
-              </p>
+              <div className="space-y-2">
+                <p>
+                  <strong>{removalModal.row.name}</strong> (ID: {removalModal.row.studentId}) has{" "}
+                  <strong>no recorded coursework</strong> in this class.
+                </p>
+                <p className="text-sm text-slate-500">
+                  They will be permanently removed from this class roster and un-enrolled.
+                </p>
+              </div>
             ) : (
-              <p>
-                <em>{removalModal.row.name}</em> has {removalModal.recordCount} {removalModal.recordCount === 1 ? "record" : "records"} and will be moved to the Drop List; their records are kept.
-              </p>
+              <div className="space-y-2">
+                <p>
+                  <strong>{removalModal.row.name}</strong> (ID: {removalModal.row.studentId}) has{" "}
+                  <strong>
+                    {removalModal.recordCount} {removalModal.recordCount === 1 ? "coursework record" : "coursework records"}
+                  </strong>{" "}
+                  (attendance, recitations, activities, projects, or quizzes).
+                </p>
+                <p className="text-sm text-slate-500">
+                  To preserve historical records and transcripts, they will be moved to the <strong>Drop List</strong>. You can restore them at any time.
+                </p>
+              </div>
             )}
             <div className="form-actions flex justify-end gap-2 pt-2">
               <Button variant="secondary" onClick={() => setRemovalModal(null)} autoFocus>
@@ -561,7 +853,7 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
                 {removing
                   ? "Processing…"
                   : removalModal.loading || removalModal.error || removalModal.recordCount === 0
-                  ? "Remove"
+                  ? "Remove from list"
                   : "Move to Drop List"}
               </Button>
             </div>

@@ -7955,3 +7955,69 @@ textarea {
   gap: 8px;
   margin-top: 6px;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Fix 3: Student List UI & Drop List Styles                                 */
+/* -------------------------------------------------------------------------- */
+
+.student-list-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 12px;
+  height: 40px;
+  width: min(320px, 100%);
+}
+
+.student-list-search-bar input {
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--navy);
+  font-size: 13px;
+  width: 100%;
+}
+
+.student-list-search-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 50%;
+}
+
+.student-list-search-clear:hover {
+  background: color-mix(in srgb, var(--muted) 15%, transparent);
+  color: var(--navy);
+}
+
+.is-focused-student-row {
+  background: color-mix(in srgb, var(--royal) 16%, var(--card)) !important;
+  outline: 2px solid var(--royal);
+  outline-offset: -1px;
+}
+
+.drop-list-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+}
+
+.drop-list-sort-btn:hover {
+  color: var(--royal);
+}

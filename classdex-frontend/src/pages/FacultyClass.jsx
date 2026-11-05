@@ -75,6 +75,17 @@ export default function FacultyClass() {
     const initialModule = new URLSearchParams(window.location.search).get("module");
     return initialModule && VALID_MODULES.has(initialModule) ? initialModule : "deck";
   });
+  const [studentListDirty, setStudentListDirty] = useState(false);
+
+  function handleModuleChange(targetModule) {
+    if (activeModule === "student-list" && studentListDirty && targetModule !== "student-list") {
+      const confirmLeave = window.confirm(
+        "You have unsaved changes in the student list. Are you sure you want to leave without saving?",
+      );
+      if (!confirmLeave) return;
+    }
+    setActiveModule(targetModule);
+  }
   const [showPending, setShowPending] = useState(() => new URLSearchParams(window.location.search).get("notifications") === "1");
   const [pendingEnrollments, setPendingEnrollments] = useState([]);
   const [autoApprovedNotifications, setAutoApprovedNotifications] = useState([]);
@@ -938,7 +949,7 @@ export default function FacultyClass() {
             <ClassShell
               classRecord={classRecord}
               activeModule={activeModule}
-              onModuleChange={setActiveModule}
+              onModuleChange={handleModuleChange}
               studentListCount={studentListCount}
               isArchived={isArchived}
               archiveBusy={archiveBusy}
@@ -959,7 +970,7 @@ export default function FacultyClass() {
                 />
               }
             >
-              {activeModule === "student-list" ? <StudentListManager classId={id} onCountChange={setStudentListCount} onAutoApproved={refreshAfterRosterApproval} onRosterChanged={handleRosterChanged} onClose={() => setActiveModule("deck")} tabCache={tabCache} readOnly={isArchived} /> : activeModule === "deck" ? (
+              {activeModule === "student-list" ? <StudentListManager classId={id} onCountChange={setStudentListCount} onAutoApproved={refreshAfterRosterApproval} onRosterChanged={handleRosterChanged} onDirtyChange={setStudentListDirty} onClose={() => handleModuleChange("deck")} tabCache={tabCache} readOnly={isArchived} /> : activeModule === "deck" ? (
                 <>
                   <div className="deck-toolbar">
                     <div className="deck-title">
