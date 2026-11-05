@@ -30,7 +30,7 @@ function parseLines(value) {
     .filter((row) => row.name || row.studentId);
 }
 
-export default function StudentListManager({ classId, onClose, onCountChange, onAutoApproved, tabCache }) {
+export default function StudentListManager({ classId, onClose, onCountChange, onAutoApproved, tabCache, readOnly = false }) {
   const cachedRoster = tabCache?.get(`roster:${classId}`);
   const [activeTab, setActiveTab] = useState("active"); // "active" | "dropList"
   const [rows, setRows] = useState(cachedRoster || []);
@@ -234,8 +234,8 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
       <div className="student-list-manager-heading">
         <div>
           <span className="eyebrow"><Icon name="users" /> Student List</span>
-          <h2 id="student-list-manager-title">Manage the students in this class</h2>
-          <p>Use the student list to automatically recognize join requests and maintain official class enrollment.</p>
+          <h2 id="student-list-manager-title">{readOnly ? "View the students in this class" : "Manage the students in this class"}</h2>
+          <p>{readOnly ? "This class is archived. View the student list and drop list in read-only mode." : "Use the student list to automatically recognize join requests and maintain official class enrollment."}</p>
         </div>
         <button type="button" className="button button-quiet" onClick={onClose}>Close</button>
       </div>
@@ -265,75 +265,81 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
 
       {activeTab === "active" ? (
         <>
-          <div className="student-list-warning notice notice-warning">
-            <Icon name="info" />
-            <span>You haven't added a student list yet. Join requests that don't match a list entry will need your manual approval.</span>
-          </div>
-          <div className="student-list-input-grid">
-            <form className="student-list-entry-form" onSubmit={addRow}>
-              <label className="field">
-                <span>Student name</span>
-                <input
-                  className="input"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="e.g., Juan Dela Cruz"
-                />
-              </label>
-              <label className="field">
-                <span>7-digit student ID</span>
-                <input
-                  className="input"
-                  inputMode="numeric"
-                  maxLength={7}
-                  value={studentId}
-                  onChange={(event) => setStudentId(event.target.value.replace(/\D/g, "").slice(0, 7))}
-                  placeholder="2300039"
-                />
-              </label>
-              <button type="submit" className="button button-secondary">
-                <Icon name="plus" /> Add student
-              </button>
-            </form>
-            <div className="student-list-import-box">
-              <label className="field">
-                <span>Paste one student per line</span>
-                <textarea
-                  className="input"
-                  rows={4}
-                  value={pasteValue}
-                  onChange={(event) => setPasteValue(event.target.value)}
-                  placeholder={"Alex Santos, 2300039\nBea Cruz, 2300040"}
-                />
-              </label>
-              <div className="student-list-import-actions">
-                <button type="button" className="button button-quiet" onClick={importPasted} disabled={!pasteValue.trim()}>
-                  Add pasted rows
-                </button>
-                <button type="button" className="button button-quiet" onClick={downloadTemplate}>
-                  <Icon name="download" /> Download template
-                </button>
-                <label className="button button-quiet">
-                  <Icon name="upload" /> Import student list
-                  <input type="file" accept=".csv,.xlsx,.xls" hidden onChange={handleFile} />
-                </label>
+          {!readOnly ? (
+            <>
+              <div className="student-list-warning notice notice-warning">
+                <Icon name="info" />
+                <span>You haven't added a student list yet. Join requests that don't match a list entry will need your manual approval.</span>
               </div>
-            </div>
-          </div>
+              <div className="student-list-input-grid">
+                <form className="student-list-entry-form" onSubmit={addRow}>
+                  <label className="field">
+                    <span>Student name</span>
+                    <input
+                      className="input"
+                      value={name}
+                      onChange={(event) => setName(event.target.value)}
+                      placeholder="e.g., Juan Dela Cruz"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>7-digit student ID</span>
+                    <input
+                      className="input"
+                      inputMode="numeric"
+                      maxLength={7}
+                      value={studentId}
+                      onChange={(event) => setStudentId(event.target.value.replace(/\D/g, "").slice(0, 7))}
+                      placeholder="2300039"
+                    />
+                  </label>
+                  <button type="submit" className="button button-secondary">
+                    <Icon name="plus" /> Add student
+                  </button>
+                </form>
+                <div className="student-list-import-box">
+                  <label className="field">
+                    <span>Paste one student per line</span>
+                    <textarea
+                      className="input"
+                      rows={4}
+                      value={pasteValue}
+                      onChange={(event) => setPasteValue(event.target.value)}
+                      placeholder={"Alex Santos, 2300039\nBea Cruz, 2300040"}
+                    />
+                  </label>
+                  <div className="student-list-import-actions">
+                    <button type="button" className="button button-quiet" onClick={importPasted} disabled={!pasteValue.trim()}>
+                      Add pasted rows
+                    </button>
+                    <button type="button" className="button button-quiet" onClick={downloadTemplate}>
+                      <Icon name="download" /> Download template
+                    </button>
+                    <label className="button button-quiet">
+                      <Icon name="upload" /> Import student list
+                      <input type="file" accept=".csv,.xlsx,.xls" hidden onChange={handleFile} />
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : null}
 
           <div className="student-list-preview-heading">
             <div>
-              <h3>Student list preview</h3>
-              <span>{rows.length} {rows.length === 1 ? "row" : "rows"}{invalidCount ? ` · ${invalidCount} need${invalidCount === 1 ? "s" : ""} attention` : ""}</span>
+              <h3>{readOnly ? "Student list" : "Student list preview"}</h3>
+              <span>{rows.length} {rows.length === 1 ? "row" : "rows"}{!readOnly && invalidCount ? ` · ${invalidCount} need${invalidCount === 1 ? "s" : ""} attention` : ""}</span>
             </div>
-            <button
-              type="button"
-              className="button button-primary"
-              onClick={saveStudentList}
-              disabled={saving || !rows.length || invalidCount}
-            >
-              {saving ? "Saving…" : "Save student list"}
-            </button>
+            {!readOnly ? (
+              <button
+                type="button"
+                className="button button-primary"
+                onClick={saveStudentList}
+                disabled={saving || !rows.length || invalidCount}
+              >
+                {saving ? "Saving…" : "Save student list"}
+              </button>
+            ) : null}
           </div>
 
           {loading && !rows.length ? (
@@ -345,8 +351,8 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
                   <tr>
                     <th>Name</th>
                     <th>Student ID</th>
-                    <th>Validation</th>
-                    <th><span className="sr-only">Actions</span></th>
+                    <th>{readOnly ? "Status" : "Validation"}</th>
+                    {!readOnly ? <th><span className="sr-only">Actions</span></th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -358,6 +364,7 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
                           <input
                             className="input"
                             value={row.name}
+                            disabled={readOnly}
                             onChange={(event) => updateRow(index, "name", event.target.value)}
                           />
                         </div>
@@ -368,26 +375,31 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
                           inputMode="numeric"
                           maxLength={7}
                           value={row.studentId}
+                          disabled={readOnly}
                           onChange={(event) => updateRow(index, "studentId", event.target.value.replace(/\D/g, "").slice(0, 7))}
                         />
                       </td>
                       <td>
-                        {row.errors.length ? (
+                        {readOnly ? (
+                          <span className="student-list-row-valid">Read-only</span>
+                        ) : row.errors.length ? (
                           <span className="student-list-row-error">{row.errors.join(" · ")}</span>
                         ) : (
                           <span className="student-list-row-valid">Ready to save</span>
                         )}
                       </td>
-                      <td>
-                        <button
-                          type="button"
-                          className="icon-button"
-                          aria-label={`Remove ${row.name || "row"}`}
-                          onClick={() => promptRemoveRow(index)}
-                        >
-                          ×
-                        </button>
-                      </td>
+                      {!readOnly ? (
+                        <td>
+                          <button
+                            type="button"
+                            className="icon-button"
+                            aria-label={`Remove ${row.name || "row"}`}
+                            onClick={() => promptRemoveRow(index)}
+                          >
+                            ×
+                          </button>
+                        </td>
+                      ) : null}
                     </tr>
                   ))}
                 </tbody>
@@ -397,7 +409,7 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
             <div className="empty-state student-list-empty">
               <Icon name="users" />
               <strong>Your student list is empty</strong>
-              <span>Add students above, paste a class list, or import an Excel/CSV file to begin.</span>
+              <span>{readOnly ? "No students were added to this student list." : "Add students above, paste a class list, or import an Excel/CSV file to begin."}</span>
             </div>
           )}
         </>
@@ -420,7 +432,7 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
                     <th>Student ID</th>
                     <th>Dropped Date</th>
                     <th>Coursework Records</th>
-                    <th>Action</th>
+                    {!readOnly ? <th>Action</th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -435,11 +447,13 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
                       <td>{entry.studentId}</td>
                       <td>{entry.droppedAt ? new Date(entry.droppedAt).toLocaleDateString() : "—"}</td>
                       <td>{entry.recordCount} {entry.recordCount === 1 ? "record" : "records"}</td>
-                      <td>
-                        <Button variant="secondary" onClick={() => restoreStudent(entry)}>
-                          Restore
-                        </Button>
-                      </td>
+                      {!readOnly ? (
+                        <td>
+                          <Button variant="secondary" onClick={() => restoreStudent(entry)}>
+                            Restore
+                          </Button>
+                        </td>
+                      ) : null}
                     </tr>
                   ))}
                 </tbody>

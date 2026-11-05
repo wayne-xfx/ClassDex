@@ -87,6 +87,7 @@ export default function StudentClassRecord() {
             <section className="student-record-hero panel">
               <div className="student-record-meta">
                 <Badge tone="neutral">Class code {classRecord.classCode}</Badge>
+                {classRecord.archivedAt ? <Badge tone="neutral">Archived</Badge> : null}
                 <Badge tone={classRecord.enrollmentStatus === "PENDING" ? "warning" : classRecord.enrollmentStatus === "DECLINED" ? "danger" : "success"}>
                   {classRecord.enrollmentStatus === "PENDING" ? "Pending approval" : classRecord.enrollmentStatus === "DECLINED" ? "Declined" : "Enrolled"}
                 </Badge>

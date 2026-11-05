@@ -200,9 +200,13 @@ function publicUser(user) {
   };
 }
 
-async function requireAuth(req, res, next) {
+async function verifyAuthenticatedSession(req, res) {
+  if (req._sessionAuthVerified) {
+    return true;
+  }
   if (!req.session?.userId) {
-    return res.status(401).json({ message: "Please log in to continue." });
+    res.status(401).json({ message: "Please log in to continue." });
+    return false;
   }
   try {
     const authUser = await prisma.user.findUnique({
@@ -212,22 +216,33 @@ async function requireAuth(req, res, next) {
     if (!authUser) {
       req.session.destroy(() => {});
       res.clearCookie("classdex.sid");
-      return res.status(401).json({ message: "Session expired. Please log in again." });
+      res.status(401).json({ message: "Session expired. Please log in again." });
+      return false;
     }
     if (authUser.passwordChangedAt) {
       const issuedAt = Number(req.session.issuedAt || 0);
       if (!issuedAt || issuedAt <= authUser.passwordChangedAt.getTime()) {
         req.session.destroy(() => {});
         res.clearCookie("classdex.sid");
-        return res.status(401).json({ message: "Your password was changed. Please log in again." });
+        res.status(401).json({ message: "Your password was changed. Please log in again." });
+        return false;
       }
     }
     req.session.role = authUser.role;
-    return next();
+    req._sessionAuthVerified = true;
+    return true;
   } catch (error) {
     console.error("Session verification failed:", error);
-    return res.status(500).json({ message: "Unable to verify session." });
+    res.status(500).json({ message: "Unable to verify session." });
+    return false;
   }
+}
+
+async function requireAuth(req, res, next) {
+  if (!(await verifyAuthenticatedSession(req, res))) {
+    return;
+  }
+  return next();
 }
 
 function requireRole(role) {
@@ -258,13 +273,183 @@ function normalizeClassCode(value) {
 }
 
 async function requireRecaptcha(req, res) {
+  if (req._recaptchaVerified) {
+    return true;
+  }
   const verified = await verifyRecaptchaToken(req.body?.recaptchaToken, req.ip);
   if (!verified.success) {
     res.status(400).json({ message: verified.message });
     return false;
   }
+  req._recaptchaVerified = true;
   return true;
 }
+
+const MUTATING_HTTP_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const ARCHIVED_READ_ONLY_MESSAGE = "This class is archived and read-only. Restore it to make changes.";
+const ARCHIVED_JOIN_MESSAGE = "This class has been archived and is no longer accepting new students.";
+
+function matchClassScopedMutationTarget(method, rawPath) {
+  if (!MUTATING_HTTP_METHODS.has(method)) return null;
+  const cleanPath = String(rawPath || "").replace(/\/+$/, "") || "/";
+
+  if (cleanPath === "/api/classes/join") {
+    return { kind: "join" };
+  }
+
+  let match = /^\/api\/classes\/([^/]+)(?:\/(.*))?$/.exec(cleanPath);
+  if (match) {
+    const id = decodeURIComponent(match[1]);
+    const subPath = match[2] || "";
+    if (method === "POST" && (subPath === "archive" || subPath === "restore")) {
+      return null;
+    }
+    return { kind: "class", id };
+  }
+
+  match = /^\/api\/sessions\/([^/]+)(?:\/.*)?$/.exec(cleanPath);
+  if (match) {
+    return { kind: "session", id: decodeURIComponent(match[1]) };
+  }
+
+  match = /^\/api\/quizzes\/([^/]+)(?:\/.*)?$/.exec(cleanPath);
+  if (match) {
+    return { kind: "quiz", id: decodeURIComponent(match[1]) };
+  }
+
+  match = /^\/api\/activities\/([^/]+)(?:\/.*)?$/.exec(cleanPath);
+  if (match) {
+    return { kind: "activity", id: decodeURIComponent(match[1]) };
+  }
+
+  match = /^\/api\/projects\/([^/]+)(?:\/.*)?$/.exec(cleanPath);
+  if (match) {
+    return { kind: "project", id: decodeURIComponent(match[1]) };
+  }
+
+  match = /^\/api\/recitation-logs\/([^/]+)(?:\/.*)?$/.exec(cleanPath);
+  if (match) {
+    return { kind: "recitationLog", id: decodeURIComponent(match[1]) };
+  }
+
+  return null;
+}
+
+async function enforceActiveClassMutationGuard(req, res, next) {
+  const target = matchClassScopedMutationTarget(req.method, req.path);
+  if (!target) {
+    return next();
+  }
+
+  if (!(await verifyAuthenticatedSession(req, res))) {
+    return;
+  }
+
+  try {
+    if (target.kind === "join") {
+      if (req.session.role !== "STUDENT") {
+        return res.status(403).json({ message: "You do not have permission to do that." });
+      }
+      if (!(await requireRecaptcha(req, res))) {
+        return;
+      }
+      const classCode = normalizeClassCode(req.body?.classCode);
+      if (!classCode) {
+        return res.status(400).json({ message: "Enter a class code or open an invite link." });
+      }
+      const classRecord = await prisma.class.findUnique({
+        where: { classCode },
+        select: { id: true, archivedAt: true },
+      });
+      if (!classRecord) {
+        return res.status(404).json({ message: "No class matches that invite code." });
+      }
+      if (classRecord.archivedAt) {
+        return res.status(409).json({ message: ARCHIVED_JOIN_MESSAGE });
+      }
+      return next();
+    }
+
+    if (req.session.role !== "FACULTY") {
+      return res.status(403).json({ message: "You do not have permission to do that." });
+    }
+
+    const facultyId = req.session.userId;
+    let parentClass = null;
+
+    if (target.kind === "class") {
+      parentClass = await prisma.class.findFirst({
+        where: { id: target.id, facultyId },
+        select: { id: true, archivedAt: true },
+      });
+      if (!parentClass) {
+        return res.status(404).json({ message: "Class not found." });
+      }
+    } else if (target.kind === "session") {
+      const sessionRecord = await prisma.classSession.findFirst({
+        where: { id: target.id, class: { is: { facultyId } } },
+        select: { id: true, class: { select: { id: true, archivedAt: true } } },
+      });
+      if (!sessionRecord) {
+        return res.status(404).json({ message: "Class session not found." });
+      }
+      parentClass = sessionRecord.class;
+    } else if (target.kind === "quiz") {
+      const quizSession = await prisma.quizSession.findFirst({
+        where: { id: target.id, class: { is: { facultyId } } },
+        select: { id: true, class: { select: { id: true, archivedAt: true } } },
+      });
+      if (!quizSession) {
+        return res.status(404).json({ message: "Quiz session not found." });
+      }
+      parentClass = quizSession.class;
+    } else if (target.kind === "activity") {
+      const activity = await prisma.activity.findFirst({
+        where: { id: target.id, class: { is: { facultyId } } },
+        select: { id: true, class: { select: { id: true, archivedAt: true } } },
+      });
+      if (!activity) {
+        return res.status(404).json({ message: "Activity not found." });
+      }
+      parentClass = activity.class;
+    } else if (target.kind === "project") {
+      const project = await prisma.project.findFirst({
+        where: { id: target.id, class: { is: { facultyId } } },
+        select: { id: true, class: { select: { id: true, archivedAt: true } } },
+      });
+      if (!project) {
+        return res.status(404).json({ message: "Project not found." });
+      }
+      parentClass = project.class;
+    } else if (target.kind === "recitationLog") {
+      const recitationLog = await prisma.recitationLog.findFirst({
+        where: {
+          id: target.id,
+          session: { is: { class: { is: { facultyId } } } },
+        },
+        select: {
+          id: true,
+          session: { select: { class: { select: { id: true, archivedAt: true } } } },
+        },
+      });
+      if (!recitationLog) {
+        return res.status(404).json({ message: "Recitation record not found." });
+      }
+      parentClass = recitationLog.session.class;
+    }
+
+    if (parentClass?.archivedAt) {
+      return res.status(409).json({ message: ARCHIVED_READ_ONLY_MESSAGE });
+    }
+
+    return next();
+  } catch (error) {
+    console.error("Archived class mutation guard failed:", error);
+    return res.status(500).json({ message: "Unable to verify class status." });
+  }
+}
+
+app.use(enforceActiveClassMutationGuard);
 
 const STUDENT_ID_PATTERN = /^\d{7}$/;
 
@@ -288,7 +473,7 @@ function parseRosterText(text) {
 }
 
 async function findOwnedClass(classId, facultyId) {
-  return prisma.class.findFirst({ where: { id: classId, facultyId }, select: { id: true } });
+  return prisma.class.findFirst({ where: { id: classId, facultyId }, select: { id: true, archivedAt: true } });
 }
 
 async function ensureApprovedEnrollmentsInRoster(classId) {
@@ -1330,6 +1515,8 @@ app.get(
           scheduleStartTime: true,
           scheduleEndTime: true,
           gracePeriodMinutes: true,
+          recitationShuffleSeconds: true,
+          archivedAt: true,
           facultyId: true,
           createdAt: true,
           _count: { select: { enrollments: true } },
@@ -1346,7 +1533,7 @@ app.get(
 
 const ABSENCE_WARNING_THRESHOLD = 7;
 
-async function getActiveAbsenceWarningsForClass(classId, sectionName = "") {
+async function getActiveAbsenceWarningsForClass(classId, sectionName = "", { readOnly = false } = {}) {
   const [enrollments, absentCounts] = await Promise.all([
     prisma.classEnrollment.findMany({
       where: { classId, status: "APPROVED" },
@@ -1392,7 +1579,7 @@ async function getActiveAbsenceWarningsForClass(classId, sectionName = "") {
     if (absentCount < readAbsenceCount) {
       enrollmentReadUpdates.warningReadAbsenceCount = absentCount;
     }
-    if (Object.keys(enrollmentReadUpdates).length) {
+    if (!readOnly && Object.keys(enrollmentReadUpdates).length) {
       await prisma.classEnrollment.update({
         where: { id: enrollment.id },
         data: enrollmentReadUpdates,
@@ -1426,7 +1613,7 @@ async function getActiveAbsenceWarningsForClass(classId, sectionName = "") {
 app.get("/api/faculty/classes/pending-counts", requireAuth, requireRole("FACULTY"), async (req, res) => {
   try {
     const classes = await prisma.class.findMany({
-      where: { facultyId: req.session.userId },
+      where: { facultyId: req.session.userId, archivedAt: null },
       select: {
         id: true,
         _count: { select: { enrollments: { where: { status: "PENDING" } } } },
@@ -1450,6 +1637,7 @@ app.get("/api/faculty/classes/pending-counts", requireAuth, requireRole("FACULTY
             ON enrollment."classId" = session."classId"
             AND enrollment."studentProfileId" = attendance."studentId"
           WHERE class_record."facultyId" = ${req.session.userId}
+            AND class_record."archivedAt" IS NULL
             AND attendance."status" = 'ABSENT'::"AttendanceStatus"
             AND enrollment."status" = 'APPROVED'::"EnrollmentStatus"
           GROUP BY session."classId", attendance."studentId", enrollment."dismissedAbsenceCount", enrollment."warningReadAbsenceCount"
@@ -1504,11 +1692,18 @@ app.get(
   requireRole("FACULTY"),
   async (req, res) => {
     const classCode = normalizeClassCode(req.query.code);
+    const excludeId = String(req.query.excludeId || "").trim();
     if (!/^[A-Z0-9-]{3,20}$/.test(classCode)) {
       return res.json({ available: false });
     }
     try {
-      const existing = await prisma.class.findUnique({ where: { classCode } });
+      const existing = await prisma.class.findFirst({
+        where: {
+          classCode,
+          ...(excludeId ? { id: { not: excludeId } } : {}),
+        },
+        select: { id: true },
+      });
       return res.json({ available: !existing });
     } catch (error) {
       console.error("Class code check failed:", error);
@@ -1703,8 +1898,11 @@ app.get(
   requireRole("FACULTY"),
   async (req, res) => {
     try {
-      if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
-      await ensureApprovedEnrollmentsInRoster(req.params.id);
+      const ownedClass = await findOwnedClass(req.params.id, req.session.userId);
+      if (!ownedClass) return res.status(404).json({ message: "Class not found." });
+      if (!ownedClass.archivedAt) {
+        await ensureApprovedEnrollmentsInRoster(req.params.id);
+      }
       const roster = await prisma.classRoster.findMany({ where: { classId: req.params.id, droppedAt: null }, orderBy: [{ sortKey: "asc" }, { firstName: "asc" }, { middleName: "asc" }, { studentId: "asc" }] });
       return res.json({ roster: await enrichRosterWithPhotos(roster) });
     } catch (error) {
@@ -2213,7 +2411,7 @@ app.get("/api/classes/:id/pending", requireAuth, requireRole("FACULTY"), async (
   try {
     const ownedClass = await prisma.class.findFirst({
       where: { id: req.params.id, facultyId: req.session.userId },
-      select: { id: true, sectionName: true },
+      select: { id: true, sectionName: true, archivedAt: true },
     });
     if (!ownedClass) return res.status(404).json({ message: "Class not found." });
     const [pending, autoApproved, absenceWarnings] = await Promise.all([
@@ -2242,7 +2440,9 @@ app.get("/api/classes/:id/pending", requireAuth, requireRole("FACULTY"), async (
         },
         orderBy: { autoApprovedAt: "desc" },
       }),
-      getActiveAbsenceWarningsForClass(ownedClass.id, ownedClass.sectionName),
+      getActiveAbsenceWarningsForClass(ownedClass.id, ownedClass.sectionName, {
+        readOnly: Boolean(ownedClass.archivedAt),
+      }),
     ]);
     const formatEnrollment = (enrollment) => {
       const photoUrl = studentPhotoUrl(enrollment.studentProfile);
@@ -2264,13 +2464,16 @@ app.get("/api/classes/:id/pending", requireAuth, requireRole("FACULTY"), async (
     const formattedPending = pending.map(formatEnrollment);
     const unreadAutoApproved = approvedNotifications.filter((enrollment) => !enrollment.isRead).length;
     const unreadWarnings = absenceWarnings.filter((warning) => !warning.isRead).length;
+    const activeUnreadCount = ownedClass.archivedAt
+      ? 0
+      : formattedPending.length + unreadAutoApproved + unreadWarnings;
     return res.json({
       pending: formattedPending,
       autoApproved: approvedNotifications,
       absenceWarnings,
       threshold: ABSENCE_WARNING_THRESHOLD,
-      unreadNotificationCount: formattedPending.length + unreadAutoApproved + unreadWarnings,
-      totalNotifications: formattedPending.length + unreadAutoApproved + unreadWarnings,
+      unreadNotificationCount: activeUnreadCount,
+      totalNotifications: activeUnreadCount,
     });
   } catch (error) {
     return res.status(500).json({ message: "Unable to load pending requests." });
@@ -2865,7 +3068,7 @@ app.get(
         },
       });
 
-      if (!session) {
+      if (!session && !classRecord.archivedAt) {
         session = await prisma.classSession.create({
           data: {
             classId: classRecord.id,
@@ -2896,7 +3099,9 @@ app.get(
         });
       }
 
-      await ensureApprovedEnrollmentsInRoster(classRecord.id);
+      if (!classRecord.archivedAt) {
+        await ensureApprovedEnrollmentsInRoster(classRecord.id);
+      }
 
       const [rosterCount, pendingCount] = await Promise.all([
         prisma.classRoster.count({ where: { classId: classRecord.id, droppedAt: null } }),
@@ -3116,40 +3321,144 @@ app.patch(
   requireAuth,
   requireRole("FACULTY"),
   async (req, res) => {
-    const updateData = {};
+    try {
+      const classRecord = await prisma.class.findFirst({
+        where: { id: req.params.id, facultyId: req.session.userId },
+        select: { id: true, archivedAt: true },
+      });
+      if (!classRecord) {
+        return res.status(404).json({ message: "Class not found." });
+      }
+      if (classRecord.archivedAt) {
+        return res.status(409).json({ message: ARCHIVED_READ_ONLY_MESSAGE });
+      }
 
-    if (req.body?.gracePeriodMinutes !== undefined) {
-      const gracePeriodMinutes = req.body.gracePeriodMinutes;
-      if (
-        !Number.isInteger(gracePeriodMinutes) ||
-        gracePeriodMinutes < 0 ||
-        gracePeriodMinutes > 1440
-      ) {
-        return res.status(400).json({
-          message: "Grace period must be a whole number from 0 to 1440 minutes.",
+      const updateData = {};
+
+      if (req.body?.sectionName !== undefined) {
+        const sectionName = String(req.body.sectionName || "").trim();
+        if (!sectionName) {
+          return res.status(400).json({ message: "Section name is required." });
+        }
+        updateData.sectionName = sectionName;
+      }
+
+      if (req.body?.classCode !== undefined) {
+        const classCode = normalizeClassCode(req.body.classCode);
+        if (!/^[A-Z0-9-]{3,20}$/.test(classCode)) {
+          return res.status(400).json({
+            message: "Use 3–20 letters, numbers, or hyphens for the class code.",
+          });
+        }
+        updateData.classCode = classCode;
+      }
+
+      if (req.body?.description !== undefined) {
+        updateData.description = optionalText(req.body.description);
+      }
+
+      const hasScheduleField = [
+        "schedule",
+        "scheduleDays",
+        "days",
+        "scheduleStartTime",
+        "startTime",
+        "scheduleEndTime",
+        "endTime",
+      ].some((key) => Object.prototype.hasOwnProperty.call(req.body || {}, key));
+
+      if (hasScheduleField) {
+        const parsedSchedule = parseStructuredScheduleInput(req.body);
+        if (parsedSchedule.error) {
+          return res.status(400).json({ message: parsedSchedule.error });
+        }
+        updateData.schedule = parsedSchedule.schedule;
+        updateData.scheduleDays = parsedSchedule.scheduleDays;
+        updateData.scheduleStartTime = parsedSchedule.scheduleStartTime;
+        updateData.scheduleEndTime = parsedSchedule.scheduleEndTime;
+      }
+
+      if (req.body?.gracePeriodMinutes !== undefined) {
+        const gracePeriodMinutes = req.body.gracePeriodMinutes;
+        if (
+          !Number.isInteger(gracePeriodMinutes) ||
+          gracePeriodMinutes < 0 ||
+          gracePeriodMinutes > 1440
+        ) {
+          return res.status(400).json({
+            message: "Grace period must be a whole number from 0 to 1440 minutes.",
+          });
+        }
+        updateData.gracePeriodMinutes = gracePeriodMinutes;
+      }
+
+      if (req.body?.recitationShuffleSeconds !== undefined) {
+        const recitationShuffleSeconds = req.body.recitationShuffleSeconds;
+        if (
+          !Number.isInteger(recitationShuffleSeconds) ||
+          recitationShuffleSeconds < 1 ||
+          recitationShuffleSeconds > 7
+        ) {
+          return res.status(400).json({
+            message: "Shuffle duration must be a whole number between 1 and 7 seconds.",
+          });
+        }
+        updateData.recitationShuffleSeconds = recitationShuffleSeconds;
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({ message: "No valid fields to update." });
+      }
+
+      const updatedClass = await prisma.class.update({
+        where: { id: classRecord.id },
+        data: updateData,
+        include: { _count: { select: { enrollments: true } } },
+      });
+      return res.json({ class: updatedClass });
+    } catch (error) {
+      if (error.code === "P2002") {
+        return res.status(409).json({
+          message: "That class code is already in use. Choose another one.",
         });
       }
-      updateData.gracePeriodMinutes = gracePeriodMinutes;
+      console.error("Class update failed:", error);
+      return res.status(500).json({ message: "Unable to update this class." });
     }
+  },
+);
 
-    if (req.body?.recitationShuffleSeconds !== undefined) {
-      const recitationShuffleSeconds = req.body.recitationShuffleSeconds;
-      if (
-        !Number.isInteger(recitationShuffleSeconds) ||
-        recitationShuffleSeconds < 1 ||
-        recitationShuffleSeconds > 7
-      ) {
-        return res.status(400).json({
-          message: "Shuffle duration must be a whole number between 1 and 7 seconds.",
-        });
+app.post(
+  "/api/classes/:id/archive",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
+    try {
+      const classRecord = await prisma.class.findFirst({
+        where: { id: req.params.id, facultyId: req.session.userId },
+        select: { id: true, archivedAt: true },
+      });
+      if (!classRecord) {
+        return res.status(404).json({ message: "Class not found." });
       }
-      updateData.recitationShuffleSeconds = recitationShuffleSeconds;
+      const updatedClass = await prisma.class.update({
+        where: { id: classRecord.id },
+        data: { archivedAt: classRecord.archivedAt || new Date() },
+        include: { _count: { select: { enrollments: true } } },
+      });
+      return res.json({ class: updatedClass });
+    } catch (error) {
+      console.error("Class archive failed:", error);
+      return res.status(500).json({ message: "Unable to archive this class." });
     }
+  },
+);
 
-    if (Object.keys(updateData).length === 0) {
-      return res.status(400).json({ message: "No valid fields to update." });
-    }
-
+app.post(
+  "/api/classes/:id/restore",
+  requireAuth,
+  requireRole("FACULTY"),
+  async (req, res) => {
     try {
       const classRecord = await prisma.class.findFirst({
         where: { id: req.params.id, facultyId: req.session.userId },
@@ -3160,12 +3469,13 @@ app.patch(
       }
       const updatedClass = await prisma.class.update({
         where: { id: classRecord.id },
-        data: updateData,
+        data: { archivedAt: null },
+        include: { _count: { select: { enrollments: true } } },
       });
       return res.json({ class: updatedClass });
     } catch (error) {
-      console.error("Class update failed:", error);
-      return res.status(500).json({ message: "Unable to update this class." });
+      console.error("Class restore failed:", error);
+      return res.status(500).json({ message: "Unable to restore this class." });
     }
   },
 );
@@ -3505,7 +3815,7 @@ app.get(
     try {
       const classRecord = await prisma.class.findFirst({
         where: { id: req.params.id, facultyId: req.session.userId },
-        select: { id: true },
+        select: { id: true, archivedAt: true },
       });
       if (!classRecord) {
         return res.status(404).json({ message: "Class not found." });
@@ -3515,7 +3825,7 @@ app.get(
         where: { classId: classRecord.id },
       });
 
-      if (existingCount < 2) {
+      if (!classRecord.archivedAt && existingCount < 2) {
         await prisma.$transaction(async (transaction) => {
           const existingTypes = new Set(
             (await transaction.project.findMany({
@@ -4646,4 +4956,10 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, resetRateLimitersForTests };
+module.exports = {
+  app,
+  resetRateLimitersForTests,
+  matchClassScopedMutationTarget,
+  ARCHIVED_READ_ONLY_MESSAGE,
+  ARCHIVED_JOIN_MESSAGE,
+};

@@ -38,6 +38,8 @@ export default function FacultyDashboard() {
   });
   const [pendingCounts, setPendingCounts] = useState({});
   const pendingCountsInFlight = useRef(false);
+  const [activeTab, setActiveTab] = useState("active");
+  const [restoringId, setRestoringId] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -101,8 +103,33 @@ export default function FacultyDashboard() {
     }
   }
 
+  async function handleRestore(classRecord) {
+    setRestoringId(classRecord.id);
+    setError("");
+    try {
+      const { class: restored } = await api.restoreClass(classRecord.id);
+      setClasses((current) =>
+        current.map((item) => (item.id === classRecord.id ? { ...item, ...restored, archivedAt: null } : item)),
+      );
+      setNotice(`${classRecord.sectionName} restored to your active classes.`);
+      try {
+        const { counts } = await api.facultyPendingCounts();
+        setPendingCounts(counts || {});
+      } catch {
+        // Ignore background count refresh failure.
+      }
+    } catch (restoreError) {
+      setError(restoreError.message);
+    } finally {
+      setRestoringId(null);
+    }
+  }
+
   const profileCompleted = isFacultyProfileComplete(profile, user);
   const displayName = profile?.name?.trim() || user?.name?.split(" ")[0] || "Faculty";
+  const activeClasses = classes.filter((item) => !item.archivedAt);
+  const archivedClasses = classes.filter((item) => Boolean(item.archivedAt));
+  const visibleClasses = activeTab === "archived" ? archivedClasses : activeClasses;
 
   return (
     <AppShell active="home">
@@ -139,42 +166,99 @@ export default function FacultyDashboard() {
         <div className="section-heading">
           <div>
             <h2>Your classes</h2>
-            <p>{classes.length} {classes.length === 1 ? "class" : "classes"} created</p>
+            <p>
+              {activeTab === "archived"
+                ? `${archivedClasses.length} archived ${archivedClasses.length === 1 ? "class" : "classes"}`
+                : `${activeClasses.length} active ${activeClasses.length === 1 ? "class" : "classes"}`}
+            </p>
           </div>
+          {!loading && classes.length > 0 ? (
+            <div className="dashboard-archive-tabs" role="tablist" aria-label="Filter classes by status">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "active"}
+                className={`button button-small ${activeTab === "active" ? "button-primary" : "button-quiet"}`}
+                onClick={() => setActiveTab("active")}
+              >
+                Active ({activeClasses.length})
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "archived"}
+                className={`button button-small ${activeTab === "archived" ? "button-primary" : "button-quiet"}`}
+                onClick={() => setActiveTab("archived")}
+              >
+                <Icon name="archive" size={14} /> Archived ({archivedClasses.length})
+              </button>
+            </div>
+          ) : null}
         </div>
 
-        {loading ? <div className="loading-card">Loading your classes…</div> : classes.length ? (
+        {loading ? <div className="loading-card">Loading your classes…</div> : visibleClasses.length ? (
           <div className="class-grid">
-            {classes.map((classRecord, index) => (
-              <article className="class-card" key={classRecord.id} style={{ "--card-accent": index % 2 ? "var(--accent-teal)" : "var(--accent-amber)" }}>
-                <div className="class-card-top">
-                  <span className="class-icon"><Icon name="book" /></span>
-                  <div className="class-card-counts">
-                    <span className="class-count"><Icon name="users" /> {classRecord._count.enrollments}</span>
-                    {pendingCounts[classRecord.id] ? (
-                      <Link
-                        to={`/faculty/classes/${classRecord.id}?notifications=1`}
-                        className="class-count class-pending-count"
-                        aria-label={`${pendingCounts[classRecord.id]} class notification${pendingCounts[classRecord.id] === 1 ? "" : "s"}`}
-                        title="Open class notifications"
-                      >
-                        <Icon name="bell" size={15} />
-                        <span className="notification-badge">{pendingCounts[classRecord.id]}</span>
-                      </Link>
-                    ) : null}
+            {visibleClasses.map((classRecord, index) => {
+              const isArchived = Boolean(classRecord.archivedAt);
+              return (
+                <article className="class-card" key={classRecord.id} style={{ "--card-accent": index % 2 ? "var(--accent-teal)" : "var(--accent-amber)" }}>
+                  <div className="class-card-top">
+                    <span className="class-icon"><Icon name="book" /></span>
+                    <div className="class-card-counts">
+                      <span className="class-count"><Icon name="users" /> {classRecord._count.enrollments}</span>
+                      {isArchived ? (
+                        <span className="enrolled-pill enrolled-pill-archived">
+                          <Icon name="archive" size={13} /> Archived
+                        </span>
+                      ) : pendingCounts[classRecord.id] ? (
+                        <Link
+                          to={`/faculty/classes/${classRecord.id}?notifications=1`}
+                          className="class-count class-pending-count"
+                          aria-label={`${pendingCounts[classRecord.id]} class notification${pendingCounts[classRecord.id] === 1 ? "" : "s"}`}
+                          title="Open class notifications"
+                        >
+                          <Icon name="bell" size={15} />
+                          <span className="notification-badge">{pendingCounts[classRecord.id]}</span>
+                        </Link>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-                <p className="class-label">Section</p>
-                <h3>{classRecord.sectionName}</h3>
-                <div className="code-chip">Code <b>{classRecord.classCode}</b></div>
-                <p className="class-schedule"><Icon name="clock" /> {formatClassSchedule(classRecord)}</p>
-                <div className="class-card-actions">
-                  <Link to={`/faculty/classes/${classRecord.id}`} className="button button-primary button-small">Open class <Icon name="arrow" /></Link>
-                  <button type="button" className="button button-secondary button-small" onClick={() => copyInvite(classRecord.classCode)}><Icon name="copy" /> Invite</button>
-                </div>
-              </article>
-            ))}
+                  <p className="class-label">Section</p>
+                  <h3>{classRecord.sectionName}</h3>
+                  <div className="code-chip">Code <b>{classRecord.classCode}</b></div>
+                  <p className="class-schedule"><Icon name="clock" /> {formatClassSchedule(classRecord)}</p>
+                  <div className="class-card-actions">
+                    <Link to={`/faculty/classes/${classRecord.id}`} className="button button-primary button-small">Open class <Icon name="arrow" /></Link>
+                    {isArchived ? (
+                      <button
+                        type="button"
+                        className="button button-secondary button-small"
+                        disabled={restoringId === classRecord.id}
+                        onClick={() => handleRestore(classRecord)}
+                      >
+                        {restoringId === classRecord.id ? "Restoring…" : "Restore"}
+                      </button>
+                    ) : (
+                      <button type="button" className="button button-secondary button-small" onClick={() => copyInvite(classRecord.classCode)}><Icon name="copy" /> Invite</button>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
           </div>
+        ) : !loading && classes.length > 0 ? (
+          <section className="empty-state">
+            <div className="empty-art"><Icon name={activeTab === "archived" ? "archive" : "book"} size={28} /></div>
+            <h3>{activeTab === "archived" ? "No archived classes" : "No active classes"}</h3>
+            <p>
+              {activeTab === "archived"
+                ? "Classes you archive at the end of a term will appear here in read-only mode."
+                : "All of your classes are currently archived. Switch to the Archived tab to view or restore one, or create a new class."}
+            </p>
+            {activeTab === "active" ? (
+              <Link to="/faculty/classes/new" className="button button-primary"><Icon name="plus" /> Create a class</Link>
+            ) : null}
+          </section>
         ) : !loading ? (
           <section className="empty-state">
             <div className="empty-art"><Icon name="book" size={28} /></div>
