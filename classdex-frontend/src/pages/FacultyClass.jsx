@@ -19,7 +19,7 @@ import { ActivitiesModule, ProjectsModule } from "../components/classroom/Scorin
 import StudentListManager from "../components/classroom/StudentListManager";
 import PendingValidationList from "../components/classroom/PendingValidationList";
 import QuizModule from "../components/classroom/QuizModule";
-import { Modal } from "../components/DesignSystem";
+import { ErrorState, Modal } from "../components/DesignSystem";
 import { api } from "../api";
 import { formatClassSchedule } from "../utils/schedule";
 
@@ -48,14 +48,18 @@ export default function FacultyClass() {
   const { id } = useParams();
   const [classRecord, setClassRecord] = useState(null);
   const [loadedClassId, setLoadedClassId] = useState(null);
-  const loading = loadedClassId !== id;
-  const [error, setError] = useState("");
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const loading = loadedClassId !== `${id}:${reloadNonce}`;
+  const [error, setError] = useState(null);
   const [notice, setNotice] = useState("");
   const [activeModule, setActiveModule] = useState("deck");
   const [showPending, setShowPending] = useState(() => new URLSearchParams(window.location.search).get("notifications") === "1");
   const [pendingEnrollments, setPendingEnrollments] = useState([]);
   const [autoApprovedNotifications, setAutoApprovedNotifications] = useState([]);
   const [absenceWarnings, setAbsenceWarnings] = useState([]);
+  const [pendingLoadedForId, setPendingLoadedForId] = useState(null);
+  const [pendingError, setPendingError] = useState("");
+  const [pendingRetrying, setPendingRetrying] = useState(false);
   const [studentListCount, setStudentListCount] = useState(0);
   const [pendingBusyId, setPendingBusyId] = useState(null);
   const [dismissBusyId, setDismissBusyId] = useState(null);
@@ -106,10 +110,12 @@ export default function FacultyClass() {
 
   useEffect(() => {
     let cancelled = false;
+    const loadKey = `${id}:${reloadNonce}`;
     api
       .classDeck(id)
       .then((deck) => {
         if (!cancelled) {
+          setError(null);
           setClassRecord({ ...deck.class, session: deck.session, students: deck.students });
           setGracePeriodMinutes(deck.class.gracePeriodMinutes);
           setRecitationShuffleSeconds(deck.class.recitationShuffleSeconds ?? 3);
@@ -120,15 +126,25 @@ export default function FacultyClass() {
         }
       })
       .catch((requestError) => {
-        if (!cancelled) setError(requestError.message);
+        if (!cancelled) {
+          setError({
+            message: requestError.message,
+            httpStatus: requestError.httpStatus,
+          });
+        }
       })
       .finally(() => {
-        if (!cancelled) setLoadedClassId(id);
+        if (!cancelled) setLoadedClassId(loadKey);
       });
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, reloadNonce]);
+
+  function retryLoadClass() {
+    setError(null);
+    setReloadNonce((current) => current + 1);
+  }
 
   const inviteLink = useMemo(
     () => (classRecord ? `${window.location.origin}/join/${classRecord.classCode}` : ""),
@@ -184,10 +200,13 @@ export default function FacultyClass() {
   }), []);
 
   const lastPendingFetchRef = useRef(0);
+  const pendingLoadedRef = useRef(null);
   const refreshPending = useCallback(
-    (isFocus = false) => {
+    (isFocus = false, forceReportError = false) => {
       const now = Date.now();
-      if (isFocus && now - lastPendingFetchRef.current < 10000) return Promise.resolve();
+      if (!forceReportError && isFocus && now - lastPendingFetchRef.current < 10000) {
+        return Promise.resolve();
+      }
       lastPendingFetchRef.current = now;
       return api
         .pendingEnrollments(id)
@@ -195,11 +214,24 @@ export default function FacultyClass() {
           setPendingEnrollments(pending || []);
           setAutoApprovedNotifications(autoApproved || []);
           setAbsenceWarnings(warnings || []);
+          pendingLoadedRef.current = id;
+          setPendingLoadedForId(id);
+          setPendingError("");
         })
-        .catch(() => {});
+        .catch((fetchError) => {
+          if (forceReportError || pendingLoadedRef.current !== id) {
+            setPendingError(fetchError.message || "Unable to load notifications.");
+            setPendingLoadedForId(id);
+          }
+        });
     },
     [id],
   );
+  function retryPendingNotifications() {
+    setPendingError("");
+    setPendingRetrying(true);
+    refreshPending(false, true).finally(() => setPendingRetrying(false));
+  }
   useEffect(() => {
     refreshPending();
     const interval = window.setInterval(() => refreshPending(false), 30000);
@@ -603,7 +635,14 @@ export default function FacultyClass() {
             {Array.from({ length: 8 }, (_, index) => <div className="student-skeleton" key={index} />)}
           </div>
         ) : error ? (
-          <div className="notice notice-error" role="alert">{error}</div>
+          <ErrorState
+            badge={error.httpStatus === 404 ? "404 · Not found" : "Not available"}
+            title={error.httpStatus === 404 ? "Class not found" : "Unable to load this class"}
+            message={error.message}
+            onRetry={error.httpStatus === 404 ? undefined : retryLoadClass}
+            backTo="/faculty"
+            backLabel="Back to dashboard"
+          />
         ) : classRecord ? (
           <>
             <header className="classroom-heading">
@@ -689,6 +728,9 @@ export default function FacultyClass() {
                 autoApproved={autoApprovedNotifications}
                 absenceWarnings={absenceWarnings}
                 className={classRecord.sectionName}
+                loading={pendingLoadedForId !== id || pendingRetrying}
+                error={pendingError}
+                onRetry={retryPendingNotifications}
                 onApprove={(enrollmentId) => updatePending(enrollmentId, "APPROVED")}
                 onDecline={(enrollmentId) => updatePending(enrollmentId, "DECLINED")}
                 onMarkAllRead={markAllNotificationsRead}

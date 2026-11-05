@@ -39,11 +39,13 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
   const [studentId, setStudentId] = useState("");
   const [pasteValue, setPasteValue] = useState("");
   const [message, setMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
   const [loading, setLoading] = useState(!cachedRoster);
   const [dropLoading, setDropLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [removalModal, setRemovalModal] = useState(null); // { row, index, loading, recordCount }
   const [removing, setRemoving] = useState(false);
+  const [restoringIds, setRestoringIds] = useState([]);
 
   const checkedRows = useMemo(() => validateRows(rows), [rows]);
   const invalidCount = checkedRows.filter((row) => row.errors.length).length;
@@ -63,7 +65,8 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
         onCountChange?.(roster.length);
       })
       .catch((error) => {
-        setMessage(error.message);
+        setMessage("");
+        setErrorMessage(error.message);
       })
       .finally(() => {
         setLoading(false);
@@ -78,7 +81,8 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
         setDropList(list || []);
       })
       .catch((error) => {
-        setMessage(error.message);
+        setMessage("");
+        setErrorMessage(error.message);
       })
       .finally(() => {
         setDropLoading(false);
@@ -104,6 +108,7 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
   function importPasted() {
     setRows((current) => [...current, ...parseLines(pasteValue)]);
     setPasteValue("");
+    setErrorMessage("");
     setMessage("Pasted rows added to the preview. Review validation before saving.");
   }
 
@@ -125,10 +130,12 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
           if (res.warnings?.length) {
             msg += ` (${res.warnings.join("; ")})`;
           }
+          setErrorMessage("");
           setMessage(msg);
         }
       } catch (err) {
-        setMessage(err.message);
+        setMessage("");
+        setErrorMessage(err.message);
       }
     };
     reader.readAsDataURL(file);
@@ -137,6 +144,7 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
 
   async function downloadTemplate() {
     try {
+      setErrorMessage("");
       const blob = await api.downloadRosterTemplate(classId);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -147,12 +155,14 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (err) {
-      setMessage(err.message);
+      setMessage("");
+      setErrorMessage(err.message);
     }
   }
 
   async function saveStudentList() {
     setSaving(true);
+    setErrorMessage("");
     try {
       const { roster, autoApprovedCount = 0 } = await api.saveClassRoster(
         classId,
@@ -174,7 +184,8 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
       );
       if (autoApprovedCount) onAutoApproved?.();
     } catch (error) {
-      setMessage(error.message);
+      setMessage("");
+      setErrorMessage(error.message);
     } finally {
       setSaving(false);
     }
@@ -199,6 +210,7 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
     if (!removalModal) return;
     const { row, index } = removalModal;
     setRemoving(true);
+    setErrorMessage("");
     try {
       const outcome = await api.deleteClassRosterEntry(classId, row.id);
       tabCache?.invalidate();
@@ -212,20 +224,27 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
       setRemovalModal(null);
       loadDropList();
     } catch (error) {
-      setMessage(error.message);
+      setMessage("");
+      setErrorMessage(error.message);
     } finally {
       setRemoving(false);
     }
   }
 
   async function restoreStudent(entry) {
+    if (restoringIds.includes(entry.id)) return;
+    setErrorMessage("");
+    setRestoringIds((current) => [...current, entry.id]);
     try {
       await api.restoreDroppedStudent(classId, entry.id);
       tabCache?.invalidate();
       setMessage(`${entry.studentName} was restored to the active student list.`);
       await Promise.all([loadRoster(), loadDropList()]);
     } catch (error) {
-      setMessage(error.message);
+      setMessage("");
+      setErrorMessage(error.message);
+    } finally {
+      setRestoringIds((current) => current.filter((itemId) => itemId !== entry.id));
     }
   }
 
@@ -261,7 +280,8 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
         </button>
       </div>
 
-      {message ? <p className="notice notice-info mt-3" role="status">{message}</p> : null}
+      {errorMessage ? <p className="notice notice-error mt-3" role="alert">{errorMessage}</p> : null}
+      {message ? <p className="notice notice-success mt-3" role="status">{message}</p> : null}
 
       {activeTab === "active" ? (
         <>
@@ -436,8 +456,12 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
                       <td>{entry.droppedAt ? new Date(entry.droppedAt).toLocaleDateString() : "—"}</td>
                       <td>{entry.recordCount} {entry.recordCount === 1 ? "record" : "records"}</td>
                       <td>
-                        <Button variant="secondary" onClick={() => restoreStudent(entry)}>
-                          Restore
+                        <Button
+                          variant="secondary"
+                          disabled={restoringIds.includes(entry.id)}
+                          onClick={() => restoreStudent(entry)}
+                        >
+                          {restoringIds.includes(entry.id) ? "Restoring…" : "Restore"}
                         </Button>
                       </td>
                     </tr>

@@ -1,4 +1,5 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { GuestRoute, ProtectedRoute } from "./components/ProtectedRoute";
 import AccountSettings from "./pages/AccountSettings";
 import CreateClass from "./pages/CreateClass";
@@ -17,33 +18,36 @@ import StudentProfile from "./pages/StudentProfile";
 import VerifyEmail from "./pages/VerifyEmail";
 
 export default function App() {
+  const location = useLocation();
   return (
-    <Routes>
-      <Route path="/" element={<Landing />} />
-      <Route path="/forgot-password" element={<ForgotPassword />} />
-      <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="/verify-email" element={<VerifyEmail />} />
-      <Route element={<GuestRoute />}>
-        <Route path="/register" element={<Register />} />
-        <Route path="/login" element={<Login />} />
-      </Route>
-      <Route element={<ProtectedRoute />}>
-        <Route path="/settings" element={<AccountSettings />} />
-      </Route>
-      <Route element={<ProtectedRoute role="FACULTY" />}>
-        <Route path="/faculty" element={<FacultyDashboard />} />
-        <Route path="/faculty/profile" element={<FacultyProfile />} />
-        <Route path="/faculty/classes/new" element={<CreateClass />} />
-        <Route path="/faculty/classes/:id" element={<FacultyClass />} />
-      </Route>
-      <Route element={<ProtectedRoute role="STUDENT" />}>
-        <Route path="/student" element={<StudentDashboard />} />
-        <Route path="/student/classes/:id" element={<StudentClassRecord />} />
-        <Route path="/student/profile" element={<StudentProfile />} />
-        <Route path="/join" element={<JoinClass />} />
-        <Route path="/join/:classCode" element={<JoinClass />} />
-      </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <ErrorBoundary key={location.pathname}>
+      <Routes>
+        <Route path="/" element={<Landing />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route element={<GuestRoute />}>
+          <Route path="/register" element={<Register />} />
+          <Route path="/login" element={<Login />} />
+        </Route>
+        <Route element={<ProtectedRoute />}>
+          <Route path="/settings" element={<AccountSettings />} />
+        </Route>
+        <Route element={<ProtectedRoute role="FACULTY" />}>
+          <Route path="/faculty" element={<FacultyDashboard />} />
+          <Route path="/faculty/profile" element={<FacultyProfile />} />
+          <Route path="/faculty/classes/new" element={<CreateClass />} />
+          <Route path="/faculty/classes/:id" element={<FacultyClass />} />
+        </Route>
+        <Route element={<ProtectedRoute role="STUDENT" />}>
+          <Route path="/student" element={<StudentDashboard />} />
+          <Route path="/student/classes/:id" element={<StudentClassRecord />} />
+          <Route path="/student/profile" element={<StudentProfile />} />
+          <Route path="/join" element={<JoinClass />} />
+          <Route path="/join/:classCode" element={<JoinClass />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </ErrorBoundary>
   );
 }

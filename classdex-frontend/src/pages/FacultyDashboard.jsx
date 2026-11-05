@@ -5,7 +5,7 @@ import EmailVerificationBanner from "../components/EmailVerificationBanner";
 import Icon from "../components/Icon";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
-import { PageHeader } from "../components/DesignSystem";
+import { ErrorState, PageHeader } from "../components/DesignSystem";
 import { formatClassSchedule } from "../utils/schedule";
 
 const PROMPT_DISMISSED_KEY = "classdex:faculty-profile-prompt-dismissed";
@@ -27,7 +27,8 @@ export default function FacultyDashboard() {
   const [classes, setClasses] = useState([]);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const [loadError, setLoadError] = useState("");
   const [notice, setNotice] = useState(location.state?.notice || "");
   const [profilePromptDismissed, setProfilePromptDismissed] = useState(() => {
     try {
@@ -44,11 +45,12 @@ export default function FacultyDashboard() {
     Promise.all([api.facultyClasses(), api.facultyProfile({ summary: true })])
       .then(([classData, profileData]) => {
         if (cancelled) return;
+        setLoadError("");
         setClasses(classData.classes || []);
         setProfile(profileData.profile || null);
       })
       .catch((requestError) => {
-        if (!cancelled) setError(requestError.message);
+        if (!cancelled) setLoadError(requestError.message);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -57,7 +59,13 @@ export default function FacultyDashboard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadNonce]);
+
+  function retryLoadDashboard() {
+    setLoadError("");
+    setLoading(true);
+    setReloadNonce((current) => current + 1);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -117,11 +125,10 @@ export default function FacultyDashboard() {
         />
 
         {notice ? <p className="notice notice-success" role="status"><Icon name="check" /> {notice}</p> : null}
-        {error ? <p className="notice notice-error" role="alert">{error}</p> : null}
 
         <EmailVerificationBanner />
 
-        {!loading && !profileCompleted && !profilePromptDismissed ? (
+        {!loading && !loadError && !profileCompleted && !profilePromptDismissed ? (
           <section className="profile-banner-compact" aria-label="Complete faculty profile">
             <span className="profile-banner-icon" aria-hidden="true"><Icon name="user" size={16} /></span>
             <p className="profile-banner-text">
@@ -143,7 +150,15 @@ export default function FacultyDashboard() {
           </div>
         </div>
 
-        {loading ? <div className="loading-card">Loading your classes…</div> : classes.length ? (
+        {loading ? (
+          <div className="loading-card">Loading your classes…</div>
+        ) : loadError ? (
+          <ErrorState
+            title="Unable to load your classes"
+            message={loadError}
+            onRetry={retryLoadDashboard}
+          />
+        ) : classes.length ? (
           <div className="class-grid">
             {classes.map((classRecord, index) => (
               <article className="class-card" key={classRecord.id} style={{ "--card-accent": index % 2 ? "var(--accent-teal)" : "var(--accent-amber)" }}>

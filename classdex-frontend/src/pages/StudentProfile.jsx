@@ -6,7 +6,7 @@ import Icon from "../components/Icon";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { uploadPhoto } from "../utils/photoUpload";
-import { PageHeader } from "../components/DesignSystem";
+import { ErrorState, PageHeader } from "../components/DesignSystem";
 
 function emptyForm(user) {
   return {
@@ -26,6 +26,8 @@ export default function StudentProfile() {
   const navigate = useNavigate();
   const [form, setForm] = useState(() => emptyForm(user));
   const [loading, setLoading] = useState(true);
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [idTouched, setIdTouched] = useState(false);
@@ -37,12 +39,15 @@ export default function StudentProfile() {
     api
       .studentProfile()
       .then(({ profile }) => {
-        if (profile && !cancelled) {
-          setForm({ ...emptyForm(user), ...profile, birthdate: profile.birthdate?.slice(0, 10) || "" });
+        if (!cancelled) {
+          setLoadError("");
+          if (profile) {
+            setForm({ ...emptyForm(user), ...profile, birthdate: profile.birthdate?.slice(0, 10) || "" });
+          }
         }
       })
       .catch((requestError) => {
-        if (!cancelled) setError(requestError.message);
+        if (!cancelled) setLoadError(requestError.message);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -50,7 +55,13 @@ export default function StudentProfile() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, reloadNonce]);
+
+  function retryLoadProfile() {
+    setLoadError("");
+    setLoading(true);
+    setReloadNonce((current) => current + 1);
+  }
 
   function update(field) {
     return (event) => setForm((current) => ({ ...current, [field]: event.target.value }));
@@ -99,78 +110,88 @@ export default function StudentProfile() {
           title="Student profile"
           description="This one card follows you into every class you join."
         />
-        <form className="panel profile-panel" onSubmit={handleSubmit}>
-          {loading ? <p className="muted">Loading your index card…</p> : (
-            <>
-              <div className="photo-upload">
-                <Avatar src={form.photo} name={form.name || user?.name} alt="Student profile" size="lg" className="photo-preview student-photo" />
-                <div>
-                  <label className="button button-secondary file-button">
-                    <Icon name="camera" /> {uploading ? "Uploading…" : form.photo ? "Change photo" : "Upload a photo *"}
-                    <input type="file" accept="image/png,image/jpeg,image/webp" onChange={handlePhoto} />
-                  </label>
-                  <p className="field-hint">Required · JPG, PNG, or WebP · up to 5 MB</p>
+        {!loading && loadError ? (
+          <ErrorState
+            title="Unable to load your student profile"
+            message={loadError}
+            onRetry={retryLoadProfile}
+            backTo="/student"
+            backLabel="Back to dashboard"
+          />
+        ) : (
+          <form className="panel profile-panel" onSubmit={handleSubmit}>
+            {loading ? <p className="muted">Loading your index card…</p> : (
+              <>
+                <div className="photo-upload">
+                  <Avatar src={form.photo} name={form.name || user?.name} alt="Student profile" size="lg" className="photo-preview student-photo" />
+                  <div>
+                    <label className="button button-secondary file-button">
+                      <Icon name="camera" /> {uploading ? "Uploading…" : form.photo ? "Change photo" : "Upload a photo *"}
+                      <input type="file" accept="image/png,image/jpeg,image/webp" onChange={handlePhoto} />
+                    </label>
+                    <p className="field-hint">Required · JPG, PNG, or WebP · up to 5 MB</p>
+                  </div>
                 </div>
-              </div>
-              <div className="form-grid">
-                <label className="field">
-                  <span>Full name <b>*</b></span>
-                  <input className="input" required value={form.name || ""} onChange={update("name")} placeholder="e.g., Juan Dela Cruz" autoComplete="name" />
-                </label>
-                <label className="field">
-                  <span>Student ID <b>*</b></span>
-                  <input
-                    className={`input ${idTouched && idInvalid ? "input-invalid" : ""}`}
-                    required
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={7}
-                    pattern="\d{7}"
-                    title="Enter exactly 7 digits, for example 2300039."
-                    value={form.studentId || ""}
-                    onChange={(event) => {
-                      setForm((current) => ({ ...current, studentId: event.target.value }));
-                      setIdTouched(true);
-                    }}
-                    onBlur={() => setIdTouched(true)}
-                    aria-describedby="student-id-hint"
-                  />
-                  <span id="student-id-hint" className={idTouched && idInvalid ? "field-error" : "field-hint"}>
-                    {idTouched && idInvalid ? "Enter exactly 7 digits (e.g. 2300039)." : "7 numbers, no letters or spaces."}
-                  </span>
-                </label>
-                <label className="field">
-                  <span>Email <b>*</b></span>
-                  <input className="input" required type="email" value={form.email || ""} onChange={update("email")} autoComplete="email" />
-                </label>
-                <label className="field">
-                  <span>Birthdate</span>
-                  <input className="input" type="date" value={form.birthdate || ""} onChange={update("birthdate")} />
-                </label>
-                <label className="field">
-                  <span>Program</span>
-                  <input className="input" value={form.program || ""} onChange={update("program")} placeholder="e.g. BSEd English" />
-                </label>
-                <label className="field">
-                  <span>Section</span>
-                  <input className="input" value={form.section || ""} onChange={update("section")} placeholder="e.g. 3A" />
-                </label>
-                <label className="field field-wide">
-                  <span>Address</span>
-                  <textarea className="input textarea" rows="3" value={form.address || ""} onChange={update("address")} autoComplete="street-address" />
-                </label>
-              </div>
-              {!form.photo ? <p className="notice notice-warm"><Icon name="camera" /> Add a profile photo before saving your index card.</p> : null}
-              {error ? <p className="notice notice-error" role="alert">{error}</p> : null}
-              <div className="form-actions">
-                <Link to="/student" className="button button-quiet">Cancel</Link>
-                <button className="button button-primary" type="submit" disabled={saving || uploading || !form.photo}>
-                  {saving ? "Saving…" : "Save index card"} <Icon name="arrow" />
-                </button>
-              </div>
-            </>
-          )}
-        </form>
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Full name <b>*</b></span>
+                    <input className="input" required value={form.name || ""} onChange={update("name")} placeholder="e.g., Juan Dela Cruz" autoComplete="name" />
+                  </label>
+                  <label className="field">
+                    <span>Student ID <b>*</b></span>
+                    <input
+                      className={`input ${idTouched && idInvalid ? "input-invalid" : ""}`}
+                      required
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={7}
+                      pattern="\d{7}"
+                      title="Enter exactly 7 digits, for example 2300039."
+                      value={form.studentId || ""}
+                      onChange={(event) => {
+                        setForm((current) => ({ ...current, studentId: event.target.value }));
+                        setIdTouched(true);
+                      }}
+                      onBlur={() => setIdTouched(true)}
+                      aria-describedby="student-id-hint"
+                    />
+                    <span id="student-id-hint" className={idTouched && idInvalid ? "field-error" : "field-hint"}>
+                      {idTouched && idInvalid ? "Enter exactly 7 digits (e.g. 2300039)." : "7 numbers, no letters or spaces."}
+                    </span>
+                  </label>
+                  <label className="field">
+                    <span>Email <b>*</b></span>
+                    <input className="input" required type="email" value={form.email || ""} onChange={update("email")} autoComplete="email" />
+                  </label>
+                  <label className="field">
+                    <span>Birthdate</span>
+                    <input className="input" type="date" value={form.birthdate || ""} onChange={update("birthdate")} />
+                  </label>
+                  <label className="field">
+                    <span>Program</span>
+                    <input className="input" value={form.program || ""} onChange={update("program")} placeholder="e.g. BSEd English" />
+                  </label>
+                  <label className="field">
+                    <span>Section</span>
+                    <input className="input" value={form.section || ""} onChange={update("section")} placeholder="e.g. 3A" />
+                  </label>
+                  <label className="field field-wide">
+                    <span>Address</span>
+                    <textarea className="input textarea" rows="3" value={form.address || ""} onChange={update("address")} autoComplete="street-address" />
+                  </label>
+                </div>
+                {!form.photo ? <p className="notice notice-warm"><Icon name="camera" /> Add a profile photo before saving your index card.</p> : null}
+                {error ? <p className="notice notice-error" role="alert">{error}</p> : null}
+                <div className="form-actions">
+                  <Link to="/student" className="button button-quiet">Cancel</Link>
+                  <button className="button button-primary" type="submit" disabled={saving || uploading || !form.photo}>
+                    {saving ? "Saving…" : "Save index card"} <Icon name="arrow" />
+                  </button>
+                </div>
+              </>
+            )}
+          </form>
+        )}
       </div>
     </AppShell>
   );

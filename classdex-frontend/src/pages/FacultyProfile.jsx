@@ -6,7 +6,7 @@ import Icon from "../components/Icon";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { uploadPhoto } from "../utils/photoUpload";
-import { PageHeader } from "../components/DesignSystem";
+import { ErrorState, PageHeader } from "../components/DesignSystem";
 
 const EMPTY_FORM = {
   name: "",
@@ -21,6 +21,8 @@ export default function FacultyProfile() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ ...EMPTY_FORM, name: user?.name || "", email: user?.email || "" });
   const [loading, setLoading] = useState(true);
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -30,10 +32,13 @@ export default function FacultyProfile() {
     api
       .facultyProfile()
       .then(({ profile }) => {
-        if (profile && !cancelled) setForm({ ...EMPTY_FORM, ...profile });
+        if (!cancelled) {
+          setLoadError("");
+          if (profile) setForm({ ...EMPTY_FORM, ...profile });
+        }
       })
       .catch((requestError) => {
-        if (!cancelled) setError(requestError.message);
+        if (!cancelled) setLoadError(requestError.message);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -41,7 +46,13 @@ export default function FacultyProfile() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadNonce]);
+
+  function retryLoadProfile() {
+    setLoadError("");
+    setLoading(true);
+    setReloadNonce((current) => current + 1);
+  }
 
   function update(field) {
     return (event) => setForm((current) => ({ ...current, [field]: event.target.value }));
@@ -88,47 +99,57 @@ export default function FacultyProfile() {
           title="Your faculty profile"
           description="Share a few details with students. You can update this any time."
         />
-        <form className="panel profile-panel" onSubmit={handleSubmit}>
-          {loading ? <p className="muted">Loading your profile…</p> : (
-            <>
-              <div className="photo-upload">
-                <Avatar src={form.photo} name={form.name || user?.name} alt="Faculty profile" size="lg" className="photo-preview" />
-                <div>
-                  <label className="button button-secondary file-button">
-                    <Icon name="camera" /> {uploading ? "Uploading…" : "Add a photo"}
-                    <input type="file" accept="image/png,image/jpeg,image/webp" onChange={handlePhoto} disabled={uploading} />
-                  </label>
-                  <p className="field-hint">Optional · JPG, PNG, or WebP · up to 5 MB</p>
+        {!loading && loadError ? (
+          <ErrorState
+            title="Unable to load your profile"
+            message={loadError}
+            onRetry={retryLoadProfile}
+            backTo="/faculty"
+            backLabel="Back to dashboard"
+          />
+        ) : (
+          <form className="panel profile-panel" onSubmit={handleSubmit}>
+            {loading ? <p className="muted">Loading your profile…</p> : (
+              <>
+                <div className="photo-upload">
+                  <Avatar src={form.photo} name={form.name || user?.name} alt="Faculty profile" size="lg" className="photo-preview" />
+                  <div>
+                    <label className="button button-secondary file-button">
+                      <Icon name="camera" /> {uploading ? "Uploading…" : "Add a photo"}
+                      <input type="file" accept="image/png,image/jpeg,image/webp" onChange={handlePhoto} disabled={uploading} />
+                    </label>
+                    <p className="field-hint">Optional · JPG, PNG, or WebP · up to 5 MB</p>
+                  </div>
                 </div>
-              </div>
-              <div className="form-grid">
-                <label className="field">
-                  <span>Full name</span>
-                  <input className="input" value={form.name || ""} onChange={update("name")} autoComplete="name" />
-                </label>
-                <label className="field">
-                  <span>Department or program</span>
-                  <input className="input" value={form.department || ""} onChange={update("department")} placeholder="e.g. College of Education" />
-                </label>
-                <label className="field">
-                  <span>Email</span>
-                  <input className="input" type="email" value={form.email || ""} onChange={update("email")} autoComplete="email" />
-                </label>
-                <label className="field">
-                  <span>Contact number</span>
-                  <input className="input" type="tel" value={form.contact || ""} onChange={update("contact")} autoComplete="tel" />
-                </label>
-              </div>
-              {error ? <p className="notice notice-error" role="alert">{error}</p> : null}
-              <div className="form-actions">
-                <Link to="/faculty" className="button button-quiet">Skip for now</Link>
-                <button className="button button-primary" type="submit" disabled={saving || uploading}>
-                  {saving ? "Saving…" : "Save profile"} <Icon name="arrow" />
-                </button>
-              </div>
-            </>
-          )}
-        </form>
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Full name</span>
+                    <input className="input" value={form.name || ""} onChange={update("name")} autoComplete="name" />
+                  </label>
+                  <label className="field">
+                    <span>Department or program</span>
+                    <input className="input" value={form.department || ""} onChange={update("department")} placeholder="e.g. College of Education" />
+                  </label>
+                  <label className="field">
+                    <span>Email</span>
+                    <input className="input" type="email" value={form.email || ""} onChange={update("email")} autoComplete="email" />
+                  </label>
+                  <label className="field">
+                    <span>Contact number</span>
+                    <input className="input" type="tel" value={form.contact || ""} onChange={update("contact")} autoComplete="tel" />
+                  </label>
+                </div>
+                {error ? <p className="notice notice-error" role="alert">{error}</p> : null}
+                <div className="form-actions">
+                  <Link to="/faculty" className="button button-quiet">Skip for now</Link>
+                  <button className="button button-primary" type="submit" disabled={saving || uploading}>
+                    {saving ? "Saving…" : "Save profile"} <Icon name="arrow" />
+                  </button>
+                </div>
+              </>
+            )}
+          </form>
+        )}
       </div>
     </AppShell>
   );

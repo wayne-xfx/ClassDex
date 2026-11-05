@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { clearSessionExpiredNotice, hasSessionExpiredNotice } from "../api";
 import { AuthLayout } from "../components/AuthLayout";
 import Icon from "../components/Icon";
 import PasswordField from "../components/PasswordField";
@@ -12,7 +13,23 @@ export default function Login() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(() => hasSessionExpiredNotice());
   const statusNotice = location.state?.notice || "";
+
+  useEffect(() => {
+    if (sessionExpired) {
+      clearSessionExpiredNotice();
+    }
+  }, [sessionExpired]);
+
+  useEffect(() => {
+    function handleUnauthorized() {
+      clearSessionExpiredNotice();
+      setSessionExpired(true);
+    }
+    window.addEventListener("classdex:unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("classdex:unauthorized", handleUnauthorized);
+  }, []);
 
   function update(field) {
     return (event) => setForm((prev) => ({ ...prev, [field]: event.target.value }));
@@ -21,6 +38,7 @@ export default function Login() {
   async function handleSubmit(event) {
     event.preventDefault();
     setError("");
+    setSessionExpired(false);
     setSubmitting(true);
     try {
       const user = await login(form);
@@ -61,6 +79,16 @@ export default function Login() {
         </>
       }
     >
+      {sessionExpired ? (
+        <div
+          className="auth-status-banner auth-status-warning mb-4"
+          role="alert"
+        >
+          <Icon name="info" size={16} />
+          <span>Your session expired. Please sign in again.</span>
+        </div>
+      ) : null}
+
       {statusNotice ? (
         <div
           className="auth-status-banner auth-status-success mb-4"
