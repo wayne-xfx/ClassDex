@@ -154,8 +154,8 @@ Create `.env` files in both `classdex-backend/` and `classdex-frontend/` based o
 | Variable | Description | Example / Default |
 | :--- | :--- | :--- |
 | `VITE_RECAPTCHA_SITE_KEY` | Google reCAPTCHA v2 site key (Checkbox) | *(Optional in development)* |
-| `VITE_CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name for profile photos | *(Optional; stores image inline if omitted)* |
-| `VITE_CLOUDINARY_UPLOAD_PRESET`| Cloudinary unsigned upload preset | *(Optional)* |
+| `VITE_CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name for unsigned profile photo uploads | `your-cloud-name` *(Optional in local dev; falls back to data URL only when unconfigured)* |
+| `VITE_CLOUDINARY_UPLOAD_PRESET`| Cloudinary unsigned upload preset name | `your-unsigned-preset` *(Required when `VITE_CLOUDINARY_CLOUD_NAME` is set)* |
 
 ### 4. Database Setup
 
@@ -228,8 +228,9 @@ The client starts on `http://localhost:5173`. Open `http://localhost:5173` in yo
 
 ### Profile Photos (Cloudinary)
 - Register at [Cloudinary](https://cloudinary.com) and create an **unsigned upload preset**.
-- Set `VITE_CLOUDINARY_CLOUD_NAME` and `VITE_CLOUDINARY_UPLOAD_PRESET` in `classdex-frontend/.env`.
-- If omitted or the Cloudinary upload fails (for example, if the preset is not enabled for unsigned uploads), selected student/faculty photos are stored directly as inline data within the profile record in the database.
+- Set `VITE_CLOUDINARY_CLOUD_NAME=` and `VITE_CLOUDINARY_UPLOAD_PRESET=` in `classdex-frontend/.env` using your cloud name and unsigned upload preset.
+- When both variables are configured, profile photos upload directly to Cloudinary; if an upload fails or returns an invalid response, ClassDex surfaces an error message instead of storing base64 data.
+- When omitted in local development, ClassDex logs a development console warning and falls back to storing a data URL in the profile record.
 
 ---
 
