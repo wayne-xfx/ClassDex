@@ -7146,6 +7146,8 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  min-height: 56px;
+  padding: 0 0.625rem;
   overflow-x: auto;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
@@ -7178,7 +7180,7 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
-  padding: 0.875rem 0.875rem 0.75rem;
+  padding: 1.0625rem 0.875rem 0.9375rem;
   font-size: 0.875rem; /* 14px */
   font-weight: 500;
   color: var(--muted);
@@ -7215,7 +7217,7 @@ textarea {
 .class-shell-tab-deck {
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 0.5rem 0.875rem;
+  padding: 0.625rem 1.125rem;
   background: transparent;
   margin-right: 0.25rem;
   color: var(--muted);
@@ -7427,8 +7429,12 @@ textarea {
   }
 
   .class-shell-tab {
-    padding: 0.75rem 0.65rem 0.65rem;
+    padding: 0.875rem 0.65rem 0.75rem;
     font-size: 0.8125rem; /* 13px */
+  }
+
+  .class-shell-tab-deck {
+    padding: 0.5rem 0.875rem;
   }
 
   .header-notifications-popover {
