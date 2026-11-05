@@ -7,7 +7,7 @@ import Icon from "../components/Icon";
 import RecaptchaWidget from "../components/RecaptchaWidget";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
-import { PageHeader } from "../components/DesignSystem";
+import { ErrorState, PageHeader } from "../components/DesignSystem";
 import { formatClassSchedule } from "../utils/schedule";
 
 export default function StudentDashboard() {
@@ -17,6 +17,8 @@ export default function StudentDashboard() {
   const [classes, setClasses] = useState([]);
   const [classCode, setClassCode] = useState("");
   const [loading, setLoading] = useState(true);
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const [loadError, setLoadError] = useState("");
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState(location.state?.notice || "");
@@ -29,6 +31,7 @@ export default function StudentDashboard() {
     Promise.all([api.studentProfile(), api.studentClasses()])
       .then(([profileData, classData]) => {
         if (!cancelled) {
+          setLoadError("");
           setProfile(profileData.profile);
           if (profileData.profile?.photo) {
             updateUser?.({ photo: profileData.profile.photo });
@@ -37,7 +40,7 @@ export default function StudentDashboard() {
         }
       })
       .catch((requestError) => {
-        if (!cancelled) setError(requestError.message);
+        if (!cancelled) setLoadError(requestError.message);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -45,7 +48,13 @@ export default function StudentDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [updateUser]);
+  }, [updateUser, reloadNonce]);
+
+  function retryLoadDashboard() {
+    setLoadError("");
+    setLoading(true);
+    setReloadNonce((current) => current + 1);
+  }
 
   function handleJoin(event) {
     event.preventDefault();
@@ -110,34 +119,44 @@ export default function StudentDashboard() {
 
         <EmailVerificationBanner />
 
-        {!profile ? (
-          <section className="profile-prompt student-prompt">
-            <div className="prompt-icon"><Icon name="camera" size={21} /></div>
-            <div className="prompt-copy">
-              <strong>Your photo is needed to create your index card</strong>
-              <p>Complete your global student profile once, then use it in every class.</p>
-            </div>
-            <Link to="/student/profile" className="button button-primary">Create profile <Icon name="arrow" /></Link>
-          </section>
-        ) : (
-          <section className="join-panel">
-            <div>
-              <span className="eyebrow"><Icon name="plus" /> Join a class</span>
-              <h2>Have an invite code?</h2>
-              <p>Enter the code from your faculty member or open their invite link.</p>
-            </div>
-            <form onSubmit={handleJoin} className="join-form">
-              <input className="input" aria-label="Class code" value={classCode} onChange={(event) => setClassCode(event.target.value.toUpperCase())} placeholder="e.g. ENG3A25" />
-              <button ref={submitButtonRef} className="button button-primary" type="submit" disabled={joining}>{joining ? "Joining…" : "Join class"} <Icon name="arrow" /></button>
-            </form>
-            {captchaOpen ? <RecaptchaWidget ref={captchaRef} onChange={handleCaptchaChange} onClose={() => setCaptchaOpen(false)} returnFocusRef={submitButtonRef} /> : null}
-          </section>
-        )}
+        {!loading && !loadError ? (
+          !profile ? (
+            <section className="profile-prompt student-prompt">
+              <div className="prompt-icon"><Icon name="camera" size={21} /></div>
+              <div className="prompt-copy">
+                <strong>Your photo is needed to create your index card</strong>
+                <p>Complete your global student profile once, then use it in every class.</p>
+              </div>
+              <Link to="/student/profile" className="button button-primary">Create profile <Icon name="arrow" /></Link>
+            </section>
+          ) : (
+            <section className="join-panel">
+              <div>
+                <span className="eyebrow"><Icon name="plus" /> Join a class</span>
+                <h2>Have an invite code?</h2>
+                <p>Enter the code from your faculty member or open their invite link.</p>
+              </div>
+              <form onSubmit={handleJoin} className="join-form">
+                <input className="input" aria-label="Class code" value={classCode} onChange={(event) => setClassCode(event.target.value.toUpperCase())} placeholder="e.g. ENG3A25" />
+                <button ref={submitButtonRef} className="button button-primary" type="submit" disabled={joining}>{joining ? "Joining…" : "Join class"} <Icon name="arrow" /></button>
+              </form>
+              {captchaOpen ? <RecaptchaWidget ref={captchaRef} onChange={handleCaptchaChange} onClose={() => setCaptchaOpen(false)} returnFocusRef={submitButtonRef} /> : null}
+            </section>
+          )
+        ) : null}
 
         <div className="section-heading">
           <div><h2>My classes</h2><p>{classes.length} {classes.length === 1 ? "class" : "classes"} joined</p></div>
         </div>
-        {loading ? <div className="loading-card">Loading your classes…</div> : classes.length ? (
+        {loading ? (
+          <div className="loading-card">Loading your classes…</div>
+        ) : loadError ? (
+          <ErrorState
+            title="Unable to load your dashboard"
+            message={loadError}
+            onRetry={retryLoadDashboard}
+          />
+        ) : classes.length ? (
           <div className="class-grid student-class-grid">
             {classes.map((classRecord, index) => (
               <article className="class-card" key={classRecord.id} style={{ "--card-accent": index % 2 ? "var(--accent-teal)" : "var(--accent-amber)" }}>

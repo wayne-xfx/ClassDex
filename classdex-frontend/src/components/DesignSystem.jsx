@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Link } from "react-router-dom";
 import Icon from "./Icon";
 
 export function Button({
@@ -106,4 +107,38 @@ export function PageHeader({ eyebrow, title, description, icon, action, classNam
 
 export function Skeleton({ className = "", ...props }) {
   return <div className={`design-skeleton${className ? ` ${className}` : ""}`} aria-hidden="true" {...props} />;
+}
+
+export function ErrorState({
+  title = "Unable to load this page",
+  message = "Something went wrong while loading data.",
+  badge = "Not available",
+  onRetry,
+  backTo,
+  backLabel = "Back to dashboard",
+  className = "",
+}) {
+  return (
+    <Card className={`student-record-error design-error-state${className ? ` ${className}` : ""}`} role="alert">
+      <div>
+        <Badge tone="danger">{badge}</Badge>
+      </div>
+      <h2>{title}</h2>
+      <p>{message}</p>
+      {onRetry || backTo ? (
+        <div className="design-error-state-actions">
+          {onRetry ? (
+            <Button variant="primary" onClick={onRetry}>
+              <Icon name="refresh" size={16} /> Try again
+            </Button>
+          ) : null}
+          {backTo ? (
+            <Link to={backTo} className="button button-secondary">
+              {backLabel}
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
+    </Card>
+  );
 }

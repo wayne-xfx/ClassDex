@@ -70,6 +70,16 @@ export default function ExportModule({ classRecord, students = [], pendingEnroll
         </Card>
       </div>
 
+      {students.length === 0 ? (
+        <div className="notice notice-warm" role="status">
+          <Icon name="info" />
+          <span>
+            No approved students are in this class yet. You can still export class information now,
+            or add students to your Student List so their records appear in exports.
+          </span>
+        </div>
+      ) : null}
+
       <Card className="export-config-card">
         <div className="export-section-header">
           <h3>Record types</h3>

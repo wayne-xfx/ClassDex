@@ -6218,6 +6218,79 @@ textarea {
   color: var(--accent-present);
 }
 
+.auth-status-warning {
+  border-color: color-mix(in srgb, var(--accent-amber) 40%, var(--line));
+  background: color-mix(in srgb, var(--accent-amber) 14%, var(--card));
+  color: color-mix(in srgb, var(--accent-amber) 75%, var(--ink));
+}
+
+.design-error-state {
+  align-items: start;
+  justify-items: start;
+}
+
+.design-error-state h2 {
+  margin: 0;
+  color: var(--navy);
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+}
+
+.design-error-state p {
+  margin: 0;
+  max-width: 44rem;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.design-error-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 0.25rem;
+}
+
+.error-boundary-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 1.5rem;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.error-boundary-card {
+  display: grid;
+  width: min(100%, 34rem);
+  gap: 0.9rem;
+  padding: 2rem;
+}
+
+.error-boundary-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.error-boundary-card h1 {
+  margin: 0;
+  color: var(--navy);
+  font-size: 1.55rem;
+  letter-spacing: -0.025em;
+}
+
+.error-boundary-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.pending-loading-state {
+  margin-top: 1.25rem;
+}
+
 .auth-outcome-panel {
   display: grid;
   gap: 14px;

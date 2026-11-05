@@ -9,6 +9,9 @@ export default function PendingValidationList({
   autoApproved = [],
   absenceWarnings = [],
   className = "",
+  loading = false,
+  error = "",
+  onRetry,
   onApprove,
   onDecline,
   onMarkAllRead,
@@ -85,7 +88,22 @@ export default function PendingValidationList({
           </button>
         </div>
 
-        {hasNotifications ? (
+        {loading ? (
+          <div className="loading-card pending-loading-state" role="status" aria-live="polite">
+            Loading notifications…
+          </div>
+        ) : error ? (
+          <div className="empty-state pending-empty" role="alert">
+            <Icon name="alert" />
+            <strong>Unable to load notifications</strong>
+            <span>{error}</span>
+            {onRetry ? (
+              <button type="button" className="button button-primary button-small" onClick={onRetry}>
+                <Icon name="refresh" size={15} /> Retry
+              </button>
+            ) : null}
+          </div>
+        ) : hasNotifications ? (
           <div className="notifications-sections">
             <div className="notifications-read-actions">
               <button type="button" className="button button-secondary button-small" onClick={onMarkAllRead} disabled={!canMarkAllRead}>

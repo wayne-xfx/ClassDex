@@ -1,53 +1,120 @@
 const API_BASE = "/api";
+const SESSION_EXPIRED_KEY = "classdex:session-expired";
+let memorySessionExpired = false;
 
-async function request(path, options = {}) {
+export function markSessionExpiredNotice() {
+  memorySessionExpired = true;
+  try {
+    window.sessionStorage.setItem(SESSION_EXPIRED_KEY, "1");
+  } catch {
+    // Fallback to in-memory flag when sessionStorage is unavailable.
+  }
+}
+
+export function hasSessionExpiredNotice() {
+  if (memorySessionExpired) return true;
+  try {
+    return window.sessionStorage.getItem(SESSION_EXPIRED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function clearSessionExpiredNotice() {
+  memorySessionExpired = false;
+  try {
+    window.sessionStorage.removeItem(SESSION_EXPIRED_KEY);
+  } catch {
+    // Ignore storage errors.
+  }
+}
+
+function isNetworkFailure(error) {
+  if (!error) return false;
+  if (error.name === "TypeError") return true;
+  return /failed to fetch|networkerror|load failed/i.test(String(error.message || ""));
+}
+
+function fallbackStatusMessage(httpStatus) {
+  if (httpStatus === 401) return "Your session expired. Please sign in again.";
+  if (httpStatus === 403) return "You do not have permission to access this.";
+  if (httpStatus === 404) return "The requested resource could not be found.";
+  if (httpStatus >= 500) return "ClassDex ran into a server problem. Please try again in a moment.";
+  return "Something went wrong.";
+}
+
+function buildRequestError(response, data = {}) {
+  const hasServerMessage = typeof data.message === "string" && data.message.trim().length > 0;
+  const requestError = new Error(
+    hasServerMessage ? data.message : fallbackStatusMessage(response.status),
+  );
+  requestError.status = data.status;
+  requestError.httpStatus = response.status;
+  requestError.reason = data.reason;
+  requestError.field = data.field;
+  requestError.retryAfter = data.retryAfter;
+  requestError.enrollment = data.enrollment;
+  return requestError;
+}
+
+function dispatchUnauthorizedIfNeeded(path, response) {
+  if (response.status === 401 && path !== "/auth/login" && path !== "/auth/me") {
+    markSessionExpiredNotice();
+    window.dispatchEvent(new CustomEvent("classdex:unauthorized"));
+  }
+}
+
+async function fetchWithTimeout(path, fetchOptions = {}, callerSignal) {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 25_000);
-  let response;
   try {
-    response = await fetch(`${API_BASE}${path}`, {
+    return await fetch(`${API_BASE}${path}`, {
       credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        ...(options.headers || {}),
-      },
-      ...options,
-      signal: options.signal || controller.signal,
+      ...fetchOptions,
+      signal: callerSignal || controller.signal,
     });
   } catch (error) {
-    if (error.name === "AbortError" && !options.signal?.aborted) {
-      throw new Error("The server took too long to respond. Check that the backend and database are running, then try again.");
+    if (error.name === "AbortError" && !callerSignal?.aborted) {
+      throw new Error(
+        "The server took too long to respond. Check that the backend and database are running, then try again.",
+      );
+    }
+    if (isNetworkFailure(error)) {
+      throw new Error("Can't reach ClassDex. Check your connection.");
     }
     throw error;
   } finally {
     window.clearTimeout(timeout);
   }
+}
+
+async function request(path, options = {}) {
+  const response = await fetchWithTimeout(
+    path,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+      },
+      ...options,
+    },
+    options.signal,
+  );
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    if (response.status === 401 && path !== "/auth/login" && path !== "/auth/me") {
-      window.dispatchEvent(new CustomEvent("classdex:unauthorized"));
-    }
-    const requestError = new Error(data.message || "Something went wrong.");
-    requestError.status = data.status;
-    requestError.httpStatus = response.status;
-    requestError.reason = data.reason;
-    requestError.field = data.field;
-    requestError.retryAfter = data.retryAfter;
-    requestError.enrollment = data.enrollment;
-    throw requestError;
+    dispatchUnauthorizedIfNeeded(path, response);
+    throw buildRequestError(response, data);
   }
   return data;
 }
 
 async function requestBlob(path, options = {}) {
-  const response = await fetch(`${API_BASE}${path}`, {
-    credentials: "include",
-    ...options,
-  });
+  const response = await fetchWithTimeout(path, options, options.signal);
   if (!response.ok) {
+    dispatchUnauthorizedIfNeeded(path, response);
     const data = await response.json().catch(() => ({}));
-    throw new Error(data.message || "Something went wrong.");
+    throw buildRequestError(response, data);
   }
   return response.blob();
 }
@@ -62,8 +129,14 @@ export const api = {
     request("/auth/login", {
       method: "POST",
       body: JSON.stringify(payload),
+    }).then((data) => {
+      clearSessionExpiredNotice();
+      return data;
     }),
-  logout: () => request("/auth/logout", { method: "POST" }),
+  logout: () =>
+    request("/auth/logout", { method: "POST" }).finally(() => {
+      clearSessionExpiredNotice();
+    }),
   me: () => request("/auth/me"),
   forgotPassword: (payload) =>
     request("/auth/forgot-password", {
