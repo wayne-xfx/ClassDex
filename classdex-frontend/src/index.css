@@ -5704,6 +5704,7 @@ textarea {
   .quiz-student-card { min-width: 0; }
 }
 .enrolled-pill-pending { background: var(--accent-amber); color: #5e3900; }
+.enrolled-pill-dropped { border: 1px solid color-mix(in srgb, var(--accent-red) 35%, var(--line)); background: color-mix(in srgb, var(--accent-red) 12%, var(--card)); color: var(--accent-red); }
 @media (max-width: 620px) { .student-class-summary { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 900px) {
   .student-record-summary-grid,

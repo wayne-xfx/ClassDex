@@ -141,7 +141,26 @@ export default function StudentDashboard() {
           <div className="class-grid student-class-grid">
             {classes.map((classRecord, index) => (
               <article className="class-card" key={classRecord.id} style={{ "--card-accent": index % 2 ? "var(--accent-teal)" : "var(--accent-amber)" }}>
-                <div className="class-card-top"><span className="class-icon"><Icon name="book" /></span><span className={`enrolled-pill ${classRecord.enrollmentStatus !== "APPROVED" ? "enrolled-pill-pending" : ""}`}>{classRecord.enrollmentStatus === "PENDING" ? "Pending approval" : classRecord.enrollmentStatus === "DECLINED" ? "Declined" : "Enrolled"}</span></div>
+                <div className="class-card-top">
+                  <span className="class-icon"><Icon name="book" /></span>
+                  <span
+                    className={`enrolled-pill${
+                      classRecord.enrollmentStatus === "DROPPED"
+                        ? " enrolled-pill-dropped"
+                        : classRecord.enrollmentStatus !== "APPROVED"
+                        ? " enrolled-pill-pending"
+                        : ""
+                    }`}
+                  >
+                    {classRecord.enrollmentStatus === "DROPPED"
+                      ? "Dropped"
+                      : classRecord.enrollmentStatus === "PENDING"
+                      ? "Pending approval"
+                      : classRecord.enrollmentStatus === "DECLINED"
+                      ? "Declined"
+                      : "Enrolled"}
+                  </span>
+                </div>
                 <p className="class-label">Section</p>
                 <h3>{classRecord.sectionName}</h3>
                 <div className="code-chip">Code <b>{classRecord.classCode}</b></div>

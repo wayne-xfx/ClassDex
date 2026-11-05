@@ -84,15 +84,44 @@ export default function StudentClassRecord() {
               action={<Link to="/student" className="button button-secondary"><Icon name="chevron" /> Back to dashboard</Link>}
             />
 
+            {classRecord.enrollmentStatus === "DROPPED" ? (
+              <div className="notice notice-warm" role="status">
+                <Icon name="info" />
+                <span>
+                  You were dropped from this class
+                  {classRecord.droppedAt
+                    ? ` on ${new Date(classRecord.droppedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Manila" })}`
+                    : ""}
+                  . Your recorded coursework is preserved below as a read-only record.
+                </span>
+              </div>
+            ) : null}
+
             <section className="student-record-hero panel">
               <div className="student-record-meta">
                 <Badge tone="neutral">Class code {classRecord.classCode}</Badge>
-                <Badge tone={classRecord.enrollmentStatus === "PENDING" ? "warning" : classRecord.enrollmentStatus === "DECLINED" ? "danger" : "success"}>
-                  {classRecord.enrollmentStatus === "PENDING" ? "Pending approval" : classRecord.enrollmentStatus === "DECLINED" ? "Declined" : "Enrolled"}
+                <Badge
+                  tone={
+                    classRecord.enrollmentStatus === "PENDING"
+                      ? "warning"
+                      : classRecord.enrollmentStatus === "DROPPED" || classRecord.enrollmentStatus === "DECLINED"
+                      ? "danger"
+                      : "success"
+                  }
+                >
+                  {classRecord.enrollmentStatus === "DROPPED"
+                    ? "Dropped"
+                    : classRecord.enrollmentStatus === "PENDING"
+                    ? "Pending approval"
+                    : classRecord.enrollmentStatus === "DECLINED"
+                    ? "Declined"
+                    : "Enrolled"}
                 </Badge>
               </div>
               <p className="student-record-copy">
-                Here is your live class record for this class, scoped to your own student profile and session history.
+                {classRecord.enrollmentStatus === "DROPPED"
+                  ? "This is a read-only archive of your coursework recorded while you were enrolled in this class."
+                  : "Here is your live class record for this class, scoped to your own student profile and session history."}
               </p>
             </section>
 
@@ -113,7 +142,9 @@ export default function StudentClassRecord() {
                     <span className="eyebrow"><Icon name="check" /> Attendance</span>
                     <h2>Attendance history</h2>
                   </div>
-                  <Badge tone="success">Live data</Badge>
+                  <Badge tone={classRecord.enrollmentStatus === "DROPPED" ? "neutral" : "success"}>
+                    {classRecord.enrollmentStatus === "DROPPED" ? "Read-only" : "Live data"}
+                  </Badge>
                 </div>
                 <div className="student-record-list">
                   {(records?.attendance || []).map((item) => (
@@ -132,7 +163,9 @@ export default function StudentClassRecord() {
                     <span className="eyebrow"><Icon name="user" /> Recitation</span>
                     <h2>Recitation calls</h2>
                   </div>
-                  <Badge tone="success">Live data</Badge>
+                  <Badge tone={classRecord.enrollmentStatus === "DROPPED" ? "neutral" : "success"}>
+                    {classRecord.enrollmentStatus === "DROPPED" ? "Read-only" : "Live data"}
+                  </Badge>
                 </div>
                 <div className="student-record-list">
                   {(records?.recitations || []).map((item) => (
@@ -152,7 +185,9 @@ export default function StudentClassRecord() {
                     <span className="eyebrow"><Icon name="book" /> Activities</span>
                     <h2>Activity scores</h2>
                   </div>
-                  <Badge tone="success">Live data</Badge>
+                  <Badge tone={classRecord.enrollmentStatus === "DROPPED" ? "neutral" : "success"}>
+                    {classRecord.enrollmentStatus === "DROPPED" ? "Read-only" : "Live data"}
+                  </Badge>
                 </div>
                 <div className="student-record-list">
                   {(records?.activities || []).map((item) => (
@@ -174,7 +209,9 @@ export default function StudentClassRecord() {
                     <span className="eyebrow"><Icon name="folder" /> Projects</span>
                     <h2>Project scores</h2>
                   </div>
-                  <Badge tone="success">Live data</Badge>
+                  <Badge tone={classRecord.enrollmentStatus === "DROPPED" ? "neutral" : "success"}>
+                    {classRecord.enrollmentStatus === "DROPPED" ? "Read-only" : "Live data"}
+                  </Badge>
                 </div>
                 <div className="student-record-list">
                   {(records?.projects || []).map((item) => (
@@ -196,7 +233,9 @@ export default function StudentClassRecord() {
                     <span className="eyebrow"><Icon name="brain" /> Quiz records</span>
                     <h2>Quiz performance</h2>
                   </div>
-                  <Badge tone="success">Live data</Badge>
+                  <Badge tone={classRecord.enrollmentStatus === "DROPPED" ? "neutral" : "success"}>
+                    {classRecord.enrollmentStatus === "DROPPED" ? "Read-only" : "Live data"}
+                  </Badge>
                 </div>
                 <div className="student-record-quiz-stats">
                   <div>

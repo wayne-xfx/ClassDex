@@ -30,7 +30,7 @@ function parseLines(value) {
     .filter((row) => row.name || row.studentId);
 }
 
-export default function StudentListManager({ classId, onClose, onCountChange, onAutoApproved, tabCache }) {
+export default function StudentListManager({ classId, onClose, onCountChange, onAutoApproved, onRosterChanged, tabCache }) {
   const cachedRoster = tabCache?.get(`roster:${classId}`);
   const [activeTab, setActiveTab] = useState("active"); // "active" | "dropList"
   const [rows, setRows] = useState(cachedRoster || []);
@@ -180,23 +180,40 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
     }
   }
 
+  async function loadRemovalImpact(row, index) {
+    setRemovalModal({ row, index, loading: true, recordCount: null, error: "" });
+    try {
+      const { recordCount = 0 } = await api.rosterImpact(classId, row.id);
+      setRemovalModal((current) =>
+        current && current.row.id === row.id
+          ? { ...current, loading: false, recordCount, error: "" }
+          : current,
+      );
+    } catch (error) {
+      setRemovalModal((current) =>
+        current && current.row.id === row.id
+          ? {
+              ...current,
+              loading: false,
+              recordCount: null,
+              error: error.message || "Unable to calculate removal impact.",
+            }
+          : current,
+      );
+    }
+  }
+
   async function promptRemoveRow(index) {
     const row = rows[index];
     if (!row.id) {
       setRows((current) => current.filter((_, rowIndex) => rowIndex !== index));
       return;
     }
-    setRemovalModal({ row, index, loading: true, recordCount: 0 });
-    try {
-      const { recordCount = 0 } = await api.rosterImpact(classId, row.id);
-      setRemovalModal((current) => (current ? { ...current, loading: false, recordCount } : null));
-    } catch {
-      setRemovalModal((current) => (current ? { ...current, loading: false, recordCount: 0 } : null));
-    }
+    await loadRemovalImpact(row, index);
   }
 
   async function executeRemoval() {
-    if (!removalModal) return;
+    if (!removalModal || removalModal.loading || removalModal.error) return;
     const { row, index } = removalModal;
     setRemoving(true);
     try {
@@ -210,7 +227,7 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
           : `${row.name} was removed from the student list.`,
       );
       setRemovalModal(null);
-      loadDropList();
+      await Promise.all([loadDropList(), Promise.resolve(onRosterChanged?.())]);
     } catch (error) {
       setMessage(error.message);
     } finally {
@@ -223,7 +240,7 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
       await api.restoreDroppedStudent(classId, entry.id);
       tabCache?.invalidate();
       setMessage(`${entry.studentName} was restored to the active student list.`);
-      await Promise.all([loadRoster(), loadDropList()]);
+      await Promise.all([loadRoster(), loadDropList(), Promise.resolve(onRosterChanged?.())]);
     } catch (error) {
       setMessage(error.message);
     }
@@ -265,10 +282,12 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
 
       {activeTab === "active" ? (
         <>
-          <div className="student-list-warning notice notice-warning">
-            <Icon name="info" />
-            <span>You haven't added a student list yet. Join requests that don't match a list entry will need your manual approval.</span>
-          </div>
+          {!loading && rows.length === 0 ? (
+            <div className="student-list-warning notice notice-warning">
+              <Icon name="info" />
+              <span>You haven't added a student list yet. Join requests that don't match a list entry will need your manual approval.</span>
+            </div>
+          ) : null}
           <div className="student-list-input-grid">
             <form className="student-list-entry-form" onSubmit={addRow}>
               <label className="field">
@@ -457,12 +476,25 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
 
       {removalModal ? (
         <Modal
-          title={removalModal.recordCount === 0 ? "Remove from Student List" : "Move to Drop List"}
+          title={
+            removalModal.loading || removalModal.error
+              ? "Remove Student"
+              : removalModal.recordCount === 0
+              ? "Remove from Student List"
+              : "Move to Drop List"
+          }
           onClose={() => setRemovalModal(null)}
         >
           <div className="p-4 space-y-4">
             {removalModal.loading ? (
               <p>Checking student records…</p>
+            ) : removalModal.error ? (
+              <div className="notice notice-error" role="alert" style={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", margin: 0 }}>
+                <span>{removalModal.error}</span>
+                <Button variant="secondary" onClick={() => loadRemovalImpact(removalModal.row, removalModal.index)}>
+                  Retry
+                </Button>
+              </div>
             ) : removalModal.recordCount === 0 ? (
               <p>
                 <em>{removalModal.row.name}</em> has no records and will be removed from this class.
@@ -478,12 +510,12 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
               </Button>
               <Button
                 variant="destructive"
-                disabled={removalModal.loading || removing}
+                disabled={removalModal.loading || Boolean(removalModal.error) || removing}
                 onClick={executeRemoval}
               >
                 {removing
                   ? "Processing…"
-                  : removalModal.recordCount === 0
+                  : removalModal.loading || removalModal.error || removalModal.recordCount === 0
                   ? "Remove"
                   : "Move to Drop List"}
               </Button>
