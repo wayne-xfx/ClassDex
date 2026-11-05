@@ -142,7 +142,7 @@ textarea {
 
 .app-header {
   position: sticky;
-  z-index: 10;
+  z-index: 35;
   top: 0;
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--card) 92%, transparent);
@@ -6814,3 +6814,574 @@ textarea {
   }
 }
 
+
+
+/* ==========================================================================
+   Fix 1: Shared Class Shell, Tab Bar, Module Header & Global Notifications
+   ========================================================================== */
+
+/* 1. Slim Class Shell Header */
+.class-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.class-shell-header {
+  position: relative;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.875rem 1rem;
+  flex-wrap: wrap;
+  padding: 0.25rem 0 0.75rem;
+}
+
+.class-shell-header-main {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.class-shell-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem; /* 13px */
+  font-weight: 600;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--paper) 65%, var(--card));
+  border: 1px solid var(--line);
+  transition: color 0.15s, background-color 0.15s, border-color 0.15s;
+}
+
+.class-shell-back:hover {
+  color: var(--ink);
+  background: var(--card);
+  border-color: var(--line-strong);
+}
+
+.class-shell-heading {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.class-shell-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.class-shell-heading h1 {
+  margin: 0;
+  font-size: 1.1875rem; /* 19px */
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.25;
+}
+
+.class-shell-heading.is-deck h1 {
+  font-size: 1.3125rem; /* 21px */
+}
+
+.class-shell-description {
+  margin: 0.125rem 0 0;
+  font-size: 0.8125rem; /* 13px */
+  color: var(--muted);
+  max-width: 480px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.class-shell-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.class-shell-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem; /* 12px min */
+  font-weight: 600;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--paper) 80%, var(--card));
+  border: 1px solid var(--line);
+  padding: 0.3rem 0.625rem;
+  border-radius: 9999px;
+  line-height: 1;
+}
+
+.class-shell-schedule-chip.is-today {
+  background: color-mix(in srgb, var(--accent-present) 12%, var(--card));
+  border-color: color-mix(in srgb, var(--accent-present) 38%, transparent);
+  color: var(--ink);
+}
+
+.class-shell-today-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: 700;
+  color: var(--accent-present);
+}
+
+.class-shell-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.class-shell-popover-anchor {
+  position: relative;
+}
+
+.class-shell-invite-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.class-shell-invite-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 280px;
+  padding: 1rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-floating);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.class-shell-invite-code-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.375rem 0.625rem;
+  background: color-mix(in srgb, var(--paper) 80%, var(--card));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+}
+
+.class-shell-invite-code-label {
+  font-size: 0.75rem; /* 12px min */
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.class-shell-invite-code-badge {
+  font-size: 1.125rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--royal);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.class-shell-invite-copy {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+}
+
+.class-shell-invite-qr-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--line);
+}
+
+.class-shell-invite-qr-img {
+  width: 160px;
+  height: 160px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--line);
+  background: #ffffff;
+  padding: 4px;
+}
+
+.class-shell-invite-qr-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: center;
+  width: 100%;
+}
+
+.class-shell-invite-qr-placeholder {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  padding: 2rem 0;
+}
+
+.class-shell-invite-error {
+  font-size: 0.75rem; /* 12px min */
+  color: var(--accent-red);
+}
+
+.class-shell-more-btn {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s, border-color 0.15s;
+}
+
+.class-shell-more-btn:hover,
+.class-shell-more-btn.is-open {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--paper) 70%, var(--card));
+  border-color: var(--line-strong);
+}
+
+.class-shell-overflow-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 175px;
+  padding: 0.35rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-floating);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.class-shell-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem; /* 13px */
+  font-weight: 500;
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  border-radius: calc(var(--radius-control) - 4px);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.12s, color 0.12s;
+}
+
+.class-shell-menu-item:hover {
+  background: color-mix(in srgb, var(--paper) 70%, var(--card));
+}
+
+.class-shell-menu-item-danger {
+  color: var(--accent-red);
+}
+
+.class-shell-menu-item-danger:hover {
+  background: color-mix(in srgb, var(--accent-red) 12%, var(--card));
+  color: var(--accent-red);
+}
+
+/* 2. Sticky Unified Tab Bar */
+.class-shell-tabs-wrap {
+  position: sticky;
+  top: var(--app-header-height, 77px);
+  z-index: 18;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+  margin: 0 0 1.25rem 0;
+  backdrop-filter: blur(12px);
+}
+
+.class-shell-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.class-shell-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.class-shell-tab-group {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.class-shell-tab-group-secondary {
+  margin-left: auto;
+}
+
+.class-shell-tab-divider {
+  width: 1px;
+  height: 1.25rem;
+  background: var(--line);
+  margin: 0 0.5rem;
+  flex-shrink: 0;
+}
+
+.class-shell-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.875rem 0.875rem 0.75rem;
+  font-size: 0.875rem; /* 14px */
+  font-weight: 500;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+  outline: none;
+  line-height: 1.2;
+}
+
+.class-shell-tab:hover {
+  color: var(--ink);
+}
+
+.class-shell-tab:focus-visible {
+  outline: 2px solid var(--royal);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+.class-shell-tab.is-active {
+  color: var(--royal);
+  font-weight: 700;
+  border-bottom-color: var(--royal);
+}
+
+/* 3. Module Header */
+.module-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+.module-header-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.module-header-copy h2 {
+  margin: 0;
+  font-size: 1.25rem; /* 20px */
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.25;
+}
+
+.module-header-copy p {
+  margin: 0;
+  font-size: 0.8125rem; /* 13px */
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.module-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* 4. Global Notifications in AppShell */
+.header-notifications {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.header-bell-trigger {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-control);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s, border-color 0.15s;
+}
+
+.header-bell-trigger:hover,
+.header-bell-trigger.is-open {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--paper) 70%, var(--card));
+  border-color: var(--line);
+}
+
+.header-bell-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  font-size: 0.75rem; /* 12px min */
+  font-weight: 700;
+  line-height: 18px;
+  border-radius: 9999px;
+  background: var(--accent-red);
+  color: #ffffff;
+  text-align: center;
+}
+
+.header-notifications-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 320px;
+  max-height: 400px;
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-floating);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem;
+}
+
+.header-notifications-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.625rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--ink);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 0.25rem;
+}
+
+.header-notifications-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.header-notification-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--radius-control);
+  text-decoration: none;
+  color: var(--ink);
+  transition: background-color 0.15s;
+}
+
+.header-notification-item:hover {
+  background: color-mix(in srgb, var(--paper) 70%, var(--card));
+}
+
+.header-notification-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.header-notification-copy strong {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.header-notification-copy span {
+  font-size: 0.75rem; /* 12px min */
+  color: var(--muted);
+}
+
+.header-notifications-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 2rem 1rem;
+  font-size: 0.8125rem; /* 13px */
+  color: var(--muted);
+  text-align: center;
+}
+
+/* 5. Warning Actions in Drawer */
+.pending-actions-warning {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-wrap: wrap;
+}
+
+/* 6. Responsive adjustments */
+@media (max-width: 680px) {
+  .class-shell-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .class-shell-header-actions {
+    width: 100%;
+    justify-content: flex-end;
+    margin-left: 0;
+  }
+
+  .class-shell-chips {
+    width: 100%;
+  }
+
+  .class-shell-tab {
+    padding: 0.75rem 0.65rem 0.65rem;
+    font-size: 0.8125rem; /* 13px */
+  }
+
+  .header-notifications-popover {
+    width: min(320px, calc(100vw - 32px));
+    right: -10px;
+  }
+}

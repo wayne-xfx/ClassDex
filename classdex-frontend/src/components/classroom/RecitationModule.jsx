@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import Avatar from "../Avatar";
 import Icon from "../Icon";
-import { formatStudentName } from "./studentNames";
+import { ModuleHeader } from "./ClassShell";
+import {
+  formatProgramSection,
+  formatStudentDisplayName,
+  formatStudentName,
+} from "./studentNames";
 import {
   getSavedShuffleMuted,
   playShuffleReveal,
@@ -117,17 +122,19 @@ export default function RecitationModule({
 
   return (
     <div className="recitation-module">
-      <div className="recitation-heading">
-        <div>
-          <span className="eyebrow"><Icon name="mic" /> Recitation</span>
-          <h2>Who’s up next?</h2>
-          <p>Students marked Present or Late today can be called.</p>
-        </div>
-        <div className="recitation-pool-count">
-          <span>{count}</span>
-          <div><strong>{count} {count === 1 ? "student" : "students"} in the pool</strong><small>Present today</small></div>
-        </div>
-      </div>
+      <ModuleHeader
+        title="Who’s up next?"
+        subtitle="Students marked Present or Late today can be called."
+        actions={
+          <div className="recitation-pool-count">
+            <span>{count}</span>
+            <div>
+              <strong>{count} {count === 1 ? "student" : "students"} in the pool</strong>
+              <small>Present today</small>
+            </div>
+          </div>
+        }
+      />
 
       <div className="recitation-mode" role="group" aria-label="Recitation shuffle mode">
         <span>Pick mode</span>
@@ -159,17 +166,29 @@ export default function RecitationModule({
         </div>
         {count ? (
           <div className="recitation-mini-cards">
-            {eligibleStudents.map((eligibleStudent) => (
-              <div
-                className="recitation-mini-card"
-                key={eligibleStudent.id}
-                title={`${formatStudentName(eligibleStudent.name)} · ${eligibleStudent.status === "LATE" ? "Late" : "Present"}`}
-              >
-                <Avatar src={eligibleStudent.photo} name={eligibleStudent.name} size="md" className="recitation-mini-photo" />
-                <span className="recitation-mini-name">{formatStudentName(eligibleStudent.name)}</span>
-                {eligibleStudent.status === "LATE" ? <small className="recitation-mini-late">Late</small> : null}
-              </div>
-            ))}
+            {eligibleStudents.map((eligibleStudent) => {
+              const displayName =
+                formatStudentDisplayName(eligibleStudent.name, eligibleStudent) ||
+                formatStudentName(eligibleStudent.name);
+              return (
+                <div
+                  className="recitation-mini-card"
+                  key={eligibleStudent.id}
+                  title={`${displayName} · ${eligibleStudent.status === "LATE" ? "Late" : "Present"}`}
+                >
+                  <Avatar
+                    src={eligibleStudent.photo}
+                    name={eligibleStudent.name}
+                    size="md"
+                    className="recitation-mini-photo"
+                  />
+                  <span className="recitation-mini-name">{displayName}</span>
+                  {eligibleStudent.status === "LATE" ? (
+                    <small className="recitation-mini-late">Late</small>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         ) : (
           <p className="recitation-mini-empty">Mark students Present or Late in Attendance to add their cards.</p>
@@ -220,7 +239,7 @@ export default function RecitationModule({
         {busy && animationEnabled && previewStudent ? (
           <article className="recitation-shuffling-card" key={previewStudent.id}>
             <Avatar src={previewStudent.photo} name={previewStudent.name} size="lg" className="recitation-shuffling-photo" />
-            <strong>{formatStudentName(previewStudent.name)}</strong>
+            <strong>{formatStudentDisplayName(previewStudent.name, previewStudent) || formatStudentName(previewStudent.name)}</strong>
             <span>ID {previewStudent.studentId}</span>
             <div className="recitation-shuffling-lines" aria-hidden="true"><i /><i /><i /></div>
             <span className="recitation-shuffling-label">Shuffling the deck…</span>
@@ -229,10 +248,10 @@ export default function RecitationModule({
           <article className="recitation-card" key={currentCall.log.id}>
             <span className="recitation-call-label"><Icon name="check" size={15} /> Your next speaker</span>
             <Avatar src={student.photo} name={student.name} size="lg" className="recitation-student-photo" />
-            <h3>{formatStudentName(student.name)}</h3>
+            <h3>{formatStudentDisplayName(student.name, student) || formatStudentName(student.name)}</h3>
             <p className="recitation-student-id">Student ID · {student.studentId}</p>
             <p className="recitation-student-program">
-              {[student.program, student.section].filter(Boolean).join(" · ") || "Student"}
+              {formatProgramSection(student.program, student.section) || "Student"}
             </p>
             <div className="recitation-score">
               <span>{savingScore ? "Saving score…" : "Optional score"}</span>
@@ -297,16 +316,20 @@ export default function RecitationModule({
             <span>{history.length}</span>
           </div>
           <ol>
-            {history.map((call) => (
+            {history.map((call) => {
+              const displayName =
+                formatStudentDisplayName(call.student.name, call.student) || call.student.name;
+              return (
               <li key={call.id}>
                 <Avatar src={call.student.photo} name={call.student.name} size="sm" className="history-student-photo" />
-                <span className="history-student-name">{call.student.name}</span>
+                <span className="history-student-name">{displayName}</span>
                 <span className="history-student-score">{call.score === null ? "No score" : `Score ${call.score}`}</span>
                 <time dateTime={call.calledAt}>
                   {new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" }).format(new Date(call.calledAt))}
                 </time>
               </li>
-            ))}
+            );
+            })}
           </ol>
         </section>
       ) : null}

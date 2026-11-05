@@ -1,8 +1,26 @@
 import { useEffect, useRef } from "react";
 import Avatar from "../Avatar";
 import Icon from "../Icon";
+import { formatProgramSection, formatStudentDisplayName } from "./studentNames";
 
 export const ABSENCE_WARNING_THRESHOLD = 7;
+
+function resolveWarningStudent(warning) {
+  if (warning?.studentProfile) return warning.studentProfile;
+  return {
+    id: warning?.studentId,
+    studentId: warning?.studentCode || "",
+    name: warning?.studentName || "Student",
+    program: warning?.program || "",
+    section: warning?.section || "",
+    photo: warning?.photo || warning?.photoUrl || "",
+  };
+}
+
+function formatStudentMetaLine(student) {
+  const programSection = formatProgramSection(student?.program, student?.section);
+  return `ID ${student?.studentId || "—"} · ${programSection || "Program not set"}`;
+}
 
 export default function PendingValidationList({
   enrollments = [],
@@ -17,6 +35,7 @@ export default function PendingValidationList({
   onMarkAllRead,
   onViewWarning,
   onDismissWarning,
+  onReviewInStudentList,
   onClose,
   busyId,
   dismissBusyId,
@@ -49,7 +68,8 @@ export default function PendingValidationList({
     };
   }, [onClose]);
 
-  const hasNotifications = absenceWarnings.length > 0 || enrollments.length > 0 || autoApproved.length > 0;
+  const hasNotifications =
+    absenceWarnings.length > 0 || enrollments.length > 0 || autoApproved.length > 0;
   const unreadAutoApproved = autoApproved.filter((enrollment) => !enrollment.isRead).length;
   const unreadWarnings = absenceWarnings.filter((warning) => !warning.isRead).length;
   const canMarkAllRead = unreadAutoApproved + unreadWarnings > 0;
@@ -76,7 +96,10 @@ export default function PendingValidationList({
               <Icon name="bell" /> Faculty notifications
             </span>
             <h2 id="pending-validation-title">Notifications</h2>
-            <p>Pending requests stay active until resolved. Read auto approvals and attendance warnings can be marked as read.</p>
+            <p>
+              Pending requests stay active until resolved. Read auto approvals and attendance
+              warnings can be marked as read.
+            </p>
           </div>
           <button
             type="button"
@@ -98,7 +121,11 @@ export default function PendingValidationList({
             <strong>Unable to load notifications</strong>
             <span>{error}</span>
             {onRetry ? (
-              <button type="button" className="button button-primary button-small" onClick={onRetry}>
+              <button
+                type="button"
+                className="button button-primary button-small"
+                onClick={onRetry}
+              >
                 <Icon name="refresh" size={15} /> Retry
               </button>
             ) : null}
@@ -106,10 +133,17 @@ export default function PendingValidationList({
         ) : hasNotifications ? (
           <div className="notifications-sections">
             <div className="notifications-read-actions">
-              <button type="button" className="button button-secondary button-small" onClick={onMarkAllRead} disabled={!canMarkAllRead}>
+              <button
+                type="button"
+                className="button button-secondary button-small"
+                onClick={onMarkAllRead}
+                disabled={!canMarkAllRead}
+              >
                 Mark all as read
               </button>
-              {enrollments.length ? <span>Pending requests remain until you approve or decline them.</span> : null}
+              {enrollments.length ? (
+                <span>Pending requests remain until you approve or decline them.</span>
+              ) : null}
             </div>
             <section className="notifications-section" aria-label="Pending join requests">
               <div className="notifications-section-header">
@@ -124,14 +158,19 @@ export default function PendingValidationList({
                 <div className="pending-list">
                   {enrollments.map((enrollment) => {
                     const student = enrollment.studentProfile;
+                    const displayName =
+                      formatStudentDisplayName(student.name, student) || student.name;
                     return (
                       <article className="pending-row" key={enrollment.id}>
-                        <Avatar src={student.photo} name={student.name} size="md" className="pending-photo" />
+                        <Avatar
+                          src={student.photo}
+                          name={student.name}
+                          size="md"
+                          className="pending-photo"
+                        />
                         <div className="pending-student">
-                          <strong>{student.name}</strong>
-                          <span>
-                            ID {student.studentId} · {student.program || "Program not set"} · {student.section || "Section not set"}
-                          </span>
+                          <strong>{displayName}</strong>
+                          <span>{formatStudentMetaLine(student)}</span>
                           <small>Submitted {new Date(enrollment.joinedAt).toLocaleString()}</small>
                         </div>
                         <div className="pending-actions">
@@ -148,7 +187,11 @@ export default function PendingValidationList({
                             className="button button-quiet pending-decline"
                             disabled={busyId === enrollment.id}
                             onClick={() => {
-                              if (window.confirm("Decline this join request? The student may submit again later.")) {
+                              if (
+                                window.confirm(
+                                  "Decline this join request? The student may submit again later.",
+                                )
+                              ) {
                                 onDecline(enrollment.id);
                               }
                             }}
@@ -168,21 +211,40 @@ export default function PendingValidationList({
             {autoApproved.length > 0 ? (
               <section className="notifications-section" aria-label="Auto approved join requests">
                 <div className="notifications-section-header">
-                  <span><Icon name="userCheck" size={15} /> Auto approved</span>
-                  {unreadAutoApproved ? <span className="notification-badge">{unreadAutoApproved} unread</span> : null}
+                  <span>
+                    <Icon name="userCheck" size={15} /> Auto approved
+                  </span>
+                  {unreadAutoApproved ? (
+                    <span className="notification-badge">{unreadAutoApproved} unread</span>
+                  ) : null}
                 </div>
                 <div className="pending-list">
                   {autoApproved.map((enrollment) => {
                     const student = enrollment.studentProfile;
+                    const displayName =
+                      formatStudentDisplayName(student.name, student) || student.name;
                     return (
-                      <article className={`pending-row pending-row-auto-approved${enrollment.isRead ? " pending-row-read" : ""}`} key={enrollment.id}>
-                        <Avatar src={student.photo} name={student.name} size="md" className="pending-photo" />
+                      <article
+                        className={`pending-row pending-row-auto-approved${enrollment.isRead ? " pending-row-read" : ""}`}
+                        key={enrollment.id}
+                      >
+                        <Avatar
+                          src={student.photo}
+                          name={student.name}
+                          size="md"
+                          className="pending-photo"
+                        />
                         <div className="pending-student">
-                          <strong>{student.name}</strong>
-                          <span>ID {student.studentId} · {student.program || "Program not set"} · {student.section || "Section not set"}</span>
-                          <small>Matched the student list · {new Date(enrollment.autoApprovedAt).toLocaleString()}</small>
+                          <strong>{displayName}</strong>
+                          <span>{formatStudentMetaLine(student)}</span>
+                          <small>
+                            Matched the student list ·{" "}
+                            {new Date(enrollment.autoApprovedAt).toLocaleString()}
+                          </small>
                         </div>
-                        <span className={`notification-status${enrollment.isRead ? " is-read" : ""}`}>
+                        <span
+                          className={`notification-status${enrollment.isRead ? " is-read" : ""}`}
+                        >
                           {enrollment.isRead ? "Auto approved · Read" : "Auto approved"}
                         </span>
                       </article>
@@ -196,16 +258,28 @@ export default function PendingValidationList({
               <section className="notifications-section" aria-label="Attendance warnings">
                 <div className="notifications-section-header">
                   <span>
-                    <Icon name="alert" size={15} /> Drop warnings ({ABSENCE_WARNING_THRESHOLD}+ absences)
+                    <Icon name="alert" size={15} /> Drop warnings ({ABSENCE_WARNING_THRESHOLD}+
+                    absences)
                   </span>
-                  {unreadWarnings ? <span className="notification-badge notification-badge-danger">{unreadWarnings} unread</span> : null}
+                  {unreadWarnings ? (
+                    <span className="notification-badge notification-badge-danger">
+                      {unreadWarnings} unread
+                    </span>
+                  ) : null}
                 </div>
                 <div className="pending-list">
                   {absenceWarnings.map((warning) => {
-                    const student = warning.studentProfile;
+                    const student = resolveWarningStudent(warning);
+                    const displayName =
+                      formatStudentDisplayName(student.name, student) || student.name;
+                    const absentCount =
+                      warning.absenceCount ?? warning.absentCount ?? ABSENCE_WARNING_THRESHOLD;
                     const resolvedClassName = warning.className || className || "this class";
                     return (
-                      <article className={`pending-row pending-row-warning${warning.isRead ? " pending-row-read" : ""}`} key={warning.id || student.id}>
+                      <article
+                        className={`pending-row pending-row-warning${warning.isRead ? " pending-row-read" : ""}`}
+                        key={warning.id || student.id}
+                      >
                         <Avatar
                           src={student.photo}
                           name={student.name}
@@ -214,20 +288,30 @@ export default function PendingValidationList({
                         />
                         <div className="pending-student">
                           <strong>
-                            {student.name} has {warning.absenceCount} absences in {resolvedClassName} and may be subject to dropping
+                            {displayName} has {absentCount} absences in {resolvedClassName} and may
+                            be subject to dropping
                           </strong>
-                          <span>
-                            ID {student.studentId} · {student.program || "Program not set"} · {student.section || "Section not set"}
-                          </span>
+                          <span>{formatStudentMetaLine(student)}</span>
                         </div>
-                        <div className="pending-actions">
+                        <div className="pending-actions pending-actions-warning">
+                          {onReviewInStudentList ? (
+                            <button
+                              type="button"
+                              className="button button-primary button-small"
+                              onClick={() => onReviewInStudentList(warning, student)}
+                            >
+                              <Icon name="users" size={14} /> Review in Student List
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             className="button button-secondary button-small"
                             disabled={readWarningBusyId === student.id}
                             onClick={() => onViewWarning?.(warning)}
                           >
-                            {readWarningBusyId === student.id ? "Opening…" : "View attendance & index card"}
+                            {readWarningBusyId === student.id
+                              ? "Opening…"
+                              : "View attendance & index card"}
                           </button>
                           <button
                             type="button"
@@ -244,17 +328,17 @@ export default function PendingValidationList({
                 </div>
               </section>
             ) : null}
-
           </div>
         ) : (
           <div className="empty-state pending-empty">
             <Icon name="check" />
             <strong>All caught up</strong>
-            <span>New unmatched join requests and 7-absence drop warnings will appear here.</span>
+            <span>
+              New unmatched join requests and 7-absence drop warnings will appear here.
+            </span>
           </div>
         )}
       </aside>
     </div>
   );
 }
-

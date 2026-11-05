@@ -74,3 +74,51 @@ export function formatClassSchedule(classRecord) {
   });
   return text || "Schedule not set";
 }
+
+
+export function formatScheduleChip(classRecord) {
+  if (!classRecord) return "Schedule not set";
+  const sortedDays = sortScheduleDays(classRecord.scheduleDays || classRecord.days || []);
+  const startMinutes = parseTimeToMinutes(classRecord.scheduleStartTime || classRecord.startTime || "");
+  const endMinutes = parseTimeToMinutes(classRecord.scheduleEndTime || classRecord.endTime || "");
+  if (sortedDays.length && startMinutes != null && endMinutes != null && endMinutes > startMinutes) {
+    const startHours24 = Math.floor(startMinutes / 60);
+    const endHours24 = Math.floor(endMinutes / 60);
+    const startPeriod = startHours24 >= 12 ? "PM" : "AM";
+    const endPeriod = endHours24 >= 12 ? "PM" : "AM";
+    const startHours12 = startHours24 % 12 || 12;
+    const startClock = `${startHours12}:${String(startMinutes % 60).padStart(2, "0")}`;
+    const timeRange =
+      startPeriod === endPeriod
+        ? `${startClock} – ${formatMinutesTo12h(endMinutes)}`
+        : `${formatMinutesTo12h(startMinutes)} – ${formatMinutesTo12h(endMinutes)}`;
+    return `${sortedDays.join(", ")} · ${timeRange}`;
+  }
+  if (sortedDays.length) {
+    return sortedDays.join(", ");
+  }
+  return String(classRecord.schedule || "").trim() || "Schedule not set";
+}
+
+export function getManilaWeekday(date = new Date()) {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    timeZone: "Asia/Manila",
+  }).format(date);
+}
+
+export function doesClassMeetToday(classRecord, date = new Date()) {
+  const days = classRecord?.scheduleDays || classRecord?.days || [];
+  if (!Array.isArray(days) || !days.length) return false;
+  const todayShort = getManilaWeekday(date).slice(0, 3).toLowerCase();
+  return days.some((day) => String(day || "").trim().slice(0, 3).toLowerCase() === todayShort);
+}
+
+export function formatManilaTodayChip(date = new Date()) {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: "Asia/Manila",
+  }).format(date);
+}

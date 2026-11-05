@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Icon from "../Icon";
-import { Badge, Button, Card, PageHeader } from "../DesignSystem";
+import { Badge, Button, Card } from "../DesignSystem";
+import { ModuleHeader } from "./ClassShell";
 
 const RECORD_TYPES = [
   { key: "overview", label: "Class Information" },
@@ -48,11 +49,9 @@ export default function ExportModule({ classRecord, students = [], pendingEnroll
 
   return (
     <div className="export-module">
-      <PageHeader
-        eyebrow="Data export"
-        icon="spreadsheet"
+      <ModuleHeader
         title="Export class data"
-        description="Choose which record types to include, select a format, then click Export."
+        subtitle="Choose which record types to include, select a format, then click Export."
       />
 
       <div className="export-summary-grid">

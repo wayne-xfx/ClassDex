@@ -4,7 +4,8 @@ import Icon from "../Icon";
 import { Button, Modal } from "../DesignSystem";
 import { api } from "../../api";
 import ModuleSkeleton from "./ModuleSkeleton";
-import { formatStudentName } from "./studentNames";
+import { ModuleHeader } from "./ClassShell";
+import { formatStudentDisplayName, formatStudentName } from "./studentNames";
 
 const ID_PATTERN = /^\d{7}$/;
 
@@ -267,14 +268,20 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
 
   return (
     <section className="panel student-list-manager" aria-labelledby="student-list-manager-title">
-      <div className="student-list-manager-heading">
-        <div>
-          <span className="eyebrow"><Icon name="users" /> Student List</span>
-          <h2 id="student-list-manager-title">{readOnly ? "View the students in this class" : "Manage the students in this class"}</h2>
-          <p>{readOnly ? "This class is archived. View the student list and drop list in read-only mode." : "Use the student list to automatically recognize join requests and maintain official class enrollment."}</p>
-        </div>
-        <button type="button" className="button button-quiet" onClick={onClose}>Close</button>
-      </div>
+      <ModuleHeader
+        titleId="student-list-manager-title"
+        title={readOnly ? "View the students in this class" : "Manage the students in this class"}
+        subtitle={
+          readOnly
+            ? "This class is archived. View the student list and drop list in read-only mode."
+            : "Use the student list to automatically recognize join requests and maintain official class enrollment."
+        }
+        actions={
+          <button type="button" className="button button-quiet" onClick={onClose}>
+            Close
+          </button>
+        }
+      />
 
       <div className="flex gap-2 border-b border-slate-200 dark:border-slate-800 pb-3 mt-4" role="tablist">
         <button
@@ -480,7 +487,7 @@ export default function StudentListManager({ classId, onClose, onCountChange, on
                       <td>
                         <div className="student-list-name-cell">
                           <Avatar src={entry.photo} name={entry.studentName} size="sm" className="student-list-avatar" />
-                          <span>{formatStudentName(entry.studentName, entry)}</span>
+                          <span>{formatStudentDisplayName(entry.studentName, entry) || formatStudentName(entry.studentName, entry)}</span>
                         </div>
                       </td>
                       <td>{entry.studentId}</td>

@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Avatar from "../Avatar";
 import Icon from "../Icon";
-import { Badge, Button, Card, Modal, PageHeader, StatusPill } from "../DesignSystem";
+import { Badge, Button, Card, Modal, StatusPill } from "../DesignSystem";
 import ModuleSkeleton from "./ModuleSkeleton";
 import { ConfirmDialog, EmptyState } from "./ClassroomComponents";
-import { formatStudentName } from "./studentNames";
+import { ModuleHeader } from "./ClassShell";
+import {
+  formatProgramSection,
+  formatStudentDisplayName,
+  formatStudentName,
+} from "./studentNames";
 import { api } from "../../api";
 
 function getRows(response) {
@@ -125,8 +130,13 @@ function ScoreRow({ entry, maxScore, onSave, inputRef, onEnter, readOnly = false
           className="scoring-student-photo"
         />
         <div className="scoring-student-copy">
-          <strong>{formatStudentName(entry.student.name)}</strong>
-          <span>ID {entry.student.studentId}</span>
+          <strong>{formatStudentDisplayName(entry.student.name, entry.student) || formatStudentName(entry.student.name)}</strong>
+          <span>
+            ID {entry.student.studentId}
+            {formatProgramSection(entry.student.program, entry.student.section)
+              ? ` · ${formatProgramSection(entry.student.program, entry.student.section)}`
+              : ""}
+          </span>
         </div>
         {isAbsent ? <StatusPill tone="absent" icon="x" title="Marked absent in attendance">Absent</StatusPill> : null}
       </div>
@@ -140,7 +150,7 @@ function ScoreRow({ entry, maxScore, onSave, inputRef, onEnter, readOnly = false
           max={maxScore ?? undefined}
           step="1"
           value={value}
-          aria-label={`Score for ${formatStudentName(entry.student.name)}`}
+          aria-label={`Score for ${formatStudentDisplayName(entry.student.name, entry.student) || formatStudentName(entry.student.name)}`}
           disabled={isLocked}
           onChange={(event) => changeValue(event.target.value)}
           onBlur={handleBlur}
@@ -209,21 +219,17 @@ export function ScoringSheet({ title, maxScore, entries, absentCount, onSave, ba
   return (
     <div className="scoring-sheet">
       <div className="scoring-sheet-heading">
-        <div>
-          <button type="button" className="back-link scoring-back" onClick={back}>
-            <Icon name="chevron" /> {backLabel}
-          </button>
-          <PageHeader
-            eyebrow="Scoring sheet"
-            icon="book"
-            title={title}
-            description={
-              readOnly
-                ? `Read-only view of recorded scores.${maxScore == null ? "" : ` Maximum score: ${maxScore}.`}`
-                : `Scores save automatically as you enter them.${maxScore == null ? "" : ` Maximum score: ${maxScore}.`}`
-            }
-          />
-        </div>
+        <button type="button" className="back-link scoring-back" onClick={back}>
+          <Icon name="chevron" /> {backLabel}
+        </button>
+        <ModuleHeader
+          title={title}
+          subtitle={
+            readOnly
+              ? `Read-only view of recorded scores.${maxScore == null ? "" : ` Maximum score: ${maxScore}.`}`
+              : `Scores save automatically as you enter them.${maxScore == null ? "" : ` Maximum score: ${maxScore}.`}`
+          }
+        />
       </div>
       <div className="scoring-stats" aria-label="Scoring statistics">
         <Card><strong>{scoredCount}/{entries.length}</strong><span>Scored</span></Card>
@@ -517,12 +523,10 @@ export function ActivitiesModule({ sessionId, students = [], tabCache, readOnly 
 
   return (
     <div className="activity-module">
-      <PageHeader
-        eyebrow="Class activities"
-        icon="book"
+      <ModuleHeader
         title="Activities"
-        description={readOnly ? "View recorded activities and scores from today’s session." : "Create today’s activities and score each admitted student."}
-        action={readOnly || !sessionId ? null : <Button onClick={() => setFormActivity(null)}><Icon name="plus" /> New activity</Button>}
+        subtitle={readOnly ? "View recorded activities and scores from today’s session." : "Create today’s activities and score each admitted student."}
+        actions={readOnly || !sessionId ? null : <Button onClick={() => setFormActivity(null)}><Icon name="plus" /> New activity</Button>}
       />
       {error ? <div className="notice notice-error" role="alert">{error}<button type="button" onClick={() => { setLoading(true); setError(""); reloadActivities(); }}>Retry</button></div> : null}
       {feedback ? <div className="notice notice-error" role="alert">{feedback}<button type="button" onClick={() => setFeedback("")}>Dismiss</button></div> : null}
@@ -724,7 +728,10 @@ export function ProjectsModule({ classId, sessionId, students = [], tabCache, re
 
   return (
     <div className="project-module">
-      <PageHeader eyebrow="Class projects" icon="book" title="Projects" description={readOnly ? "View term project scores for this archived class." : "A shared scoring sheet for your two term projects."} />
+      <ModuleHeader
+        title="Projects"
+        subtitle={readOnly ? "View term project scores for this archived class." : "A shared scoring sheet for your two term projects."}
+      />
       {error ? <div className="notice notice-error" role="alert">{error}<button type="button" onClick={() => { setLoading(true); setError(""); loadProjects(); }}>Retry</button></div> : null}
       <AbsenceBanner count={rosterAbsentCount} />
       {loading ? <ModuleSkeleton aria-label="Loading projects" /> : (

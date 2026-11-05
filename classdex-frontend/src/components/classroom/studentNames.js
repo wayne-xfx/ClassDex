@@ -189,3 +189,101 @@ export function compareStudents(left, right) {
 export function compareStudentsByLastName(left, right) {
   return compareStudents(left, right);
 }
+
+
+function toMiddleInitial(middleStr = "") {
+  const cleaned = String(middleStr || "").trim().replace(/^\.+/, "");
+  const match = /[A-Za-zÀ-ÖØ-öø-ÿ]/.exec(cleaned);
+  return match ? `${match[0].toUpperCase()}.` : "";
+}
+
+function formatCommaDisplayName(trimmed) {
+  const rawSegments = trimmed.split(",").map((segment) => segment.trim()).filter(Boolean);
+  if (rawSegments.length === 0) return "";
+  if (rawSegments.length === 1) return rawSegments[0];
+
+  let lastPart = rawSegments[0];
+  const restSegments = rawSegments.slice(1);
+  let suffix = "";
+
+  if (restSegments.length >= 2 && isSuffixToken(restSegments[restSegments.length - 1])) {
+    suffix = toCanonicalSuffix(restSegments.pop());
+  }
+
+  const lastTokens = lastPart.split(" ").filter(Boolean);
+  if (lastTokens.length > 1 && isSuffixToken(lastTokens[lastTokens.length - 1])) {
+    suffix = suffix || toCanonicalSuffix(lastTokens.pop());
+    lastPart = lastTokens.join(" ");
+  }
+
+  const givenTokens = restSegments.join(" ").split(" ").filter(Boolean);
+  if (givenTokens.length === 0) {
+    return suffix ? `${lastPart} ${suffix}` : lastPart;
+  }
+  if (givenTokens.length === 1 && isSuffixToken(givenTokens[0]) && !suffix) {
+    return `${lastPart}, ${toCanonicalSuffix(givenTokens[0])}`;
+  }
+  if (givenTokens.length > 1 && isSuffixToken(givenTokens[givenTokens.length - 1])) {
+    suffix = suffix || toCanonicalSuffix(givenTokens.pop());
+  }
+
+  const minFirst = givenTokens.length >= 2 && /^ma\.?$/i.test(givenTokens[0]) ? 2 : 1;
+  let givenFormatted = "";
+  if (givenTokens.length <= minFirst) {
+    givenFormatted = givenTokens.join(" ");
+  } else {
+    let midStart = givenTokens.length - 1;
+    while (midStart > minFirst && SURNAME_PARTICLES.has(givenTokens[midStart - 1].toLowerCase())) {
+      midStart -= 1;
+    }
+    const firstStr = givenTokens.slice(0, midStart).join(" ");
+    const midInitial = toMiddleInitial(givenTokens[midStart]);
+    givenFormatted = midInitial
+      ? `${firstStr} ${midInitial}`
+      : givenTokens.join(" ");
+  }
+
+  return `${lastPart}, ${givenFormatted}${suffix ? ` ${suffix}` : ""}`;
+}
+
+export function formatStudentDisplayName(name = "", studentObj = null) {
+  const trimmed = String(name || "").trim().replace(/\s+/g, " ");
+
+  if (trimmed.includes(",")) {
+    return formatCommaDisplayName(trimmed);
+  }
+
+  if (trimmed && !trimmed.includes(" ")) {
+    return trimmed;
+  }
+
+  const structuredLast = String(studentObj?.lastName || "").trim().replace(/\s+/g, " ");
+  const structuredFirst = String(studentObj?.firstName || "").trim().replace(/\s+/g, " ");
+  if (structuredLast && structuredFirst) {
+    const structuredMiddle = String(studentObj?.middleName || "").trim().replace(/\s+/g, " ");
+    let effectiveFirst = structuredFirst;
+    let midInitial = "";
+    if (structuredMiddle) {
+      const midTokens = structuredMiddle.split(" ").filter(Boolean);
+      let midStart = midTokens.length - 1;
+      while (midStart > 0 && SURNAME_PARTICLES.has(midTokens[midStart - 1].toLowerCase())) {
+        midStart -= 1;
+      }
+      if (midStart > 0) {
+        effectiveFirst = `${structuredFirst} ${midTokens.slice(0, midStart).join(" ")}`;
+      }
+      midInitial = toMiddleInitial(midTokens[midStart]);
+    }
+    const rawSuffix = String(studentObj?.suffix || "").trim().replace(/\s+/g, " ");
+    const suffix = rawSuffix ? toCanonicalSuffix(rawSuffix) : "";
+    return `${structuredLast}, ${effectiveFirst}${midInitial ? ` ${midInitial}` : ""}${suffix ? ` ${suffix}` : ""}`;
+  }
+
+  return trimmed;
+}
+
+export function formatProgramSection(program = "", section = "") {
+  const cleanProgram = String(program || "").trim().replace(/\s+/g, " ").toUpperCase();
+  const cleanSection = String(section || "").trim().replace(/\s+/g, " ").toUpperCase();
+  return [cleanProgram, cleanSection].filter(Boolean).join(" · ");
+}

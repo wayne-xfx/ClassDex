@@ -24,6 +24,8 @@ const PATHS = {
   upload: <><path d="M12 16V4m-5 5 5-5 5 5" /><path d="M4 16v4h16v-4" /></>,
   logout: <><path d="M10 17l5-5-5-5m5 5H3" /><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" /></>,
   arrow: <><path d="M5 12h14m-7-7 7 7-7 7" /></>,
+  arrowLeft: <><path d="M19 12H5m7-7-7 7 7 7" /></>,
+  moreHorizontal: <><circle cx="5" cy="12" r="1.5" fill="currentColor" /><circle cx="12" cy="12" r="1.5" fill="currentColor" /><circle cx="19" cy="12" r="1.5" fill="currentColor" /></>,
   camera: <><path d="M14 5h-4L8 7H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3Z" /><circle cx="12" cy="13" r="3" /></>,
   check: <path d="m5 12 4 4L19 6" />,
   clipboardCheck: <><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4V2h6v2m-4 8 2 2 4-4" /></>,

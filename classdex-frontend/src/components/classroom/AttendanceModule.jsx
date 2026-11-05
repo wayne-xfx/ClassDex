@@ -1,8 +1,13 @@
 import { useMemo, useState } from "react";
 import Avatar from "../Avatar";
 import Icon from "../Icon";
+import { ModuleHeader } from "./ClassShell";
 import { StatCounter, StatusButton, StudentCard } from "./ClassroomComponents";
-import { formatStudentName } from "./studentNames";
+import {
+  formatProgramSection,
+  formatStudentDisplayName,
+  formatStudentName,
+} from "./studentNames";
 
 const ATTENDANCE_STATUSES = ["PRESENT", "LATE", "ABSENT"];
 
@@ -99,46 +104,58 @@ export default function AttendanceModule({
 
   return (
     <div className="attendance-module">
-      <div className="attendance-heading">
-        <div>
-          <span className="eyebrow"><Icon name="clipboardCheck" /> Attendance</span>
-          <h2>Attendance</h2>
-          <p>Review attendance cards or take attendance one student at a time.</p>
-        </div>
-        {!readOnly ? (
-          <form className="grace-control" noValidate onSubmit={saveGracePeriod}>
-            <label htmlFor="grace-period">Grace period</label>
-            <div className="grace-input-row">
-              <input
-                id="grace-period"
-                className={`input${graceError ? " input-invalid" : ""}`}
-                type="number"
-                min="0"
-                max="1440"
-                step="1"
-                required
-                value={inputGraceValue}
-                onChange={(event) => {
-                  setGraceValue(event.target.value);
-                  if (graceError) setGraceError("");
-                }}
-                aria-invalid={Boolean(graceError)}
-                aria-describedby={graceError ? "grace-period-error grace-period-help" : "grace-period-help"}
-              />
-              <span>min</span>
-              <button className="button button-secondary" type="submit" disabled={savingGracePeriod}>
-                {savingGracePeriod ? "Saving…" : "Save"}
-              </button>
-            </div>
-            {graceError ? (
-              <div id="grace-period-error" className="field-error" role="alert" style={{ marginTop: 6 }}>
-                {graceError}
+      <ModuleHeader
+        title="Attendance"
+        subtitle="Review attendance cards or take attendance one student at a time."
+        actions={
+          !readOnly ? (
+            <form className="grace-control" noValidate onSubmit={saveGracePeriod}>
+              <label htmlFor="grace-period">Grace period</label>
+              <div className="grace-input-row">
+                <input
+                  id="grace-period"
+                  className={`input${graceError ? " input-invalid" : ""}`}
+                  type="number"
+                  min="0"
+                  max="1440"
+                  step="1"
+                  required
+                  value={inputGraceValue}
+                  onChange={(event) => {
+                    setGraceValue(event.target.value);
+                    if (graceError) setGraceError("");
+                  }}
+                  aria-invalid={Boolean(graceError)}
+                  aria-describedby={
+                    graceError ? "grace-period-error grace-period-help" : "grace-period-help"
+                  }
+                />
+                <span>min</span>
+                <button
+                  className="button button-secondary"
+                  type="submit"
+                  disabled={savingGracePeriod}
+                >
+                  {savingGracePeriod ? "Saving…" : "Save"}
+                </button>
               </div>
-            ) : null}
-            <span id="grace-period-help">Present is recorded as Late after the session starts plus this time.</span>
-          </form>
-        ) : null}
-      </div>
+              {graceError ? (
+                <div
+                  id="grace-period-error"
+                  className="field-error"
+                  role="alert"
+                  style={{ marginTop: 6 }}
+                >
+                  {graceError}
+                </div>
+              ) : null}
+              <span id="grace-period-help">
+                Present is recorded as Late after the session starts plus this time.
+              </span>
+            </form>
+          ) : null
+        }
+      />
 
       <div className="attendance-stats">
         <StatCounter label="Present" value={counts.PRESENT} tone="present" />
@@ -167,10 +184,10 @@ export default function AttendanceModule({
                 <article className="recitation-card attendance-focus-card">
                   <span className="recitation-call-label">Student {activeIndex + 1} of {students.length}</span>
                   <Avatar src={currentStudent.photo} name={currentStudent.name} size="lg" className="recitation-student-photo" />
-                  <h3>{formatStudentName(currentStudent.name)}</h3>
+                  <h3>{formatStudentDisplayName(currentStudent.name, currentStudent) || formatStudentName(currentStudent.name)}</h3>
                   <p className="recitation-student-id">Student ID · {currentStudent.studentId}</p>
                   <p className="recitation-student-program">
-                    {[currentStudent.program, currentStudent.section].filter(Boolean).join(" · ") || "Student"}
+                    {formatProgramSection(currentStudent.program, currentStudent.section) || "Student"}
                   </p>
                   <div className="attendance-focus-actions" aria-label={`Mark ${currentStudent.name}`}>
                     {ATTENDANCE_STATUSES.map((status) => (
