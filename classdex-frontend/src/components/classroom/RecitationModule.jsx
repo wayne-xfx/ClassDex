@@ -16,14 +16,15 @@ import {
 } from "../../utils/shuffleSound";
 
 export default function RecitationModule({
-  eligibleStudents,
-  currentCall,
-  history,
-  mode,
+  eligibleStudents = [],
+  currentCall = null,
+  history = [],
+  mode = "RANDOM",
   onModeChange,
   onShuffle,
   onScoreChange,
   onSkip,
+  onOpenAttendance,
   busy = false,
   savingScore = false,
   animationEnabled = true,
@@ -37,9 +38,14 @@ export default function RecitationModule({
   const count = eligibleStudents.length;
   const [previewIndex, setPreviewIndex] = useState(0);
   const [soundMuted, setSoundMuted] = useState(getSavedShuffleMuted);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [showWeightedInfo, setShowWeightedInfo] = useState(false);
+
   const soundMutedRef = useRef(soundMuted);
   const userGestureActiveRef = useRef(false);
   const lastRevealedLogIdRef = useRef(currentCall?.log?.id || null);
+  const settingsRef = useRef(null);
+  const tooltipRef = useRef(null);
 
   useEffect(() => {
     soundMutedRef.current = soundMuted;
@@ -54,6 +60,11 @@ export default function RecitationModule({
       }
       return nextMuted;
     });
+  }
+
+  function handleSettingsToggle() {
+    unlockShuffleAudio();
+    setSettingsOpen((prev) => !prev);
   }
 
   function handleShuffleClick() {
@@ -71,6 +82,32 @@ export default function RecitationModule({
     }
     onSkip(animationEnabled);
   }
+
+  // Click outside and Escape key handler for Settings popover and Weighted Info tooltip
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (settingsRef.current && !settingsRef.current.contains(event.target)) {
+        setSettingsOpen(false);
+      }
+      if (tooltipRef.current && !tooltipRef.current.contains(event.target)) {
+        setShowWeightedInfo(false);
+      }
+    }
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        setSettingsOpen(false);
+        setShowWeightedInfo(false);
+      }
+    }
+    if (settingsOpen || showWeightedInfo) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("keydown", handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [settingsOpen, showWeightedInfo]);
 
   useEffect(() => {
     const reduceMotion = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -126,44 +163,155 @@ export default function RecitationModule({
         title="Who’s up next?"
         subtitle="Students marked Present or Late today can be called."
         actions={
-          <div className="recitation-pool-count">
-            <span>{count}</span>
-            <div>
-              <strong>{count} {count === 1 ? "student" : "students"} in the pool</strong>
-              <small>Present today</small>
-            </div>
+          <div className="recitation-pool-badge">
+            <Icon name="users" size={16} />
+            <span>{count} eligible {count === 1 ? "student" : "students"} · Present or Late today</span>
           </div>
         }
       />
 
-      <div className="recitation-mode" role="group" aria-label="Recitation shuffle mode">
-        <span>Pick mode</span>
-        <button
-          type="button"
-          aria-pressed={mode === "RANDOM"}
-          className={mode === "RANDOM" ? "is-active" : ""}
-          onClick={() => onModeChange("RANDOM")}
-        >
-          <Icon name="shuffle" size={16} /> Random
-        </button>
-        <button
-          type="button"
-          aria-pressed={mode === "WEIGHTED"}
-          className={mode === "WEIGHTED" ? "is-active" : ""}
-          onClick={() => onModeChange("WEIGHTED")}
-        >
-          <Icon name="sparkles" size={16} /> Weighted
-        </button>
-        <span className="recitation-mode-help">
-          {mode === "WEIGHTED" ? "Favors students called less often this term." : "Every eligible student has an equal chance."}
-        </span>
-      </div>
+      {/* Merged Deck & Mode Card */}
+      <section className="recitation-deck-card" aria-label="Recitation controls and shuffle deck">
+        <div className="recitation-deck-toolbar">
+          <div className="recitation-mode-block">
+            <span className="recitation-mode-label">Pick mode</span>
+            <div className="recitation-mode-toggle" role="group" aria-label="Recitation shuffle mode">
+              <button
+                type="button"
+                aria-pressed={mode === "RANDOM"}
+                className={`recitation-mode-btn ${mode === "RANDOM" ? "is-active" : ""}`}
+                onClick={() => onModeChange("RANDOM")}
+              >
+                <Icon name="shuffle" size={15} />
+                <span>Random</span>
+              </button>
+              <button
+                type="button"
+                aria-pressed={mode === "WEIGHTED"}
+                className={`recitation-mode-btn ${mode === "WEIGHTED" ? "is-active" : ""}`}
+                onClick={() => onModeChange("WEIGHTED")}
+              >
+                <Icon name="sparkles" size={15} />
+                <span>Weighted</span>
+              </button>
+            </div>
 
-      <section className="recitation-mini-deck" aria-label="Eligible students in the shuffle deck">
-        <div className="recitation-mini-deck-heading">
-          <strong>Shuffle deck</strong>
-          <span>Present and Late students · {count} cards</span>
+            <div className="recitation-tooltip-anchor" ref={tooltipRef}>
+              <button
+                type="button"
+                className="recitation-help-btn"
+                aria-label="Weighted selection information"
+                aria-expanded={showWeightedInfo}
+                onClick={() => setShowWeightedInfo((prev) => !prev)}
+                onFocus={() => setShowWeightedInfo(true)}
+                onBlur={() => setShowWeightedInfo(false)}
+                onMouseEnter={() => setShowWeightedInfo(true)}
+                onMouseLeave={() => setShowWeightedInfo(false)}
+              >
+                ?
+              </button>
+              {showWeightedInfo ? (
+                <div className="recitation-help-popover" role="tooltip">
+                  Students with fewer prior recitation calls in this class receive higher selection weight (1 / (1 + calls)).
+                </div>
+              ) : null}
+            </div>
+
+            <span className="recitation-mode-help">
+              {mode === "WEIGHTED" ? "Favors students called less often this term." : "Every eligible student has an equal chance."}
+            </span>
+          </div>
+
+          {!readOnly ? (
+            <div className="recitation-actions-bar">
+              <button
+                type="button"
+                className="button button-primary recitation-shuffle-btn"
+                disabled={!count || busy || savingScore}
+                onClick={handleShuffleClick}
+              >
+                <Icon name="shuffle" size={16} />
+                <span>{busy ? "Picking…" : student ? "Shuffle again" : "Shuffle"}</span>
+              </button>
+              {student ? (
+                <button
+                  type="button"
+                  className="button button-secondary recitation-skip-btn"
+                  disabled={count < 2 || busy || savingScore}
+                  onClick={handleSkipClick}
+                >
+                  <Icon name="arrow" size={16} />
+                  <span>Skip</span>
+                </button>
+              ) : null}
+
+              <div className="recitation-settings-anchor" ref={settingsRef}>
+                <button
+                  type="button"
+                  className={`button button-secondary recitation-settings-btn ${settingsOpen ? "is-active" : ""}`}
+                  aria-label="Recitation shuffle settings"
+                  aria-haspopup="dialog"
+                  aria-expanded={settingsOpen}
+                  onClick={handleSettingsToggle}
+                >
+                  <Icon name="settings" size={17} />
+                </button>
+
+                {settingsOpen ? (
+                  <div className="recitation-settings-popover" role="dialog" aria-label="Shuffle settings">
+                    <div className="recitation-settings-header">
+                      <strong>Shuffle settings</strong>
+                    </div>
+                    <div className="recitation-settings-body">
+                      <button
+                        type="button"
+                        className={`recitation-sound-btn ${soundMuted ? "is-muted" : ""}`}
+                        aria-pressed={!soundMuted}
+                        aria-label={soundMuted ? "Unmute shuffle sound" : "Mute shuffle sound"}
+                        onClick={toggleSoundMuted}
+                      >
+                        <Icon name={soundMuted ? "volumeOff" : "volume"} size={16} />
+                        <span>{soundMuted ? "Sound muted" : "Sound on"}</span>
+                      </button>
+
+                      <label className="recitation-switch-row">
+                        <span>Shuffle animation</span>
+                        <input
+                          type="checkbox"
+                          role="switch"
+                          aria-label="Shuffle animation"
+                          checked={animationEnabled}
+                          onChange={(e) => onAnimationChange(e.target.checked)}
+                        />
+                        <span className="recitation-switch-track" aria-hidden="true" />
+                      </label>
+
+                      <div className="recitation-duration-row">
+                        <label className="recitation-duration-label" htmlFor="recitation-duration-slider">
+                          <Icon name="timer" size={15} />
+                          <span>Duration ({durationSeconds}s)</span>
+                        </label>
+                        <input
+                          id="recitation-duration-slider"
+                          type="range"
+                          min="1"
+                          max="7"
+                          step="1"
+                          value={durationSeconds}
+                          disabled={!animationEnabled || busy}
+                          aria-label="Shuffle animation duration"
+                          onChange={(e) => onDurationChange?.(Number(e.target.value))}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
         </div>
+
+        {/* Eligible student strip */}
         {count ? (
           <div className="recitation-mini-cards">
             {eligibleStudents.map((eligibleStudent) => {
@@ -195,46 +343,7 @@ export default function RecitationModule({
         )}
       </section>
 
-      {!readOnly ? (
-        <div className="recitation-animation-toggle">
-          <button
-            type="button"
-            className={`recitation-sound-toggle${soundMuted ? " is-muted" : ""}`}
-            aria-pressed={!soundMuted}
-            aria-label={soundMuted ? "Unmute shuffle sound" : "Mute shuffle sound"}
-            onClick={toggleSoundMuted}
-          >
-            <Icon name={soundMuted ? "volumeOff" : "volume"} size={16} />
-            <span>{soundMuted ? "Sound muted" : "Sound on"}</span>
-          </button>
-          <label className="recitation-animation-switch">
-            <span>Shuffle animation</span>
-            <input
-              type="checkbox"
-              role="switch"
-              aria-label="Shuffle animation"
-              checked={animationEnabled}
-              onChange={(event) => onAnimationChange(event.target.checked)}
-            />
-            <span className="recitation-switch-track" aria-hidden="true" />
-          </label>
-          <label className="recitation-duration-control" title="Shuffle animation duration">
-            <Icon name="timer" size={15} />
-            <span>{durationSeconds} s</span>
-            <input
-              type="range"
-              min="1"
-              max="7"
-              step="1"
-              value={durationSeconds}
-              disabled={!animationEnabled || busy}
-              aria-label="Shuffle animation duration"
-              onChange={(event) => onDurationChange?.(Number(event.target.value))}
-            />
-          </label>
-        </div>
-      ) : null}
-
+      {/* Stage: Shuffling card, Revealed speaker card, or Compact empty card */}
       <section className="recitation-stage" aria-live="polite" aria-atomic="true">
         {busy && animationEnabled && previewStudent ? (
           <article className="recitation-shuffling-card" key={previewStudent.id}>
@@ -275,40 +384,29 @@ export default function RecitationModule({
         ) : (
           <div className="recitation-empty-card">
             <div className="recitation-deck-art" aria-hidden="true">
-              <span /><span /><span><Icon name="shuffle" size={25} /></span>
+              <span /><span /><span><Icon name="shuffle" size={24} /></span>
             </div>
             <h3>{count ? "The deck is ready" : "No one in the pool yet"}</h3>
-            <p>{count
-              ? "Shuffle to reveal the next student. You can change or skip the pick at any time."
-              : "Mark students Present or Late in Attendance. Absent and Unmarked students are never included."}</p>
+            <p>
+              {count
+                ? "Shuffle to reveal the next student. You can change or skip the pick at any time."
+                : "Mark students Present or Late in Attendance. Absent and Unmarked students are never included."}
+            </p>
+            {!count && onOpenAttendance ? (
+              <button
+                type="button"
+                className="button button-secondary recitation-empty-attendance-btn"
+                onClick={onOpenAttendance}
+              >
+                <Icon name="clipboardCheck" size={16} />
+                <span>Go to Attendance</span>
+              </button>
+            ) : null}
           </div>
         )}
       </section>
 
-      {!readOnly ? (
-        <>
-          <div className="recitation-actions">
-            <button
-              type="button"
-              className="button button-primary recitation-primary-action"
-              disabled={!count || busy || savingScore}
-              onClick={handleShuffleClick}
-            >
-              <Icon name="shuffle" />
-              {busy ? "Picking…" : student ? "Shuffle again" : "Shuffle"}
-            </button>
-            {student ? (
-              <button type="button" className="button button-secondary" disabled={count < 2 || busy || savingScore} onClick={handleSkipClick}>
-                <Icon name="arrow" /> Skip
-              </button>
-            ) : null}
-          </div>
-          {!count ? (
-            <p className="recitation-pool-hint"><Icon name="clock" size={15} /> The shuffle is disabled until at least one student is marked Present or Late.</p>
-          ) : null}
-        </>
-      ) : null}
-
+      {/* History */}
       {history.length ? (
         <section className="recitation-history" aria-label="Students called today">
           <div className="recitation-history-heading">
@@ -318,17 +416,19 @@ export default function RecitationModule({
           <ol>
             {history.map((call) => {
               const displayName =
-                formatStudentDisplayName(call.student.name, call.student) || call.student.name;
+                formatStudentDisplayName(call.student?.name, call.student) ||
+                formatStudentName(call.student?.name) ||
+                call.student?.name;
               return (
-              <li key={call.id}>
-                <Avatar src={call.student.photo} name={call.student.name} size="sm" className="history-student-photo" />
-                <span className="history-student-name">{displayName}</span>
-                <span className="history-student-score">{call.score === null ? "No score" : `Score ${call.score}`}</span>
-                <time dateTime={call.calledAt}>
-                  {new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" }).format(new Date(call.calledAt))}
-                </time>
-              </li>
-            );
+                <li key={call.id}>
+                  <Avatar src={call.student?.photo} name={call.student?.name} size="sm" className="history-student-photo" />
+                  <span className="history-student-name">{displayName}</span>
+                  <span className="history-student-score">{call.score === null ? "No score" : `Score ${call.score}`}</span>
+                  <time dateTime={call.calledAt}>
+                    {new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" }).format(new Date(call.calledAt))}
+                  </time>
+                </li>
+              );
             })}
           </ol>
         </section>

@@ -8472,3 +8472,399 @@ textarea {
 .project-card-actions button {
   min-height: 44px;
 }
+
+
+/* ==========================================================================
+   Recitation Module UI/UX Polish (Fix 6)
+   ========================================================================== */
+
+.recitation-pool-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent-teal) 35%, var(--line));
+  background: color-mix(in srgb, var(--accent-teal) 8%, var(--card));
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.recitation-pool-badge svg {
+  color: var(--accent-teal);
+  flex-shrink: 0;
+}
+
+.recitation-deck-card {
+  margin: 14px 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  box-shadow: 0 2px 8px rgba(18, 38, 79, 0.04);
+}
+
+.recitation-deck-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.recitation-mode-block {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.recitation-mode-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-right: 2px;
+}
+
+.recitation-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--card) 85%, transparent);
+}
+
+.recitation-mode-btn {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.recitation-mode-btn:hover {
+  background: color-mix(in srgb, var(--royal) 8%, transparent);
+  color: var(--navy);
+}
+
+.recitation-mode-btn.is-active {
+  background: var(--royal);
+  color: #ffffff;
+  border-color: var(--royal);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--royal) 25%, transparent);
+}
+
+.recitation-mode-btn:focus-visible {
+  outline: 2px solid var(--royal);
+  outline-offset: 2px;
+}
+
+.recitation-tooltip-anchor {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.recitation-help-btn {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong, var(--line));
+  background: var(--card);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  transition: color 140ms ease, border-color 140ms ease, background-color 140ms ease;
+}
+
+.recitation-help-btn:hover,
+.recitation-help-btn:focus-visible {
+  color: var(--royal);
+  border-color: var(--royal);
+  background: color-mix(in srgb, var(--royal) 8%, var(--card));
+  outline: none;
+}
+
+.recitation-help-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 260px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--navy);
+  color: #ffffff;
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+  z-index: 50;
+  pointer-events: none;
+}
+
+.recitation-help-popover::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 0 6px 6px 6px;
+  border-style: solid;
+  border-color: transparent transparent var(--navy) transparent;
+}
+
+[data-theme="dark"] .recitation-help-popover {
+  background: color-mix(in srgb, var(--card) 95%, #ffffff);
+  border: 1px solid var(--line);
+  color: var(--text, #f1f5f9);
+}
+
+[data-theme="dark"] .recitation-help-popover::before {
+  border-color: transparent transparent var(--card) transparent;
+}
+
+.recitation-mode-help {
+  color: var(--muted);
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+.recitation-actions-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.recitation-shuffle-btn {
+  min-height: 44px;
+  min-width: 130px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.recitation-skip-btn {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.recitation-settings-anchor {
+  position: relative;
+}
+
+.recitation-settings-btn {
+  display: grid;
+  place-items: center;
+  min-height: 44px;
+  width: 44px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 140ms ease, border-color 140ms ease, background-color 140ms ease;
+}
+
+.recitation-settings-btn:hover,
+.recitation-settings-btn.is-active {
+  color: var(--navy);
+  border-color: var(--royal);
+  background: color-mix(in srgb, var(--royal) 8%, var(--card));
+}
+
+.recitation-settings-btn:focus-visible {
+  outline: 2px solid var(--royal);
+  outline-offset: 2px;
+}
+
+.recitation-settings-popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  width: 270px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  background: var(--card);
+  box-shadow: 0 12px 28px rgba(18, 38, 79, 0.16);
+  z-index: 50;
+}
+
+.recitation-settings-header {
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.recitation-settings-header strong {
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.recitation-settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.recitation-sound-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--card) 95%, transparent);
+  color: var(--royal);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.recitation-sound-btn:hover {
+  border-color: var(--royal);
+  background: color-mix(in srgb, var(--royal) 8%, var(--card));
+}
+
+.recitation-sound-btn.is-muted {
+  color: var(--muted);
+}
+
+.recitation-switch-row {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.recitation-switch-row input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.recitation-duration-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recitation-duration-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.recitation-duration-row input[type="range"] {
+  width: 100%;
+  accent-color: var(--royal);
+  cursor: pointer;
+}
+
+.recitation-empty-card {
+  display: flex;
+  max-width: 420px;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 24px 20px;
+}
+
+.recitation-empty-attendance-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  min-height: 44px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.recitation-mini-name,
+.recitation-mini-card > span:not(.avatar) {
+  width: 100%;
+  overflow: hidden;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recitation-mini-late {
+  border-radius: 10px;
+  padding: 2px 6px;
+  background: color-mix(in srgb, #ae7300 12%, var(--card));
+  color: #855000;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .recitation-deck-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .recitation-mode-block {
+    justify-content: space-between;
+  }
+  .recitation-mode-help {
+    width: 100%;
+    margin-left: 0;
+    margin-top: 4px;
+  }
+  .recitation-actions-bar {
+    justify-content: space-between;
+    width: 100%;
+  }
+  .recitation-shuffle-btn {
+    flex: 1;
+  }
+}

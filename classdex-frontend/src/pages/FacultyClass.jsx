@@ -85,6 +85,11 @@ export default function FacultyClass() {
       if (!confirmLeave) return;
     }
     setActiveModule(targetModule);
+    if (searchParams.has("module") && searchParams.get("module") !== targetModule) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set("module", targetModule);
+      setSearchParams(nextParams, { replace: true });
+    }
   }
   const [showPending, setShowPending] = useState(() => new URLSearchParams(window.location.search).get("notifications") === "1");
   const [pendingEnrollments, setPendingEnrollments] = useState([]);
@@ -1082,6 +1087,7 @@ export default function FacultyClass() {
                   onAnimationChange={setRecitationAnimationEnabled}
                   durationSeconds={recitationShuffleSeconds}
                   onDurationChange={saveShuffleDuration}
+                  onOpenAttendance={() => handleModuleChange("attendance")}
                   readOnly={isArchived}
                 />
               ) : activeModule === "activities" ? (
@@ -1091,7 +1097,7 @@ export default function FacultyClass() {
               ) : activeModule === "export" ? (
                 <ExportModule classRecord={classRecord} exportCounts={classRecord?.exportCounts} students={sortedStudents} pendingEnrollments={pendingEnrollments} onExcel={downloadExcelExport} onCsv={downloadCsvExport} />
               ) : activeModule === "quiz" ? (
-                <QuizModule classId={id} students={sortedStudents} attendanceTaken={students.some((student) => student.status !== "UNMARKED")} onTakeAttendance={() => setActiveModule("attendance")} tabCache={tabCache} readOnly={isArchived} />
+                <QuizModule classId={id} students={sortedStudents} attendanceTaken={students.some((student) => student.status !== "UNMARKED")} onTakeAttendance={() => handleModuleChange("attendance")} tabCache={tabCache} readOnly={isArchived} />
               ) : null}
             </ClassShell>
             {selectedStudent ? (
