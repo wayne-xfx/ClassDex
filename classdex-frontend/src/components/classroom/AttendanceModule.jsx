@@ -20,6 +20,7 @@ export default function AttendanceModule({
 }) {
   const [onlyUnmarked, setOnlyUnmarked] = useState(false);
   const [graceValue, setGraceValue] = useState(null);
+  const [graceError, setGraceError] = useState("");
   const [search, setSearch] = useState("");
   const [takingAttendance, setTakingAttendance] = useState(false);
   const [currentStudentId, setCurrentStudentId] = useState(null);
@@ -40,8 +41,13 @@ export default function AttendanceModule({
 
   async function saveGracePeriod(event) {
     event.preventDefault();
-    const minutes = Number(inputGraceValue);
-    if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) return;
+    const trimmed = String(inputGraceValue).trim();
+    const minutes = Number(trimmed);
+    if (!trimmed || !/^\d+$/.test(trimmed) || !Number.isInteger(minutes) || minutes < 0 || minutes > 1440) {
+      setGraceError("Grace period must be a whole number from 0 to 1440 minutes.");
+      return;
+    }
+    setGraceError("");
     const saved = await onSaveGracePeriod(minutes);
     if (saved) setGraceValue(null);
   }
@@ -98,26 +104,35 @@ export default function AttendanceModule({
           <h2>Attendance</h2>
           <p>Review attendance cards or take attendance one student at a time.</p>
         </div>
-        <form className="grace-control" onSubmit={saveGracePeriod}>
+        <form className="grace-control" noValidate onSubmit={saveGracePeriod}>
           <label htmlFor="grace-period">Grace period</label>
           <div className="grace-input-row">
             <input
               id="grace-period"
-              className="input"
+              className={`input${graceError ? " input-invalid" : ""}`}
               type="number"
               min="0"
               max="1440"
               step="1"
               required
               value={inputGraceValue}
-              onChange={(event) => setGraceValue(event.target.value)}
-              aria-describedby="grace-period-help"
+              onChange={(event) => {
+                setGraceValue(event.target.value);
+                if (graceError) setGraceError("");
+              }}
+              aria-invalid={Boolean(graceError)}
+              aria-describedby={graceError ? "grace-period-error grace-period-help" : "grace-period-help"}
             />
             <span>min</span>
             <button className="button button-secondary" type="submit" disabled={savingGracePeriod}>
               {savingGracePeriod ? "Saving…" : "Save"}
             </button>
           </div>
+          {graceError ? (
+            <div id="grace-period-error" className="field-error" role="alert" style={{ marginTop: 6 }}>
+              {graceError}
+            </div>
+          ) : null}
           <span id="grace-period-help">Present is recorded as Late after the session starts plus this time.</span>
         </form>
       </div>
