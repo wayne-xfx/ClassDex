@@ -53,6 +53,24 @@
   --success: var(--accent-present);
   --danger: var(--accent-red);
   --accent-blue: var(--royal);
+  --text-color: var(--ink);
+  /* Solid blue fills (chips, switches, checkboxes) match the primary button in both themes. */
+  --royal-solid: #3569d4;
+  --on-royal-solid: #ffffff;
+  /* Shared attendance status palette (edges/fills + readable text). */
+  --status-present: #278655;
+  --status-late: #c48717;
+  --status-absent: #bb4a52;
+  --status-present-text: #176b47;
+  --status-late-text: #855000;
+  --status-absent-text: #aa373f;
+  --warning: var(--status-late-text);
+}
+
+[data-theme="dark"] {
+  --status-present-text: #94e6b7;
+  --status-late-text: #ffd286;
+  --status-absent-text: #ff9da4;
 }
 
 @theme {
@@ -2386,15 +2404,15 @@ textarea {
 }
 
 .student-card-present .student-card-edge {
-  background: #278655;
+  background: var(--status-present);
 }
 
 .student-card-late .student-card-edge {
-  background: #c48717;
+  background: var(--status-late);
 }
 
 .student-card-absent .student-card-edge {
-  background: #bb4a52;
+  background: var(--status-absent);
 }
 
 .student-card-content {
@@ -3590,9 +3608,9 @@ textarea {
 }
 
 .score-chips button.is-active {
-  border-color: var(--royal);
-  background: var(--royal);
-  color: #fff;
+  border-color: var(--royal-solid);
+  background: var(--royal-solid);
+  color: var(--on-royal-solid);
 }
 
 .score-chips button:disabled {
@@ -4118,7 +4136,7 @@ textarea {
   justify-content: center;
   gap: 6px;
   border: 1px solid var(--line);
-  border-top: 3px solid #278655;
+  border-top: 3px solid var(--status-present);
   border-radius: 11px;
   padding: 8px 6px;
   background:
@@ -4258,16 +4276,19 @@ textarea {
   transition: transform 160ms ease;
 }
 
-.recitation-animation-switch input:checked + .recitation-switch-track {
-  border-color: var(--royal);
-  background: var(--royal);
+.recitation-animation-switch input:checked + .recitation-switch-track,
+.recitation-switch-row input:checked + .recitation-switch-track {
+  border-color: var(--royal-solid);
+  background: var(--royal-solid);
 }
 
-.recitation-animation-switch input:checked + .recitation-switch-track::after {
+.recitation-animation-switch input:checked + .recitation-switch-track::after,
+.recitation-switch-row input:checked + .recitation-switch-track::after {
   transform: translateX(20px);
 }
 
-.recitation-animation-switch input:focus-visible + .recitation-switch-track {
+.recitation-animation-switch input:focus-visible + .recitation-switch-track,
+.recitation-switch-row input:focus-visible + .recitation-switch-track {
   outline: 3px solid color-mix(in srgb, var(--royal) 55%, transparent);
   outline-offset: 3px;
 }
@@ -6062,9 +6083,9 @@ textarea {
 }
 
 .schedule-day-pill.is-selected {
-  border-color: var(--royal);
-  background: var(--royal);
-  color: #ffffff;
+  border-color: var(--royal-solid);
+  background: var(--royal-solid);
+  color: var(--on-royal-solid);
 }
 
 .schedule-time-grid {
@@ -7549,21 +7570,21 @@ textarea {
 }
 
 .attendance-filter-pill.pill-present.is-active {
-  border-color: #16a34a;
-  background: color-mix(in srgb, #16a34a 12%, var(--card));
-  color: #15803d;
+  border-color: var(--status-present);
+  background: color-mix(in srgb, var(--status-present) 12%, var(--card));
+  color: var(--status-present-text);
 }
 
 .attendance-filter-pill.pill-late.is-active {
-  border-color: #d97706;
-  background: color-mix(in srgb, #d97706 12%, var(--card));
-  color: #b45309;
+  border-color: var(--status-late);
+  background: color-mix(in srgb, var(--status-late) 12%, var(--card));
+  color: var(--status-late-text);
 }
 
 .attendance-filter-pill.pill-absent.is-active {
-  border-color: #dc2626;
-  background: color-mix(in srgb, #dc2626 12%, var(--card));
-  color: #b91c1c;
+  border-color: var(--status-absent);
+  background: color-mix(in srgb, var(--status-absent) 12%, var(--card));
+  color: var(--status-absent-text);
 }
 
 .attendance-filter-pill.pill-unmarked.is-active {
@@ -7572,17 +7593,6 @@ textarea {
   color: var(--navy);
 }
 
-[data-theme="dark"] .attendance-filter-pill.pill-present.is-active {
-  color: #86efac;
-}
-
-[data-theme="dark"] .attendance-filter-pill.pill-late.is-active {
-  color: #fde047;
-}
-
-[data-theme="dark"] .attendance-filter-pill.pill-absent.is-active {
-  color: #fca5a5;
-}
 
 .attendance-pill-count {
   font-size: 12px;
@@ -7648,15 +7658,15 @@ textarea {
 }
 
 .attendance-card-present .attendance-card-edge {
-  background: #16a34a;
+  background: var(--status-present);
 }
 
 .attendance-card-late .attendance-card-edge {
-  background: #d97706;
+  background: var(--status-late);
 }
 
 .attendance-card-absent .attendance-card-edge {
-  background: #dc2626;
+  background: var(--status-absent);
 }
 
 .attendance-card-unmarked .attendance-card-edge {
@@ -7726,21 +7736,21 @@ textarea {
 }
 
 .attendance-status-badge.status-present {
-  background: color-mix(in srgb, #16a34a 14%, var(--card));
-  color: #15803d;
-  border: 1px solid color-mix(in srgb, #16a34a 30%, transparent);
+  background: color-mix(in srgb, var(--status-present) 14%, var(--card));
+  color: var(--status-present-text);
+  border: 1px solid color-mix(in srgb, var(--status-present) 30%, transparent);
 }
 
 .attendance-status-badge.status-late {
-  background: color-mix(in srgb, #d97706 14%, var(--card));
-  color: #b45309;
-  border: 1px solid color-mix(in srgb, #d97706 30%, transparent);
+  background: color-mix(in srgb, var(--status-late) 14%, var(--card));
+  color: var(--status-late-text);
+  border: 1px solid color-mix(in srgb, var(--status-late) 30%, transparent);
 }
 
 .attendance-status-badge.status-absent {
-  background: color-mix(in srgb, #dc2626 14%, var(--card));
-  color: #b91c1c;
-  border: 1px solid color-mix(in srgb, #dc2626 30%, transparent);
+  background: color-mix(in srgb, var(--status-absent) 14%, var(--card));
+  color: var(--status-absent-text);
+  border: 1px solid color-mix(in srgb, var(--status-absent) 30%, transparent);
 }
 
 .attendance-status-badge.status-unmarked {
@@ -7749,17 +7759,6 @@ textarea {
   border: 1px solid var(--line);
 }
 
-[data-theme="dark"] .attendance-status-badge.status-present {
-  color: #86efac;
-}
-
-[data-theme="dark"] .attendance-status-badge.status-late {
-  color: #fde047;
-}
-
-[data-theme="dark"] .attendance-status-badge.status-absent {
-  color: #fca5a5;
-}
 
 .attendance-absent-counter {
   display: inline-flex;
@@ -7771,16 +7770,13 @@ textarea {
 }
 
 .attendance-absent-counter.is-warning {
-  color: #dc2626;
+  color: var(--status-absent-text);
   font-weight: 700;
-  background: color-mix(in srgb, #dc2626 12%, transparent);
+  background: color-mix(in srgb, var(--status-absent) 12%, transparent);
   padding: 2px 7px;
   border-radius: 6px;
 }
 
-[data-theme="dark"] .attendance-absent-counter.is-warning {
-  color: #fca5a5;
-}
 
 /* 44px min-height action buttons with solid active fill */
 .attendance-card-actions {
@@ -7819,26 +7815,26 @@ textarea {
 
 .attendance-action-btn-present.is-active,
 .attendance-btn-present-active {
-  background: #16a34a !important;
-  border-color: #15803d !important;
+  background: var(--status-present) !important;
+  border-color: var(--status-present) !important;
   color: #ffffff !important;
-  box-shadow: 0 2px 6px rgba(22, 163, 74, 0.3);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--status-present) 30%, transparent);
 }
 
 .attendance-action-btn-late.is-active,
 .attendance-btn-late-active {
-  background: #d97706 !important;
-  border-color: #b45309 !important;
+  background: var(--status-late) !important;
+  border-color: var(--status-late) !important;
   color: #ffffff !important;
-  box-shadow: 0 2px 6px rgba(217, 119, 6, 0.3);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--status-late) 30%, transparent);
 }
 
 .attendance-action-btn-absent.is-active,
 .attendance-btn-absent-active {
-  background: #dc2626 !important;
-  border-color: #b91c1c !important;
+  background: var(--status-absent) !important;
+  border-color: var(--status-absent) !important;
   color: #ffffff !important;
-  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.3);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--status-absent) 30%, transparent);
 }
 
 /* List layout adjustments for Attendance cards */
@@ -8162,8 +8158,8 @@ textarea {
   transition: all 0.15s ease;
 }
 .export-checkbox-indicator.is-checked {
-  background: var(--royal);
-  border-color: var(--royal);
+  background: var(--royal-solid);
+  border-color: var(--royal-solid);
 }
 .export-type-icon-wrapper {
   color: var(--royal);
@@ -8426,7 +8422,7 @@ textarea {
   border-left: 3px solid var(--royal);
 }
 .project-card-finals {
-  border-left: 3px solid #8b5cf6;
+  border-left: 3px solid var(--accent-teal);
 }
 .project-card-top-row {
   display: flex;
@@ -8444,8 +8440,8 @@ textarea {
   color: var(--royal);
 }
 .project-card-finals .project-card-icon {
-  background: color-mix(in srgb, #8b5cf6 12%, transparent);
-  color: #8b5cf6;
+  background: color-mix(in srgb, var(--accent-teal) 12%, transparent);
+  color: var(--accent-teal);
 }
 .project-card-title {
   margin: 0;
@@ -8514,15 +8510,15 @@ textarea {
   gap: 8px;
   padding: 8px 14px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--accent-teal) 35%, var(--line));
-  background: color-mix(in srgb, var(--accent-teal) 8%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--royal) 35%, var(--line));
+  background: color-mix(in srgb, var(--royal) 8%, var(--card));
   color: var(--navy);
   font-size: 13px;
   font-weight: 600;
 }
 
 .recitation-pool-badge svg {
-  color: var(--accent-teal);
+  color: var(--royal);
   flex-shrink: 0;
 }
 
@@ -8594,10 +8590,10 @@ textarea {
 }
 
 .recitation-mode-btn.is-active {
-  background: var(--royal);
-  color: #ffffff;
-  border-color: var(--royal);
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--royal) 25%, transparent);
+  background: color-mix(in srgb, var(--royal) 14%, var(--card));
+  color: var(--royal);
+  border-color: color-mix(in srgb, var(--royal) 45%, var(--line));
+  box-shadow: none;
 }
 
 .recitation-mode-btn:focus-visible {
@@ -8666,11 +8662,11 @@ textarea {
 [data-theme="dark"] .recitation-help-popover {
   background: color-mix(in srgb, var(--card) 95%, #ffffff);
   border: 1px solid var(--line);
-  color: var(--text, #f1f5f9);
+  color: var(--ink);
 }
 
 [data-theme="dark"] .recitation-help-popover::before {
-  border-color: transparent transparent var(--card) transparent;
+  border-color: transparent transparent color-mix(in srgb, var(--card) 95%, #ffffff) transparent;
 }
 
 .recitation-mode-help {
@@ -8867,11 +8863,15 @@ textarea {
   white-space: nowrap;
 }
 
+.recitation-mini-card.is-late {
+  border-top-color: var(--status-late);
+}
+
 .recitation-mini-late {
   border-radius: 10px;
   padding: 2px 6px;
-  background: color-mix(in srgb, #ae7300 12%, var(--card));
-  color: #855000;
+  background: color-mix(in srgb, var(--status-late) 14%, var(--card));
+  color: var(--status-late-text);
   font-size: 12px;
   font-weight: 600;
 }

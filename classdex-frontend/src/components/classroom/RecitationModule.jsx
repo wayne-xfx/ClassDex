@@ -320,7 +320,7 @@ export default function RecitationModule({
                 formatStudentName(eligibleStudent.name);
               return (
                 <div
-                  className="recitation-mini-card"
+                  className={`recitation-mini-card${eligibleStudent.status === "LATE" ? " is-late" : ""}`}
                   key={eligibleStudent.id}
                   title={`${displayName} · ${eligibleStudent.status === "LATE" ? "Late" : "Present"}`}
                 >
