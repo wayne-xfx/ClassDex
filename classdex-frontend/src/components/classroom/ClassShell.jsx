@@ -46,20 +46,20 @@ export default function ClassShell({
 
   const primaryTabs = useMemo(
     () => [
-      { id: "deck", label: "Class deck" },
-      { id: "attendance", label: "Attendance" },
-      { id: "recitation", label: "Recitation" },
-      { id: "activities", label: "Activities" },
-      { id: "projects", label: "Projects" },
-      { id: "quiz", label: "Quiz" },
+      { id: "deck", label: "Class Deck", icon: "book" },
+      { id: "attendance", label: "Attendance", icon: "clipboardCheck" },
+      { id: "recitation", label: "Recitation", icon: "message" },
+      { id: "activities", label: "Activities", icon: "listChecks" },
+      { id: "projects", label: "Projects", icon: "folder" },
+      { id: "quiz", label: "Quiz", icon: "brain" },
     ],
     [],
   );
 
   const secondaryTabs = useMemo(
     () => [
-      { id: "export", label: "Data export" },
-      { id: "student-list", label: `Student List (${studentListCount})` },
+      { id: "export", label: "Data export", icon: "exportSheet" },
+      { id: "student-list", label: `Student List (${studentListCount})`, icon: "users" },
     ],
     [studentListCount],
   );
@@ -354,30 +354,38 @@ export default function ClassShell({
 
       <div className="class-shell-tabs-wrap">
         <div className="class-shell-tabs" role="tablist" aria-label="Class modules">
-          <div className="class-shell-tab-group">
-            {primaryTabs.map((tab, groupIdx) => (
-              <button
-                key={tab.id}
-                id={`module-tab-${tab.id}`}
-                type="button"
-                role="tab"
-                className={`class-shell-tab${activeModule === tab.id ? " is-active" : ""}`}
-                aria-selected={activeModule === tab.id}
-                aria-controls={`module-panel-${tab.id}`}
-                tabIndex={activeModule === tab.id ? 0 : -1}
-                ref={(el) => {
-                  tabRefs.current[groupIdx] = el;
-                }}
-                onKeyDown={(event) => handleTabKeyDown(event, groupIdx)}
-                onClick={() => {
-                  setInviteOpen(false);
-                  setMenuOpen(false);
-                  onModuleChange(tab.id);
-                }}
-              >
-                {tab.label}
-              </button>
-            ))}
+          <div className="class-shell-tab-group class-shell-tab-group-primary">
+            {primaryTabs.map((tab, groupIdx) => {
+              const isDeck = tab.id === "deck";
+              return (
+                <button
+                  key={tab.id}
+                  id={isDeck ? "module-deck-link" : `module-tab-${tab.id}`}
+                  type="button"
+                  role="tab"
+                  className={
+                    isDeck
+                      ? `class-shell-tab class-shell-tab-deck${activeModule === "deck" ? " is-active" : ""}`
+                      : `class-shell-tab${activeModule === tab.id ? " is-active" : ""}`
+                  }
+                  aria-selected={activeModule === tab.id}
+                  aria-controls={`module-panel-${tab.id}`}
+                  tabIndex={activeModule === tab.id ? 0 : -1}
+                  ref={(el) => {
+                    tabRefs.current[groupIdx] = el;
+                  }}
+                  onKeyDown={(event) => handleTabKeyDown(event, groupIdx)}
+                  onClick={() => {
+                    setInviteOpen(false);
+                    setMenuOpen(false);
+                    onModuleChange(tab.id);
+                  }}
+                >
+                  <Icon name={tab.icon} size={16} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
           </div>
 
           <div className="class-shell-tab-group class-shell-tab-group-secondary">
@@ -404,7 +412,8 @@ export default function ClassShell({
                     onModuleChange(tab.id);
                   }}
                 >
-                  {tab.label}
+                  <Icon name={tab.icon} size={16} />
+                  <span>{tab.label}</span>
                 </button>
               );
             })}

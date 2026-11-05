@@ -7187,6 +7187,36 @@ textarea {
   border-bottom-color: var(--royal);
 }
 
+.class-shell-tab svg {
+  flex-shrink: 0;
+}
+
+.class-shell-tab-deck {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.5rem 0.875rem;
+  background: var(--card);
+  margin-right: 0.25rem;
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom: 1px solid var(--line);
+  align-self: center;
+}
+
+.class-shell-tab-deck:hover {
+  border-color: color-mix(in srgb, var(--royal) 35%, var(--line));
+  background: color-mix(in srgb, var(--royal) 5%, var(--card));
+  color: var(--ink);
+}
+
+.class-shell-tab-deck.is-active {
+  border-color: color-mix(in srgb, var(--royal) 50%, var(--line));
+  background: color-mix(in srgb, var(--royal) 10%, var(--card));
+  color: var(--royal);
+  font-weight: 700;
+  border-bottom: 1px solid color-mix(in srgb, var(--royal) 50%, var(--line));
+}
+
 /* 3. Module Header */
 .module-header {
   display: flex;
