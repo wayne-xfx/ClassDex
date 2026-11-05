@@ -7216,10 +7216,10 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 0.5rem 0.875rem;
-  background: var(--card);
+  background: transparent;
   margin-right: 0.25rem;
-  color: var(--ink);
-  font-weight: 600;
+  color: var(--muted);
+  font-weight: 500;
   border-bottom: 1px solid var(--line);
   align-self: center;
 }
