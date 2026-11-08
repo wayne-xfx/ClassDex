@@ -257,6 +257,8 @@ function parseTypes(rawTypes) {
 function classInformation(classRecord) {
   return [
     ["Field", "Value"],
+    ["Course code", classRecord.courseCode || ""],
+    ["Course title", classRecord.courseTitle || ""],
     ["Class name", classRecord.sectionName],
     ["Class code", classRecord.classCode],
     ["Description", classRecord.description || ""],

@@ -12,6 +12,12 @@ const { eligibleCandidates, selectRecitationCandidate } = require("./recitation"
 const { verifyRecaptchaToken } = require("./recaptcha");
 const { buildExcelWorkbook, buildCsvExport, sanitizeExportValue, buildStudentListRows, buildAttendanceRows, buildRecitationRows, buildActivityRows, buildProjectRows, buildQuizRows } = require("./export");
 const {
+  normalizeCourseCode,
+  normalizeCourseTitle,
+  validateCourseFields,
+  formatClassLabel,
+} = require("./classLabel");
+const {
   buildJoinEmail,
   buildFacultyJoinEmail,
   buildDecisionEmail,
@@ -573,7 +579,7 @@ async function autoApproveRosterMatches(classId) {
   const [classRecord, pending] = await Promise.all([
     prisma.class.findUnique({
       where: { id: classId },
-      select: { sectionName: true, faculty: { select: { name: true } } },
+      select: { sectionName: true, courseCode: true, courseTitle: true, faculty: { select: { name: true } } },
     }),
     prisma.classEnrollment.findMany({
       where: {
@@ -610,7 +616,7 @@ async function autoApproveRosterMatches(classId) {
       queueEmail(buildDecisionEmail({
         studentName: student.name,
         studentEmail: student.email,
-        classSectionName: classRecord.sectionName,
+        classSectionName: formatClassLabel(classRecord),
         decision: "APPROVED",
         facultyName: classRecord.faculty?.name,
       }), "automatic join approval");
@@ -1574,6 +1580,8 @@ app.get(
         where: { facultyId: req.session.userId },
         select: {
           id: true,
+          courseCode: true,
+          courseTitle: true,
           sectionName: true,
           classCode: true,
           description: true,
@@ -1907,10 +1915,19 @@ app.post(
   requireAuth,
   requireRole("FACULTY"),
   async (req, res) => {
+    const courseValidationError = validateCourseFields(
+      { courseCode: req.body?.courseCode, courseTitle: req.body?.courseTitle },
+      { partial: false },
+    );
+    if (courseValidationError) {
+      return res.status(400).json(courseValidationError);
+    }
+    const courseCode = normalizeCourseCode(req.body?.courseCode);
+    const courseTitle = normalizeCourseTitle(req.body?.courseTitle);
     const sectionName = String(req.body?.sectionName || "").trim();
     let classCode = normalizeClassCode(req.body?.classCode);
     if (!sectionName) {
-      return res.status(400).json({ message: "Section name is required." });
+      return res.status(400).json({ field: "sectionName", message: "Section name is required." });
     }
     if (classCode && !/^[A-Z0-9-]{3,20}$/.test(classCode)) {
       return res.status(400).json({
@@ -1944,6 +1961,8 @@ app.post(
 
       const createdClass = await prisma.class.create({
         data: {
+          courseCode,
+          courseTitle,
           sectionName,
           classCode,
           description: optionalText(req.body?.description),
@@ -2506,7 +2525,7 @@ app.get("/api/classes/:id/pending", requireAuth, requireRole("FACULTY"), async (
   try {
     const ownedClass = await prisma.class.findFirst({
       where: { id: req.params.id, facultyId: req.session.userId },
-      select: { id: true, sectionName: true, archivedAt: true },
+      select: { id: true, sectionName: true, courseCode: true, courseTitle: true, archivedAt: true },
     });
     if (!ownedClass) return res.status(404).json({ message: "Class not found." });
     const [pending, autoApproved, absenceWarnings] = await Promise.all([
@@ -2535,7 +2554,7 @@ app.get("/api/classes/:id/pending", requireAuth, requireRole("FACULTY"), async (
         },
         orderBy: { autoApprovedAt: "desc" },
       }),
-      getActiveAbsenceWarningsForClass(ownedClass.id, ownedClass.sectionName, {
+      getActiveAbsenceWarningsForClass(ownedClass.id, formatClassLabel(ownedClass), {
         readOnly: Boolean(ownedClass.archivedAt),
       }),
     ]);
@@ -2583,11 +2602,11 @@ app.post(
     try {
       const ownedClass = await prisma.class.findFirst({
         where: { id: req.params.id, facultyId: req.session.userId },
-        select: { id: true, sectionName: true },
+        select: { id: true, sectionName: true, courseCode: true, courseTitle: true },
       });
       if (!ownedClass) return res.status(404).json({ message: "Class not found." });
 
-      const unreadWarnings = (await getActiveAbsenceWarningsForClass(ownedClass.id, ownedClass.sectionName))
+      const unreadWarnings = (await getActiveAbsenceWarningsForClass(ownedClass.id, formatClassLabel(ownedClass)))
         .filter((warning) => !warning.isRead);
       const readResults = await prisma.$transaction([
         prisma.classEnrollment.updateMany({
@@ -2704,7 +2723,7 @@ app.patch("/api/classes/:id/pending/:enrollmentId", requireAuth, requireRole("FA
   try {
     const classRecord = await prisma.class.findFirst({
       where: { id: req.params.id, facultyId: req.session.userId },
-      select: { id: true, sectionName: true, classCode: true, faculty: { select: { name: true, email: true } } },
+      select: { id: true, sectionName: true, courseCode: true, courseTitle: true, classCode: true, faculty: { select: { name: true, email: true } } },
     });
     if (!classRecord) return res.status(404).json({ message: "Class not found." });
 
@@ -2798,7 +2817,7 @@ app.patch("/api/classes/:id/pending/:enrollmentId", requireAuth, requireRole("FA
       queueEmail(buildDecisionEmail({
         studentName: enrollment.studentProfile.name,
         studentEmail: enrollment.studentProfile.email,
-        classSectionName: classRecord.sectionName,
+        classSectionName: formatClassLabel(classRecord),
         decision: status,
         facultyName: classRecord.faculty?.name,
       }), `join ${status.toLowerCase()}`);
@@ -3668,10 +3687,26 @@ app.patch(
 
       const updateData = {};
 
+      if (req.body?.courseCode !== undefined || req.body?.courseTitle !== undefined) {
+        const courseValidationError = validateCourseFields(
+          { courseCode: req.body?.courseCode, courseTitle: req.body?.courseTitle },
+          { partial: true },
+        );
+        if (courseValidationError) {
+          return res.status(400).json(courseValidationError);
+        }
+        if (req.body?.courseCode !== undefined) {
+          updateData.courseCode = normalizeCourseCode(req.body.courseCode);
+        }
+        if (req.body?.courseTitle !== undefined) {
+          updateData.courseTitle = normalizeCourseTitle(req.body.courseTitle);
+        }
+      }
+
       if (req.body?.sectionName !== undefined) {
         const sectionName = String(req.body.sectionName || "").trim();
         if (!sectionName) {
-          return res.status(400).json({ message: "Section name is required." });
+          return res.status(400).json({ field: "sectionName", message: "Section name is required." });
         }
         updateData.sectionName = sectionName;
       }
@@ -5471,7 +5506,7 @@ app.post(
         queueEmail(buildJoinEmail({
           studentName: profile.name,
           studentEmail: profile.email,
-          classSectionName: classRecord.sectionName,
+          classSectionName: formatClassLabel(classRecord),
           classCode: classRecord.classCode,
           status: joinResult.enrollment.status,
           facultyName: classRecord.faculty?.name,
@@ -5481,7 +5516,7 @@ app.post(
             facultyEmail: classRecord.faculty.email,
             facultyName: classRecord.faculty.name,
             studentName: profile.name,
-            classSectionName: classRecord.sectionName,
+            classSectionName: formatClassLabel(classRecord),
             classCode: classRecord.classCode,
             status: joinResult.enrollment.status,
           }), "faculty join notice");
@@ -5490,7 +5525,7 @@ app.post(
         queueEmail(buildDecisionEmail({
           studentName: profile.name,
           studentEmail: profile.email,
-          classSectionName: classRecord.sectionName,
+          classSectionName: formatClassLabel(classRecord),
           decision: "APPROVED",
           facultyName: classRecord.faculty?.name,
         }), "automatic join approval");
