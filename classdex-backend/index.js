@@ -1590,7 +1590,35 @@ app.get(
         },
         orderBy: { createdAt: "desc" },
       });
-      return res.json({ classes });
+      const classIds = classes.map((item) => item.id);
+      const latestSessions = classIds.length
+        ? await prisma.classSession.findMany({
+            where: {
+              classId: { in: classIds },
+              OR: [
+                { startedAt: { not: null } },
+                { attendance: { some: {} } },
+                { recitations: { some: {} } },
+                { activities: { some: {} } },
+              ],
+            },
+            select: { classId: true, date: true },
+            orderBy: { date: "desc" },
+            distinct: ["classId"],
+          })
+        : [];
+      const lastSessionByClass = new Map(
+        latestSessions.map((row) => [
+          row.classId,
+          row.date ? row.date.toISOString() : null,
+        ]),
+      );
+      return res.json({
+        classes: classes.map((item) => ({
+          ...item,
+          lastSessionAt: lastSessionByClass.get(item.id) ?? null,
+        })),
+      });
     } catch (error) {
       console.error("Faculty classes lookup failed:", error);
       return res.status(500).json({ message: "Unable to load your classes." });
@@ -4980,6 +5008,29 @@ app.get(
         FULL OUTER JOIN activities USING ("classId")
         FULL OUTER JOIN quizzes USING ("classId")
       `;
+      const classIds = enrolledClasses.map((item) => item.id);
+      const latestSessions = classIds.length
+        ? await prisma.classSession.findMany({
+            where: {
+              classId: { in: classIds },
+              OR: [
+                { startedAt: { not: null } },
+                { attendance: { some: {} } },
+                { recitations: { some: {} } },
+                { activities: { some: {} } },
+              ],
+            },
+            select: { classId: true, date: true },
+            orderBy: { date: "desc" },
+            distinct: ["classId"],
+          })
+        : [];
+      const lastSessionByClass = new Map(
+        latestSessions.map((row) => [
+          row.classId,
+          row.date ? row.date.toISOString() : null,
+        ]),
+      );
       const summaryByClass = new Map(summaryRows.map((row) => [row.classId, row]));
       const summaries = enrolledClasses.map((classItem) => {
         const row = summaryByClass.get(classItem.id) || {};
@@ -4987,6 +5038,7 @@ app.get(
         const quizPossible = Number(row.quizPossibleTotal || 0);
         return {
           ...classItem,
+          lastSessionAt: lastSessionByClass.get(classItem.id) ?? null,
           recordSummary: {
             attendance: formatPercentSummary(Number(row.attendedCount || 0), Number(row.attendanceCount || 0)),
             recitation: formatAverageSummary(Number(row.recitationScoreTotal || 0), Number(row.recitationScoreCount || 0), " / 5"),
