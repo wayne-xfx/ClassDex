@@ -4,15 +4,17 @@ import ClassForm from "../components/ClassForm";
 import Icon from "../components/Icon";
 import { api } from "../api";
 import { PageHeader } from "../components/DesignSystem";
+import { getClassDisplay } from "../utils/classDisplay";
 
 export default function CreateClass() {
   const navigate = useNavigate();
 
   async function handleCreateClass(payload) {
     const { class: createdClass } = await api.createClass(payload);
+    const display = getClassDisplay(createdClass);
     navigate("/faculty", {
       state: {
-        notice: `${createdClass.sectionName} is ready. Invite code: ${createdClass.classCode}`,
+        notice: `${display.label} is ready. Invite code: ${createdClass.classCode}`,
       },
     });
   }

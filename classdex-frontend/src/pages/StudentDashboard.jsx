@@ -8,6 +8,7 @@ import RecaptchaWidget from "../components/RecaptchaWidget";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { ErrorState, PageHeader } from "../components/DesignSystem";
+import { getClassDisplay } from "../utils/classDisplay";
 import { formatClassSchedule } from "../utils/schedule";
 import { getScheduleStatus, partitionAndOrderClasses } from "../utils/classOrdering";
 import { useNow } from "../utils/useNow";
@@ -94,10 +95,13 @@ export default function StudentDashboard() {
     try {
       const joinResult = await api.joinClass(classCode.trim().toUpperCase(), recaptchaToken);
       setClassCode("");
+      const joinedLabel = getClassDisplay(joinResult.enrollment?.class).label;
       setNotice(
         joinResult.status === "PENDING"
           ? joinResult.message || "Waiting for instructor approval."
-          : "You joined the class. Welcome aboard!"
+          : joinedLabel
+            ? `You joined ${joinedLabel}. Welcome aboard!`
+            : "You joined the class. Welcome aboard!"
       );
       const result = await api.studentClasses();
       setClasses(result.classes);
@@ -138,6 +142,7 @@ export default function StudentDashboard() {
     const isPending = classRecord.enrollmentStatus === "PENDING";
     const isDropped = classRecord.enrollmentStatus === "DROPPED";
     const isDeclined = classRecord.enrollmentStatus === "DECLINED";
+    const display = getClassDisplay(classRecord);
     const instructorName =
       classRecord.faculty?.facultyProfile?.name ||
       classRecord.faculty?.name ||
@@ -163,7 +168,9 @@ export default function StudentDashboard() {
             <span className="class-icon">
               <Icon name="book" size={17} />
             </span>
-            <span className="class-label">Section</span>
+            <span className="class-label">
+              {display.hasCourse ? display.eyebrow : "Section"}
+            </span>
           </div>
           <div className="class-card-badges">
             {isLive ? (
@@ -196,7 +203,14 @@ export default function StudentDashboard() {
         </div>
 
         <div className="student-card-heading">
-          <h3>{classRecord.sectionName}</h3>
+          <div className="student-card-title-block">
+            <h3 className="class-card-title" title={display.title}>
+              {display.title}
+            </h3>
+            {display.sectionLine ? (
+              <p className="class-card-section-line">{display.sectionLine}</p>
+            ) : null}
+          </div>
           <div className="code-chip">
             Code <b>{classRecord.classCode}</b>
           </div>

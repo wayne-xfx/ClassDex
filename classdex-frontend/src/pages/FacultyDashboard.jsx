@@ -6,6 +6,7 @@ import Icon from "../components/Icon";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { ErrorState, PageHeader } from "../components/DesignSystem";
+import { getClassDisplay } from "../utils/classDisplay";
 import { formatClassSchedule } from "../utils/schedule";
 import { getScheduleStatus, partitionAndOrderClasses } from "../utils/classOrdering";
 import { useNow } from "../utils/useNow";
@@ -120,10 +121,11 @@ export default function FacultyDashboard() {
     setActionError("");
     try {
       const { class: restored } = await api.restoreClass(classRecord.id);
+      const updatedRecord = { ...classRecord, ...restored, archivedAt: null };
       setClasses((current) =>
-        current.map((item) => (item.id === classRecord.id ? { ...item, ...restored, archivedAt: null } : item)),
+        current.map((item) => (item.id === classRecord.id ? updatedRecord : item)),
       );
-      setNotice(`${classRecord.sectionName} restored to your active classes.`);
+      setNotice(`${getClassDisplay(updatedRecord).label} restored to your active classes.`);
       try {
         const { counts } = await api.facultyPendingCounts();
         setPendingCounts(counts || {});
@@ -174,6 +176,7 @@ export default function FacultyDashboard() {
 
   function renderFacultyCard(classRecord, index, { isLive = false, scheduleStatus = null } = {}) {
     const isArchived = Boolean(classRecord.archivedAt);
+    const display = getClassDisplay(classRecord);
     const accentColor = isLive
       ? "var(--accent-teal)"
       : index % 2
@@ -213,8 +216,11 @@ export default function FacultyDashboard() {
             ) : null}
           </div>
         </div>
-        <p className="class-label">Section</p>
-        <h3>{classRecord.sectionName}</h3>
+        <p className="class-label">{display.hasCourse ? display.eyebrow : "Section"}</p>
+        <h3 className="class-card-title" title={display.title}>{display.title}</h3>
+        {display.sectionLine ? (
+          <p className="class-card-section-line">{display.sectionLine}</p>
+        ) : null}
         <div className="code-chip">Code <b>{classRecord.classCode}</b></div>
         <p className="class-schedule"><Icon name="clock" /> {formatClassSchedule(classRecord)}</p>
         {isLive && scheduleStatus?.endsAt ? (

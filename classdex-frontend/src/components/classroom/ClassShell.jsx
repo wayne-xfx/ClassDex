@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import Icon from "../Icon";
+import { getClassDisplay } from "../../utils/classDisplay";
 import {
   doesClassMeetToday,
   formatManilaTodayChip,
@@ -140,6 +141,7 @@ export default function ClassShell({
   const meetsToday = doesClassMeetToday(classRecord);
   const isDeck = activeModule === "deck";
   const description = classRecord?.description?.trim() || "";
+  const display = getClassDisplay(classRecord);
 
   return (
     <div className="class-shell">
@@ -151,14 +153,20 @@ export default function ClassShell({
           </Link>
 
           <div className={`class-shell-heading${isDeck ? " is-deck" : ""}`}>
+            {display.hasCourse ? (
+              <span className="class-shell-eyebrow">{display.eyebrow}</span>
+            ) : null}
             <div className="class-shell-title-row">
-              <h1>{classRecord.sectionName}</h1>
+              <h1>{display.title}</h1>
               {isArchived ? (
                 <span className="enrolled-pill enrolled-pill-archived">
                   <Icon name="archive" size={13} /> Archived
                 </span>
               ) : null}
             </div>
+            {display.sectionLine ? (
+              <p className="class-shell-section-line">{display.sectionLine}</p>
+            ) : null}
             {isDeck && description ? (
               <p className="class-shell-description" title={description}>
                 {description}
@@ -212,7 +220,7 @@ export default function ClassShell({
                   id="class-shell-invite-popover"
                   className="class-shell-invite-popover"
                   role="dialog"
-                  aria-label={`Invite students to ${classRecord.sectionName}`}
+                  aria-label={`Invite students to ${display.label}`}
                 >
                   <div className="class-shell-invite-code-row">
                     <span className="class-shell-invite-code-label">Class code</span>
@@ -233,7 +241,7 @@ export default function ClassShell({
                       <>
                         <img
                           src={inviteQr}
-                          alt={`QR code for joining ${classRecord.sectionName}`}
+                          alt={`QR code for joining ${display.label}`}
                           className="class-shell-invite-qr-img"
                         />
                         <div className="class-shell-invite-qr-actions">

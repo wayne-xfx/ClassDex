@@ -5,6 +5,7 @@ import { api } from "../api";
 import Avatar from "./Avatar";
 import ThemeToggle from "./ThemeToggle";
 import Icon from "./Icon";
+import { getClassDisplay } from "../utils/classDisplay";
 
 export function Brand({ to = "/" }) {
   return (
@@ -132,8 +133,10 @@ export default function AppShell({
         const count = Number(rawCount) || 0;
         const classInfo = classById.get(classId);
         if (count <= 0 || classInfo?.archivedAt) return null;
+        const display = getClassDisplay(classInfo);
         return {
           id: classId,
+          label: display.label || "Class",
           sectionName: classInfo?.sectionName || "Class",
           classCode: classInfo?.classCode || "",
           count,
@@ -255,7 +258,7 @@ export default function AppShell({
                             onClick={() => setGlobalBellOpen(false)}
                           >
                             <div className="header-notification-copy">
-                              <strong>{item.sectionName}</strong>
+                              <strong>{item.label}</strong>
                               {item.classCode ? <span>Code {item.classCode}</span> : null}
                             </div>
                             <span className="notification-badge">{item.count}</span>

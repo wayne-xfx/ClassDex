@@ -3,6 +3,13 @@ import { Link } from "react-router-dom";
 import Icon from "./Icon";
 import { api } from "../api";
 import {
+  COURSE_CODE_ERROR_MESSAGE,
+  COURSE_CODE_REGEX,
+  COURSE_TITLE_ERROR_MESSAGE,
+  normalizeCourseCode,
+  normalizeCourseTitle,
+} from "../utils/classDisplay";
+import {
   DAYS_OF_WEEK,
   TIME_OPTIONS,
   formatScheduleText,
@@ -25,8 +32,14 @@ export default function ClassForm({
   const originalClassCode = String(initialValues?.classCode || "")
     .trim()
     .toUpperCase();
+  const isLegacyEdit =
+    isEdit &&
+    (!String(initialValues?.courseCode || "").trim() ||
+      !String(initialValues?.courseTitle || "").trim());
 
   const [form, setForm] = useState(() => ({
+    courseCode: initialValues?.courseCode || "",
+    courseTitle: initialValues?.courseTitle || "",
     sectionName: initialValues?.sectionName || "",
     classCode: initialValues?.classCode || "",
     description: initialValues?.description || "",
@@ -38,6 +51,7 @@ export default function ClassForm({
   }));
   const [scheduleTouched, setScheduleTouched] = useState(false);
   const [codeCheck, setCodeCheck] = useState(null);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -88,8 +102,29 @@ export default function ClassForm({
       if (field === "scheduleStartTime" || field === "scheduleEndTime") {
         setScheduleTouched(true);
       }
-      setForm((current) => ({ ...current, [field]: event.target.value }));
+      const value = event.target.value;
+      setForm((current) => ({ ...current, [field]: value }));
+      setFieldErrors((current) => {
+        if (!current[field]) return current;
+        const next = { ...current };
+        delete next[field];
+        return next;
+      });
     };
+  }
+
+  function handleCourseCodeBlur() {
+    setForm((current) => ({
+      ...current,
+      courseCode: normalizeCourseCode(current.courseCode),
+    }));
+  }
+
+  function handleCourseTitleBlur() {
+    setForm((current) => ({
+      ...current,
+      courseTitle: normalizeCourseTitle(current.courseTitle),
+    }));
   }
 
   function toggleDay(dayId) {
@@ -111,6 +146,12 @@ export default function ClassForm({
   function suggestCode() {
     const suggestion = Math.random().toString(36).slice(2, 8).toUpperCase();
     setForm((current) => ({ ...current, classCode: suggestion }));
+    setFieldErrors((current) => {
+      if (!current.classCode) return current;
+      const next = { ...current };
+      delete next.classCode;
+      return next;
+    });
   }
 
   const startMinutes = parseTimeToMinutes(form.scheduleStartTime);
@@ -135,18 +176,41 @@ export default function ClassForm({
   async function handleSubmit(event) {
     event.preventDefault();
     setError("");
-    if (!form.sectionName.trim()) {
-      setError("Section name is required.");
-      return;
+    const nextFieldErrors = {};
+
+    const normalizedCourseCode = normalizeCourseCode(form.courseCode);
+    const normalizedCourseTitle = normalizeCourseTitle(form.courseTitle);
+    const trimmedSectionName = form.sectionName.trim();
+
+    if (
+      normalizedCourseCode.length < 2 ||
+      normalizedCourseCode.length > 30 ||
+      !COURSE_CODE_REGEX.test(normalizedCourseCode)
+    ) {
+      nextFieldErrors.courseCode = COURSE_CODE_ERROR_MESSAGE;
     }
+
+    if (normalizedCourseTitle.length < 2 || normalizedCourseTitle.length > 120) {
+      nextFieldErrors.courseTitle = COURSE_TITLE_ERROR_MESSAGE;
+    }
+
+    if (!trimmedSectionName) {
+      nextFieldErrors.sectionName = "Section name is required.";
+    }
+
     if (isEdit && !classCode) {
-      setError("Enter a class code.");
+      nextFieldErrors.classCode = "Enter a 3–20 character class code.";
+    } else if (classCode && !validCode) {
+      nextFieldErrors.classCode = "Use 3–20 letters, numbers, or hyphens for the class code.";
+    }
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors(nextFieldErrors);
       return;
     }
-    if (classCode && !validCode) {
-      setError("Use 3–20 letters, numbers, or hyphens for the class code.");
-      return;
-    }
+
+    setFieldErrors({});
+
     if (hasScheduleInput) {
       if (!form.scheduleDays.length) {
         setError("Select at least one day of the week for the schedule.");
@@ -166,7 +230,9 @@ export default function ClassForm({
       isEdit && !scheduleTouched && !hasScheduleInput && Boolean(initialValues?.schedule);
 
     const payload = {
-      sectionName: form.sectionName,
+      courseCode: normalizedCourseCode,
+      courseTitle: normalizedCourseTitle,
+      sectionName: trimmedSectionName,
       classCode,
       description: form.description,
       ...(preserveLegacySchedule
@@ -183,7 +249,17 @@ export default function ClassForm({
     try {
       await onSubmit(payload);
     } catch (saveError) {
-      setError(saveError.message);
+      if (
+        saveError?.field &&
+        ["courseCode", "courseTitle", "sectionName", "classCode"].includes(saveError.field)
+      ) {
+        setFieldErrors((current) => ({
+          ...current,
+          [saveError.field]: saveError.message,
+        }));
+      } else {
+        setError(saveError.message);
+      }
     } finally {
       setSaving(false);
     }
@@ -196,7 +272,59 @@ export default function ClassForm({
     timeRangeInvalid;
 
   return (
-    <form className={className} onSubmit={handleSubmit}>
+    <form className={className} onSubmit={handleSubmit} noValidate>
+      {isLegacyEdit ? (
+        <p className="legacy-course-notice" role="status">
+          <Icon name="info" size={15} />
+          <span>Add the course code and course title for this class.</span>
+        </p>
+      ) : null}
+
+      <div className="course-fields-grid">
+        <label className="field">
+          <span>
+            Course code <b>*</b>
+          </span>
+          <input
+            className="input"
+            required
+            maxLength={30}
+            value={form.courseCode}
+            onChange={update("courseCode")}
+            onBlur={handleCourseCodeBlur}
+            placeholder="e.g. IT 121/121L"
+            autoFocus
+            aria-invalid={Boolean(fieldErrors.courseCode)}
+          />
+          {fieldErrors.courseCode ? (
+            <span className="field-hint field-error" role="alert">
+              {fieldErrors.courseCode}
+            </span>
+          ) : null}
+        </label>
+
+        <label className="field">
+          <span>
+            Course title <b>*</b>
+          </span>
+          <input
+            className="input"
+            required
+            maxLength={120}
+            value={form.courseTitle}
+            onChange={update("courseTitle")}
+            onBlur={handleCourseTitleBlur}
+            placeholder="e.g. Information Management I"
+            aria-invalid={Boolean(fieldErrors.courseTitle)}
+          />
+          {fieldErrors.courseTitle ? (
+            <span className="field-hint field-error" role="alert">
+              {fieldErrors.courseTitle}
+            </span>
+          ) : null}
+        </label>
+      </div>
+
       <label className="field">
         <span>
           Section name <b>*</b>
@@ -206,10 +334,20 @@ export default function ClassForm({
           required
           value={form.sectionName}
           onChange={update("sectionName")}
-          placeholder="e.g. BSEd English · Section 3A"
-          autoFocus
+          placeholder="e.g. BSIT - AI23"
+          aria-invalid={Boolean(fieldErrors.sectionName)}
         />
+        {fieldErrors.sectionName ? (
+          <span className="field-hint field-error" role="alert">
+            {fieldErrors.sectionName}
+          </span>
+        ) : (
+          <span className="field-hint">
+            Program and section only. Put the subject in Course title.
+          </span>
+        )}
       </label>
+
       <label className="field">
         <span>
           Class code{isEdit ? <> <b>*</b></> : null}
@@ -225,36 +363,53 @@ export default function ClassForm({
             onChange={update("classCode")}
             placeholder={isEdit ? "e.g. ENG3A25" : "Leave blank to generate one"}
             autoComplete="off"
+            aria-invalid={
+              Boolean(fieldErrors.classCode) ||
+              codeStatus === "taken" ||
+              codeStatus === "invalid" ||
+              codeStatus === "required"
+            }
           />
           <button type="button" className="button button-secondary" onClick={suggestCode}>
             Suggest code
           </button>
         </div>
-        <span
-          className={`field-hint ${
-            codeStatus === "taken" || codeStatus === "invalid" || codeStatus === "required"
-              ? "field-error"
+        {fieldErrors.classCode ? (
+          <span className="field-hint field-error" role="alert">
+            {fieldErrors.classCode}
+          </span>
+        ) : (
+          <span
+            className={`field-hint ${
+              codeStatus === "taken" || codeStatus === "invalid" || codeStatus === "required"
+                ? "field-error"
+                : codeStatus === "available"
+                  ? "field-success"
+                  : ""
+            }`}
+            role={
+              codeStatus === "taken" || codeStatus === "invalid" || codeStatus === "required"
+                ? "alert"
+                : undefined
+            }
+          >
+            {codeStatus === "checking"
+              ? "Checking code… Class code is what students type to join. Course code (above) is the subject code."
               : codeStatus === "available"
-                ? "field-success"
-                : ""
-          }`}
-        >
-          {codeStatus === "checking"
-            ? "Checking code…"
-            : codeStatus === "available"
-              ? "This code is available."
-              : codeStatus === "unchanged"
-                ? "Current class invite code."
-                : codeStatus === "taken"
-                  ? "That code is taken. Try another."
-                  : codeStatus === "required"
-                    ? "Enter a 3–20 character class code."
-                    : codeStatus === "invalid"
-                      ? "Use 3–20 letters, numbers, or hyphens."
-                      : codeStatus === "unavailable"
-                        ? "Couldn’t check right now; the code will be checked when you save."
-                        : "Students can use this code or its invite link to join."}
-        </span>
+                ? "This code is available. Class code is what students type to join. Course code (above) is the subject code."
+                : codeStatus === "unchanged"
+                  ? "Current class invite code. Class code is what students type to join. Course code (above) is the subject code."
+                  : codeStatus === "taken"
+                    ? "That code is taken. Try another."
+                    : codeStatus === "required"
+                      ? "Enter a 3–20 character class code."
+                      : codeStatus === "invalid"
+                        ? "Use 3–20 letters, numbers, or hyphens."
+                        : codeStatus === "unavailable"
+                          ? "Couldn’t check right now; the code will be checked when you save."
+                          : "Class code is what students type to join. Course code (above) is the subject code."}
+          </span>
+        )}
         {isChangedEditCode ? (
           <span className="class-code-change-warning" role="status">
             <Icon name="alert" size={15} />
@@ -264,6 +419,7 @@ export default function ClassForm({
           </span>
         ) : null}
       </label>
+
       <label className="field">
         <span>Description</span>
         <textarea
@@ -274,6 +430,7 @@ export default function ClassForm({
           placeholder="A short note about this class"
         />
       </label>
+
       <fieldset className="field schedule-fieldset">
         <legend className="schedule-legend">Schedule</legend>
         <div className="schedule-days-group" role="group" aria-label="Days of the week">

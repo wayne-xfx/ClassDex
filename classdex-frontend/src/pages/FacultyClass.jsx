@@ -23,6 +23,7 @@ import PendingValidationList from "../components/classroom/PendingValidationList
 import QuizModule from "../components/classroom/QuizModule";
 import { ErrorState, Modal } from "../components/DesignSystem";
 import { api } from "../api";
+import { getClassDisplay } from "../utils/classDisplay";
 
 const VALID_MODULES = new Set([
   "deck",
@@ -128,6 +129,7 @@ export default function FacultyClass() {
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [archiveBusy, setArchiveBusy] = useState(false);
   const isArchived = Boolean(classRecord?.archivedAt);
+  const classDisplay = getClassDisplay(classRecord);
   const studentRecordsLoading = Boolean(selectedStudent && !studentRecords && !studentRecordsError);
 
   const notificationsParam = searchParams.get("notifications");
@@ -892,7 +894,7 @@ export default function FacultyClass() {
             {!isArchived && showLargeQr && inviteQr ? (
               <Modal
                 title="Class join QR code"
-                description={`Scan with any mobile camera or QR reader to join ${classRecord.sectionName}.`}
+                description={`Scan with any mobile camera or QR reader to join ${classDisplay.label}.`}
                 onClose={() => setShowLargeQr(false)}
                 footer={
                   <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem" }}>
@@ -902,7 +904,7 @@ export default function FacultyClass() {
                 }
               >
                 <div style={{ display: "grid", placeItems: "center", padding: "1.25rem", textAlign: "center" }}>
-                  <img src={inviteQr} alt={`Large QR code for ${classRecord.sectionName}`} style={{ width: "260px", height: "260px", borderRadius: "12px", border: "1px solid var(--border-color, #e2e8f0)" }} />
+                  <img src={inviteQr} alt={`Large QR code for ${classDisplay.label}`} style={{ width: "260px", height: "260px", borderRadius: "12px", border: "1px solid var(--border-color, #e2e8f0)" }} />
                   <p style={{ marginTop: "0.75rem", fontWeight: "bold" }}>Class code: {classRecord.classCode}</p>
                 </div>
               </Modal>
@@ -912,7 +914,7 @@ export default function FacultyClass() {
                 enrollments={isArchived ? [] : pendingEnrollments}
                 autoApproved={isArchived ? [] : autoApprovedNotifications}
                 absenceWarnings={isArchived ? [] : absenceWarnings}
-                className={classRecord.sectionName}
+                className={classDisplay.label}
                 loading={!isArchived && (pendingLoadedForId !== id || pendingRetrying)}
                 error={isArchived ? "" : pendingError}
                 onRetry={isArchived ? undefined : retryPendingNotifications}
@@ -931,7 +933,7 @@ export default function FacultyClass() {
             {!isArchived && showEditClassModal ? (
               <Modal
                 title="Edit class details"
-                description="Update the section name, invite code, description, or class schedule."
+                description="Update the course code, course title, section name, invite code, description, or class schedule."
                 onClose={() => setShowEditClassModal(false)}
               >
                 <ClassForm
@@ -946,7 +948,7 @@ export default function FacultyClass() {
             ) : null}
             {!isArchived && showArchiveConfirm ? (
               <ConfirmDialog
-                title={`Archive ${classRecord.sectionName}?`}
+                title={`Archive ${classDisplay.label}?`}
                 description="Archiving makes this class read-only and pauses new student joins. 100% of your student list, attendance, recitation, quiz, activity, and project records are kept, and you can restore the class anytime."
                 confirmLabel={archiveBusy ? "Archiving…" : "Archive class"}
                 onConfirm={handleArchiveClass}
@@ -1103,7 +1105,7 @@ export default function FacultyClass() {
             {selectedStudent ? (
               <StudentDetailDialog
                 student={selectedStudent}
-                className={classRecord.sectionName}
+                className={classDisplay.label}
                 records={studentRecords}
                 loading={studentRecordsLoading}
                 error={studentRecordsError}

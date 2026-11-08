@@ -6,6 +6,7 @@ import { ErrorState, Skeleton } from "../components/DesignSystem";
 import { IndexCardView } from "../components/classroom/ClassroomComponents";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
+import { getClassDisplay } from "../utils/classDisplay";
 
 const SUMMARY_FIELDS = [
   { key: "attendance", label: "Attendance" },
@@ -95,6 +96,7 @@ export default function StudentClassRecord() {
   const isDropped = classRecord?.enrollmentStatus === "DROPPED";
   const isPending = classRecord?.enrollmentStatus === "PENDING";
   const isDeclined = classRecord?.enrollmentStatus === "DECLINED";
+  const display = getClassDisplay(classRecord);
 
   return (
     <AppShell active="home">
@@ -103,7 +105,7 @@ export default function StudentClassRecord() {
           <Link to="/student">Dashboard</Link>
           <Icon name="chevron" size={14} />
           <span aria-current="page">
-            {classRecord?.sectionName || "Class record"}
+            {display.label || "Class record"}
           </span>
         </nav>
 
@@ -153,9 +155,15 @@ export default function StudentClassRecord() {
             <header className="student-record-header">
               <div className="student-record-header-main">
                 <span className="eyebrow">
-                  <Icon name="book" size={14} /> Student class record
+                  <Icon name="book" size={14} />{" "}
+                  {display.hasCourse ? display.eyebrow : "Student class record"}
                 </span>
-                <h1>{classRecord.sectionName}</h1>
+                <h1>{display.title}</h1>
+                {display.sectionLine ? (
+                  <p className="student-record-section-line">
+                    {display.sectionLine}
+                  </p>
+                ) : null}
                 {classRecord.description ? (
                   <p className="student-record-description">
                     {classRecord.description}
@@ -266,7 +274,7 @@ export default function StudentClassRecord() {
               <IndexCardView
                 variant="inline"
                 student={studentIdentity}
-                className={classRecord.sectionName}
+                className={display.label}
                 classCode={classRecord.classCode}
                 records={adaptedRecords}
                 loading={false}

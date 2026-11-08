@@ -5,6 +5,7 @@ import Icon from "../components/Icon";
 import RecaptchaWidget from "../components/RecaptchaWidget";
 import { api } from "../api";
 import { PageHeader } from "../components/DesignSystem";
+import { getClassDisplay } from "../utils/classDisplay";
 
 export default function JoinClass() {
   const { classCode: inviteCode = "" } = useParams();
@@ -37,7 +38,16 @@ export default function JoinClass() {
     setJoining(true);
     try {
       const { enrollment, status, message } = await api.joinClass(classCode.trim().toUpperCase(), recaptchaToken);
-      navigate("/student", { state: { notice: status === "PENDING" ? message || "Waiting for instructor approval." : `You joined ${enrollment.class.sectionName}.`, enrollmentStatus: status } });
+      const classLabel = getClassDisplay(enrollment.class).label;
+      navigate("/student", {
+        state: {
+          notice:
+            status === "PENDING"
+              ? message || "Waiting for instructor approval."
+              : `You joined ${classLabel}.`,
+          enrollmentStatus: status,
+        },
+      });
     } catch (joinError) {
       if (joinError.status === "PENDING" || joinError.status === "APPROVED") {
         navigate("/student", { state: { notice: joinError.message, enrollmentStatus: joinError.status } });
