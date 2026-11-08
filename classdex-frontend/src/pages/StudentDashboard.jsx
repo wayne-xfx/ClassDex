@@ -207,8 +207,10 @@ export default function StudentDashboard() {
             <h3 className="class-card-title" title={display.title}>
               {display.title}
             </h3>
-            {display.sectionLine ? (
-              <p className="class-card-section-line">{display.sectionLine}</p>
+            {(display.sectionLine || classRecord.courseTitle?.trim() || classRecord.description?.trim()) ? (
+              <p className="class-card-section-line">
+                {display.sectionLine || classRecord.courseTitle?.trim() || classRecord.description?.trim()}
+              </p>
             ) : null}
           </div>
           <div className="code-chip">

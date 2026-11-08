@@ -218,8 +218,10 @@ export default function FacultyDashboard() {
         </div>
         <p className="class-label">{display.hasCourse ? display.eyebrow : "Section"}</p>
         <h3 className="class-card-title" title={display.title}>{display.title}</h3>
-        {display.sectionLine ? (
-          <p className="class-card-section-line">{display.sectionLine}</p>
+        {(display.sectionLine || classRecord.courseTitle?.trim() || classRecord.description?.trim()) ? (
+          <p className="class-card-section-line">
+            {display.sectionLine || classRecord.courseTitle?.trim() || classRecord.description?.trim()}
+          </p>
         ) : null}
         <div className="code-chip">Code <b>{classRecord.classCode}</b></div>
         <p className="class-schedule"><Icon name="clock" /> {formatClassSchedule(classRecord)}</p>

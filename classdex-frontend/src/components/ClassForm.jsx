@@ -39,7 +39,9 @@ export default function ClassForm({
 
   const [form, setForm] = useState(() => ({
     courseCode: initialValues?.courseCode || "",
-    courseTitle: initialValues?.courseTitle || "",
+    courseTitle:
+      initialValues?.courseTitle ||
+      (isEdit && !initialValues?.courseTitle ? String(initialValues?.description || "").slice(0, 120) : ""),
     sectionName: initialValues?.sectionName || "",
     classCode: initialValues?.classCode || "",
     description: initialValues?.description || "",

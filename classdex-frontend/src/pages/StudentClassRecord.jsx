@@ -164,7 +164,8 @@ export default function StudentClassRecord() {
                     {display.sectionLine}
                   </p>
                 ) : null}
-                {classRecord.description ? (
+                {classRecord.description &&
+                classRecord.description.trim().toLowerCase() !== display.courseTitle.toLowerCase() ? (
                   <p className="student-record-description">
                     {classRecord.description}
                   </p>

@@ -167,7 +167,7 @@ export default function ClassShell({
             {display.sectionLine ? (
               <p className="class-shell-section-line">{display.sectionLine}</p>
             ) : null}
-            {isDeck && description ? (
+            {isDeck && description && description.trim().toLowerCase() !== display.courseTitle.toLowerCase() ? (
               <p className="class-shell-description" title={description}>
                 {description}
               </p>

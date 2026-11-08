@@ -6,7 +6,7 @@
   "scripts": {
     "test": "node --test --test-concurrency=1",
     "start": "node index.js",
-    "dev": "node index.js",
+    "dev": "node --watch index.js",
     "db:setup": "prisma generate && node scripts/apply-schema.js"
   },
   "keywords": [],
