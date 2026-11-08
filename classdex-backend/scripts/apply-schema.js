@@ -101,6 +101,15 @@ async function applySchema() {
     if (!gracePeriodColumn) {
       throw new Error("Schema setup is incomplete. Class.gracePeriodMinutes is missing.");
     }
+    const { rowCount: courseColumns } = await client.query(
+      `SELECT 1 FROM information_schema.columns
+       WHERE table_schema = current_schema()
+         AND table_name = 'Class'
+         AND column_name IN ('courseCode', 'courseTitle')`,
+    );
+    if (courseColumns !== 2) {
+      throw new Error("Schema setup is incomplete. Class courseCode/courseTitle columns are missing.");
+    }
     const { rowCount: userSecurityColumns } = await client.query(
       `SELECT 1 FROM information_schema.columns
        WHERE table_schema = current_schema()

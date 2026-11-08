@@ -120,6 +120,8 @@ model StudentProfile {
 
 model Class {
   id                 String            @id @default(cuid())
+  courseCode         String?
+  courseTitle        String?
   sectionName        String
   classCode          String            @unique
   description        String?
