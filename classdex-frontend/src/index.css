@@ -3953,7 +3953,7 @@ textarea {
   border-radius: 20px;
   border: 1px solid var(--line);
   border-top: 6px solid var(--royal);
-  padding: 18px 24px 14px 54px;
+  padding: 18px 24px 14px 24px;
   background:
     repeating-linear-gradient(
       to bottom,
@@ -3989,19 +3989,6 @@ textarea {
 
 .index-card-back {
   transform: rotateY(180deg);
-}
-
-/* Red vertical margin rule */
-.index-card-face::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 56px;
-  width: 1px;
-  background: color-mix(in srgb, var(--accent-red) 35%, transparent);
-  pointer-events: none;
-  z-index: 2;
 }
 
 /* Top header band */
@@ -5715,12 +5702,8 @@ textarea {
   }
 
   .index-card-face {
-    padding: 14px 14px 12px 36px;
+    padding: 14px 14px 12px 14px;
     border-radius: 16px;
-  }
-
-  .index-card-face::before {
-    left: 22px;
   }
 
   .index-card-header {
