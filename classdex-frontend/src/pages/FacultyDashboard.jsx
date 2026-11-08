@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import EmailVerificationBanner from "../components/EmailVerificationBanner";
@@ -7,6 +7,8 @@ import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { ErrorState, PageHeader } from "../components/DesignSystem";
 import { formatClassSchedule } from "../utils/schedule";
+import { getScheduleStatus, partitionAndOrderClasses } from "../utils/classOrdering";
+import { useNow } from "../utils/useNow";
 
 const PROMPT_DISMISSED_KEY = "classdex:faculty-profile-prompt-dismissed";
 
@@ -24,6 +26,7 @@ function isFacultyProfileComplete(profile, user) {
 export default function FacultyDashboard() {
   const { user } = useAuth();
   const location = useLocation();
+  const now = useNow();
   const [classes, setClasses] = useState([]);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -136,9 +139,121 @@ export default function FacultyDashboard() {
 
   const profileCompleted = isFacultyProfileComplete(profile, user);
   const displayName = profile?.name?.trim() || user?.name?.split(" ")[0] || "Faculty";
-  const activeClasses = classes.filter((item) => !item.archivedAt);
-  const archivedClasses = classes.filter((item) => Boolean(item.archivedAt));
-  const visibleClasses = activeTab === "archived" ? archivedClasses : activeClasses;
+  const activeClasses = useMemo(
+    () => classes.filter((item) => !item.archivedAt),
+    [classes],
+  );
+  const archivedClasses = useMemo(
+    () => classes.filter((item) => Boolean(item.archivedAt)),
+    [classes],
+  );
+
+  const liveActiveKey = useMemo(
+    () =>
+      activeClasses
+        .filter((item) => getScheduleStatus(item, now, { role: "FACULTY" }).isLive)
+        .map((item) => item.id)
+        .sort()
+        .join(","),
+    [activeClasses, now],
+  );
+
+  const { live: liveActiveClasses, rest: restActiveClasses } = useMemo(
+    () => partitionAndOrderClasses(activeClasses, { role: "FACULTY", now }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeClasses, liveActiveKey],
+  );
+
+  const orderedArchivedClasses = useMemo(
+    () => partitionAndOrderClasses(archivedClasses, { role: "FACULTY", now }).rest,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [archivedClasses],
+  );
+
+  const visibleClasses = activeTab === "archived" ? orderedArchivedClasses : activeClasses;
+
+  function renderFacultyCard(classRecord, index, { isLive = false, scheduleStatus = null } = {}) {
+    const isArchived = Boolean(classRecord.archivedAt);
+    const accentColor = isLive
+      ? "var(--accent-teal)"
+      : index % 2
+        ? "var(--accent-teal)"
+        : "var(--accent-amber)";
+
+    return (
+      <article
+        className={`class-card${isLive ? " is-live-class" : ""}`}
+        key={classRecord.id}
+        style={{ "--card-accent": accentColor }}
+      >
+        <div className="class-card-top">
+          <span className="class-icon"><Icon name="book" /></span>
+          <div className="class-card-counts">
+            {isLive ? (
+              <span className="enrolled-pill live-now-badge">
+                <span className="live-now-dot" aria-hidden="true" />
+                Live now
+              </span>
+            ) : null}
+            <span className="class-count"><Icon name="users" /> {classRecord._count.enrollments}</span>
+            {isArchived ? (
+              <span className="enrolled-pill enrolled-pill-archived">
+                <Icon name="archive" size={13} /> Archived
+              </span>
+            ) : pendingCounts[classRecord.id] ? (
+              <Link
+                to={`/faculty/classes/${classRecord.id}?notifications=1`}
+                className="class-count class-pending-count"
+                aria-label={`${pendingCounts[classRecord.id]} class notification${pendingCounts[classRecord.id] === 1 ? "" : "s"}`}
+                title="Open class notifications"
+              >
+                <Icon name="bell" size={15} />
+                <span className="notification-badge">{pendingCounts[classRecord.id]}</span>
+              </Link>
+            ) : null}
+          </div>
+        </div>
+        <p className="class-label">Section</p>
+        <h3>{classRecord.sectionName}</h3>
+        <div className="code-chip">Code <b>{classRecord.classCode}</b></div>
+        <p className="class-schedule"><Icon name="clock" /> {formatClassSchedule(classRecord)}</p>
+        {isLive && scheduleStatus?.endsAt ? (
+          <p className="live-window-status">
+            <span className="live-now-dot" aria-hidden="true" />
+            <span>Ends {scheduleStatus.endsAt} · {scheduleStatus.minutesLeft}m left</span>
+          </p>
+        ) : null}
+        <div className="class-card-actions">
+          {isLive ? (
+            <Link
+              to={`/faculty/classes/${classRecord.id}?module=attendance`}
+              className="button button-primary button-small"
+            >
+              Take attendance <Icon name="arrow" />
+            </Link>
+          ) : (
+            <Link to={`/faculty/classes/${classRecord.id}`} className="button button-primary button-small">
+              Open class <Icon name="arrow" />
+            </Link>
+          )}
+          {isArchived ? (
+            <button
+              type="button"
+              className="button button-secondary button-small"
+              disabled={restoringId === classRecord.id}
+              onClick={() => handleRestore(classRecord)}
+            >
+              {restoringId === classRecord.id ? "Restoring…" : "Restore"}
+            </button>
+          ) : (
+            <button type="button" className="button button-secondary button-small" onClick={() => copyInvite(classRecord.classCode)}>
+              <Icon name="copy" /> Invite
+            </button>
+          )}
+        </div>
+      </article>
+    );
+  }
 
   return (
     <AppShell active="home">
@@ -214,55 +329,56 @@ export default function FacultyDashboard() {
             onRetry={retryLoadDashboard}
           />
         ) : visibleClasses.length ? (
-          <div className="class-grid">
-            {visibleClasses.map((classRecord, index) => {
-              const isArchived = Boolean(classRecord.archivedAt);
-              return (
-                <article className="class-card" key={classRecord.id} style={{ "--card-accent": index % 2 ? "var(--accent-teal)" : "var(--accent-amber)" }}>
-                  <div className="class-card-top">
-                    <span className="class-icon"><Icon name="book" /></span>
-                    <div className="class-card-counts">
-                      <span className="class-count"><Icon name="users" /> {classRecord._count.enrollments}</span>
-                      {isArchived ? (
-                        <span className="enrolled-pill enrolled-pill-archived">
-                          <Icon name="archive" size={13} /> Archived
-                        </span>
-                      ) : pendingCounts[classRecord.id] ? (
-                        <Link
-                          to={`/faculty/classes/${classRecord.id}?notifications=1`}
-                          className="class-count class-pending-count"
-                          aria-label={`${pendingCounts[classRecord.id]} class notification${pendingCounts[classRecord.id] === 1 ? "" : "s"}`}
-                          title="Open class notifications"
-                        >
-                          <Icon name="bell" size={15} />
-                          <span className="notification-badge">{pendingCounts[classRecord.id]}</span>
-                        </Link>
-                      ) : null}
+          activeTab === "archived" ? (
+            <div className="class-grid">
+              {orderedArchivedClasses.map((classRecord, index) =>
+                renderFacultyCard(classRecord, index),
+              )}
+            </div>
+          ) : (
+            <div className="dashboard-classes-stack">
+              {liveActiveClasses.length > 0 ? (
+                <section
+                  className="happening-now-section"
+                  aria-labelledby="faculty-happening-now-heading"
+                >
+                  <div className="happening-now-header">
+                    <div className="happening-now-title-row">
+                      <span className="live-now-dot" aria-hidden="true" />
+                      <h3 id="faculty-happening-now-heading">Happening now</h3>
                     </div>
+                    <span className="happening-now-count">
+                      {liveActiveClasses.length}{" "}
+                      {liveActiveClasses.length === 1 ? "class" : "classes"} in session
+                    </span>
                   </div>
-                  <p className="class-label">Section</p>
-                  <h3>{classRecord.sectionName}</h3>
-                  <div className="code-chip">Code <b>{classRecord.classCode}</b></div>
-                  <p className="class-schedule"><Icon name="clock" /> {formatClassSchedule(classRecord)}</p>
-                  <div className="class-card-actions">
-                    <Link to={`/faculty/classes/${classRecord.id}`} className="button button-primary button-small">Open class <Icon name="arrow" /></Link>
-                    {isArchived ? (
-                      <button
-                        type="button"
-                        className="button button-secondary button-small"
-                        disabled={restoringId === classRecord.id}
-                        onClick={() => handleRestore(classRecord)}
-                      >
-                        {restoringId === classRecord.id ? "Restoring…" : "Restore"}
-                      </button>
-                    ) : (
-                      <button type="button" className="button button-secondary button-small" onClick={() => copyInvite(classRecord.classCode)}><Icon name="copy" /> Invite</button>
+                  <div className="class-grid">
+                    {liveActiveClasses.map((classRecord, index) =>
+                      renderFacultyCard(classRecord, index, {
+                        isLive: true,
+                        scheduleStatus: getScheduleStatus(classRecord, now, { role: "FACULTY" }),
+                      }),
                     )}
                   </div>
-                </article>
-              );
-            })}
-          </div>
+                </section>
+              ) : null}
+
+              {restActiveClasses.length > 0 ? (
+                <div className="dashboard-other-classes">
+                  {liveActiveClasses.length > 0 ? (
+                    <div className="dashboard-sub-heading">
+                      <h3>Other active classes</h3>
+                    </div>
+                  ) : null}
+                  <div className="class-grid">
+                    {restActiveClasses.map((classRecord, index) =>
+                      renderFacultyCard(classRecord, index),
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )
         ) : !loading && classes.length > 0 ? (
           <section className="empty-state">
             <div className="empty-art"><Icon name={activeTab === "archived" ? "archive" : "book"} size={28} /></div>
@@ -288,4 +404,3 @@ export default function FacultyDashboard() {
     </AppShell>
   );
 }
-

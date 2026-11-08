@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import Avatar from "../components/Avatar";
@@ -9,6 +9,8 @@ import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { ErrorState, PageHeader } from "../components/DesignSystem";
 import { formatClassSchedule } from "../utils/schedule";
+import { getScheduleStatus, partitionAndOrderClasses } from "../utils/classOrdering";
+import { useNow } from "../utils/useNow";
 
 const LEDGER_FIELDS = [
   { key: "attendance", label: "Attendance" },
@@ -26,6 +28,7 @@ function isEmptySummaryValue(value) {
 export default function StudentDashboard() {
   const { user, updateUser } = useAuth();
   const location = useLocation();
+  const now = useNow();
   const [profile, setProfile] = useState(null);
   const [classes, setClasses] = useState([]);
   const [classCode, setClassCode] = useState("");
@@ -113,6 +116,150 @@ export default function StudentDashboard() {
     captchaRef.current?.reset();
     setCaptchaOpen(false);
     void joinWithToken(token);
+  }
+
+  const liveStudentKey = useMemo(
+    () =>
+      classes
+        .filter((item) => getScheduleStatus(item, now, { role: "STUDENT" }).isLive)
+        .map((item) => item.id)
+        .sort()
+        .join(","),
+    [classes, now],
+  );
+
+  const { live: liveClasses, rest: restClasses } = useMemo(
+    () => partitionAndOrderClasses(classes, { role: "STUDENT", now }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [classes, liveStudentKey],
+  );
+
+  function renderStudentCard(classRecord, index, { isLive = false, scheduleStatus = null } = {}) {
+    const isPending = classRecord.enrollmentStatus === "PENDING";
+    const isDropped = classRecord.enrollmentStatus === "DROPPED";
+    const isDeclined = classRecord.enrollmentStatus === "DECLINED";
+    const instructorName =
+      classRecord.faculty?.facultyProfile?.name ||
+      classRecord.faculty?.name ||
+      "Faculty";
+    const cardAccent = isLive
+      ? "var(--accent-teal)"
+      : index % 3 === 1
+        ? "var(--accent-teal)"
+        : index % 3 === 2
+          ? "var(--accent-amber)"
+          : "var(--royal)";
+
+    return (
+      <article
+        className={`class-card student-index-card${isPending ? " is-pending" : ""}${
+          isLive ? " is-live-class" : ""
+        }`}
+        key={classRecord.id}
+        style={{ "--card-accent": cardAccent }}
+      >
+        <div className="class-card-top student-card-top">
+          <div className="student-card-eyebrow">
+            <span className="class-icon">
+              <Icon name="book" size={17} />
+            </span>
+            <span className="class-label">Section</span>
+          </div>
+          <div className="class-card-badges">
+            {isLive ? (
+              <span className="enrolled-pill live-now-badge">
+                <span className="live-now-dot" aria-hidden="true" />
+                Live now
+              </span>
+            ) : null}
+            {classRecord.archivedAt ? (
+              <span className="enrolled-pill enrolled-pill-archived">Archived</span>
+            ) : null}
+            <span
+              className={`enrolled-pill${
+                isDropped || isDeclined
+                  ? " enrolled-pill-dropped"
+                  : classRecord.enrollmentStatus !== "APPROVED"
+                    ? " enrolled-pill-pending"
+                    : ""
+              }`}
+            >
+              {isDropped
+                ? "Dropped"
+                : isPending
+                  ? "Pending approval"
+                  : isDeclined
+                    ? "Declined"
+                    : "Enrolled"}
+            </span>
+          </div>
+        </div>
+
+        <div className="student-card-heading">
+          <h3>{classRecord.sectionName}</h3>
+          <div className="code-chip">
+            Code <b>{classRecord.classCode}</b>
+          </div>
+        </div>
+
+        {isPending ? (
+          <p className="student-pending-note" role="status">
+            <Icon name="clock" size={13} />
+            <span>Waiting for instructor approval</span>
+          </p>
+        ) : null}
+
+        <div className="student-card-meta">
+          <p className="class-schedule">
+            <Icon name="clock" size={14} />
+            <span>{formatClassSchedule(classRecord)}</span>
+          </p>
+          {isLive && scheduleStatus?.endsAt ? (
+            <p className="live-window-status">
+              <span className="live-now-dot" aria-hidden="true" />
+              <span>Ends {scheduleStatus.endsAt} · {scheduleStatus.minutesLeft}m left</span>
+            </p>
+          ) : null}
+          <p className="faculty-byline">
+            <Avatar
+              src={classRecord.faculty?.facultyProfile?.photo}
+              name={instructorName}
+              size="xs"
+              className="faculty-byline-avatar"
+            />
+            <span>{instructorName}</span>
+          </p>
+        </div>
+
+        <div
+          className="student-class-summary student-ledger"
+          aria-label="Class record summary"
+        >
+          {LEDGER_FIELDS.map(({ key, label }) => {
+            const rawValue = classRecord.recordSummary?.[key];
+            const empty = isEmptySummaryValue(rawValue);
+            return (
+              <div key={key} className="student-ledger-row">
+                <span className="student-ledger-label">{label}</span>
+                <span className="student-ledger-leader" aria-hidden="true" />
+                {empty ? (
+                  <span className="student-ledger-value is-empty">none yet</span>
+                ) : (
+                  <strong className="student-ledger-value">{rawValue}</strong>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <Link
+          to={`/student/classes/${classRecord.id}`}
+          className={`button ${isLive ? "button-primary" : "button-secondary"} student-class-action`}
+        >
+          View class record <Icon name="arrow" size={15} />
+        </Link>
+      </article>
+    );
   }
 
   return (
@@ -218,120 +365,47 @@ export default function StudentDashboard() {
             onRetry={retryLoadDashboard}
           />
         ) : classes.length ? (
-          <div className="class-grid student-class-grid">
-            {classes.map((classRecord, index) => {
-              const isPending = classRecord.enrollmentStatus === "PENDING";
-              const isDropped = classRecord.enrollmentStatus === "DROPPED";
-              const isDeclined = classRecord.enrollmentStatus === "DECLINED";
-              const instructorName =
-                classRecord.faculty?.facultyProfile?.name ||
-                classRecord.faculty?.name ||
-                "Faculty";
-
-              return (
-                <article
-                  className={`class-card student-index-card${isPending ? " is-pending" : ""}`}
-                  key={classRecord.id}
-                  style={{
-                    "--card-accent":
-                      index % 3 === 1
-                        ? "var(--accent-teal)"
-                        : index % 3 === 2
-                        ? "var(--accent-amber)"
-                        : "var(--royal)",
-                  }}
-                >
-                  <div className="class-card-top student-card-top">
-                    <div className="student-card-eyebrow">
-                      <span className="class-icon">
-                        <Icon name="book" size={17} />
-                      </span>
-                      <span className="class-label">Section</span>
-                    </div>
-                    <div className="class-card-badges">
-                      {classRecord.archivedAt ? (
-                        <span className="enrolled-pill enrolled-pill-archived">Archived</span>
-                      ) : null}
-                      <span
-                        className={`enrolled-pill${
-                          isDropped || isDeclined
-                            ? " enrolled-pill-dropped"
-                            : classRecord.enrollmentStatus !== "APPROVED"
-                            ? " enrolled-pill-pending"
-                            : ""
-                        }`}
-                      >
-                        {isDropped
-                          ? "Dropped"
-                          : isPending
-                          ? "Pending approval"
-                          : isDeclined
-                          ? "Declined"
-                          : "Enrolled"}
-                      </span>
-                    </div>
+          <div className="dashboard-classes-stack">
+            {liveClasses.length > 0 ? (
+              <section
+                className="happening-now-section"
+                aria-labelledby="student-happening-now-heading"
+              >
+                <div className="happening-now-header">
+                  <div className="happening-now-title-row">
+                    <span className="live-now-dot" aria-hidden="true" />
+                    <h3 id="student-happening-now-heading">Happening now</h3>
                   </div>
+                  <span className="happening-now-count">
+                    {liveClasses.length}{" "}
+                    {liveClasses.length === 1 ? "class" : "classes"} in session
+                  </span>
+                </div>
+                <div className="class-grid student-class-grid">
+                  {liveClasses.map((classRecord, index) =>
+                    renderStudentCard(classRecord, index, {
+                      isLive: true,
+                      scheduleStatus: getScheduleStatus(classRecord, now, { role: "STUDENT" }),
+                    }),
+                  )}
+                </div>
+              </section>
+            ) : null}
 
-                  <div className="student-card-heading">
-                    <h3>{classRecord.sectionName}</h3>
-                    <div className="code-chip">
-                      Code <b>{classRecord.classCode}</b>
-                    </div>
+            {restClasses.length > 0 ? (
+              <div className="dashboard-other-classes">
+                {liveClasses.length > 0 ? (
+                  <div className="dashboard-sub-heading">
+                    <h3>Other classes</h3>
                   </div>
-
-                  {isPending ? (
-                    <p className="student-pending-note" role="status">
-                      <Icon name="clock" size={13} />
-                      <span>Waiting for instructor approval</span>
-                    </p>
-                  ) : null}
-
-                  <div className="student-card-meta">
-                    <p className="class-schedule">
-                      <Icon name="clock" size={14} />
-                      <span>{formatClassSchedule(classRecord)}</span>
-                    </p>
-                    <p className="faculty-byline">
-                      <Avatar
-                        src={classRecord.faculty?.facultyProfile?.photo}
-                        name={instructorName}
-                        size="xs"
-                        className="faculty-byline-avatar"
-                      />
-                      <span>{instructorName}</span>
-                    </p>
-                  </div>
-
-                  <div
-                    className="student-class-summary student-ledger"
-                    aria-label="Class record summary"
-                  >
-                    {LEDGER_FIELDS.map(({ key, label }) => {
-                      const rawValue = classRecord.recordSummary?.[key];
-                      const empty = isEmptySummaryValue(rawValue);
-                      return (
-                        <div key={key} className="student-ledger-row">
-                          <span className="student-ledger-label">{label}</span>
-                          <span className="student-ledger-leader" aria-hidden="true" />
-                          {empty ? (
-                            <span className="student-ledger-value is-empty">none yet</span>
-                          ) : (
-                            <strong className="student-ledger-value">{rawValue}</strong>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <Link
-                    to={`/student/classes/${classRecord.id}`}
-                    className="button button-secondary student-class-action"
-                  >
-                    View class record <Icon name="arrow" size={15} />
-                  </Link>
-                </article>
-              );
-            })}
+                ) : null}
+                <div className="class-grid student-class-grid">
+                  {restClasses.map((classRecord, index) =>
+                    renderStudentCard(classRecord, index),
+                  )}
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : !loading && profile ? (
           <section className="empty-state student-empty-index-card">

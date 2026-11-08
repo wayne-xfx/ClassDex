@@ -9934,3 +9934,167 @@ textarea {
     font-size: 13.5px;
   }
 }
+
+
+/* ==========================================================================
+   Dashboard Live Class Pinning ("Happening now" & "Live now" badges)
+   ========================================================================== */
+
+.dashboard-classes-stack {
+  display: grid;
+  gap: 28px;
+}
+
+.happening-now-section {
+  display: grid;
+  gap: 16px;
+  padding: 18px 20px 22px;
+  border-radius: 20px;
+  border: 1px solid color-mix(in srgb, var(--accent-teal) 36%, var(--line));
+  background: color-mix(in srgb, var(--accent-teal) 5%, var(--card));
+  box-shadow: var(--shadow-soft);
+}
+
+[data-theme="dark"] .happening-now-section {
+  border-color: color-mix(in srgb, var(--accent-teal) 42%, var(--line));
+  background: color-mix(in srgb, var(--accent-teal) 8%, var(--card));
+}
+
+.happening-now-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.happening-now-title-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.happening-now-title-row h3 {
+  margin: 0;
+  color: var(--navy);
+  font-size: 18px;
+  font-weight: 760;
+  letter-spacing: -0.02em;
+}
+
+.happening-now-count {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 11px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent-teal) 34%, var(--line));
+  background: color-mix(in srgb, var(--accent-teal) 12%, var(--card));
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.live-now-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 999px;
+  background: var(--accent-teal);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-teal) 24%, transparent);
+  animation: live-dot-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes live-dot-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-teal) 22%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent-teal) 12%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-now-dot {
+    animation: none;
+  }
+}
+
+.enrolled-pill.live-now-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--accent-teal) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent-teal) 15%, var(--card));
+  color: var(--navy);
+  font-weight: 760;
+}
+
+[data-theme="dark"] .enrolled-pill.live-now-badge {
+  border-color: color-mix(in srgb, var(--accent-teal) 52%, var(--line));
+  background: color-mix(in srgb, var(--accent-teal) 20%, var(--card));
+  color: var(--navy);
+}
+
+.class-card.is-live-class {
+  border-color: color-mix(in srgb, var(--accent-teal) 45%, var(--line));
+}
+
+.live-window-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 4px 0 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--royal) 28%, var(--line));
+  background: color-mix(in srgb, var(--royal) 10%, var(--card));
+  color: var(--navy);
+  font-size: 12.5px;
+  font-weight: 680;
+  line-height: 1.35;
+}
+
+.live-window-status .live-now-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  background: var(--royal);
+  box-shadow: none;
+  animation: none;
+}
+
+.dashboard-other-classes {
+  display: grid;
+  gap: 14px;
+}
+
+.dashboard-sub-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dashboard-sub-heading h3 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 740;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 480px) {
+  .happening-now-section {
+    padding: 14px 14px 16px;
+    border-radius: 16px;
+  }
+
+  .class-card-counts {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}
