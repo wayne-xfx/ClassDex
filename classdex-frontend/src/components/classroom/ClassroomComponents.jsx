@@ -160,22 +160,41 @@ export function StudentCard({ student, status = "UNMARKED", children, layout = "
   );
 }
 
-export function StudentDetailDialog({ student, className, records, loading, error, onClose }) {
-  const [isFlipped, setIsFlipped] = useState(false);
+export function IndexCardView({
+  student,
+  className,
+  classCode,
+  statusBadges,
+  banner,
+  records,
+  loading,
+  error,
+  variant = "dialog",
+  onClose,
+}) {
+  const studentKey = student?.id ?? records?.student?.id ?? "__card__";
+  const [flippedKey, setFlippedKey] = useState(null);
+  const isFlipped = flippedKey === studentKey;
+  const setIsFlipped = (next) => {
+    setFlippedKey((prev) => {
+      const currentlyFlipped = prev === studentKey;
+      const shouldFlip = typeof next === "function" ? next(currentlyFlipped) : Boolean(next);
+      return shouldFlip ? studentKey : null;
+    });
+  };
   const frontHeadingRef = useRef(null);
   const backHeadingRef = useRef(null);
-  const dialogRef = useRef(null);
+  const sceneRef = useRef(null);
+  const hasMountedRef = useRef(false);
+  const isDialog = variant === "dialog";
 
-  // Reset flip to front whenever student changes
-  useEffect(() => {
-    setIsFlipped(false);
-  }, [student?.id]);
-
-  // Keyboard navigation: Esc to close, F to toggle flip
+  // Keyboard navigation: Esc to close (dialog only), F to toggle flip (when focus is inside card/dialog)
   useEffect(() => {
     function handleKeyDown(event) {
       if (event.key === "Escape") {
-        onClose();
+        if (isDialog && onClose) {
+          onClose();
+        }
         return;
       }
       if (
@@ -184,25 +203,44 @@ export function StudentDetailDialog({ student, className, records, loading, erro
         !event.metaKey &&
         !event.altKey
       ) {
-        const activeTag = document.activeElement?.tagName?.toLowerCase();
-        if (activeTag !== "input" && activeTag !== "textarea") {
+        const activeEl = document.activeElement;
+        const activeTag = activeEl?.tagName?.toLowerCase();
+        if (
+          activeTag === "input" ||
+          activeTag === "textarea" ||
+          activeTag === "select" ||
+          activeEl?.isContentEditable
+        ) {
+          return;
+        }
+        const focusInsideCard = isDialog
+          ? sceneRef.current?.contains(activeEl) || activeEl === document.body
+          : Boolean(sceneRef.current?.contains(activeEl));
+        if (focusInsideCard) {
           event.preventDefault();
-          setIsFlipped((prev) => !prev);
+          setFlippedKey((prev) => (prev === studentKey ? null : studentKey));
         }
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  }, [isDialog, onClose, studentKey]);
 
-  // Focus visible face heading on flip
+  // Focus visible face heading on flip (do not steal focus on initial mount in inline variant)
   useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      if (isDialog) {
+        frontHeadingRef.current?.focus();
+      }
+      return;
+    }
     if (isFlipped) {
       backHeadingRef.current?.focus();
     } else {
       frontHeadingRef.current?.focus();
     }
-  }, [isFlipped]);
+  }, [isFlipped, isDialog]);
 
   const formatDate = (isoStr) => {
     if (!isoStr) return "";
@@ -224,10 +262,21 @@ export function StudentDetailDialog({ student, className, records, loading, erro
     return lower.charAt(0).toUpperCase() + lower.slice(1);
   };
 
+  const attendanceList = records?.attendance || [];
+  const presentCount = attendanceList.filter((r) => r.status === "PRESENT").length;
+  const lateCount = attendanceList.filter((r) => r.status === "LATE").length;
+  const absentCount = attendanceList.filter((r) => r.status === "ABSENT").length;
+
+  const recitationsList = records?.recitations || [];
+
   // Back face calculations
   const quizzes = records?.quizzes || [];
   const scoredQuizzes = quizzes.filter(
-    (q) => !q.isAbsent && q.score !== null && q.session?.totalItems > 0
+    (q) =>
+      !q.isAbsent &&
+      q.score !== null &&
+      q.score !== undefined &&
+      q.session?.totalItems > 0
   );
   const quizAvg =
     scoredQuizzes.length > 0
@@ -241,7 +290,11 @@ export function StudentDetailDialog({ student, className, records, loading, erro
 
   const activities = records?.activities || [];
   const scoredActivities = activities.filter(
-    (a) => !a.isAbsent && a.score !== null && a.activity?.maxScore > 0
+    (a) =>
+      !a.isAbsent &&
+      a.score !== null &&
+      a.score !== undefined &&
+      a.activity?.maxScore > 0
   );
   const actAvg =
     scoredActivities.length > 0
@@ -253,29 +306,36 @@ export function StudentDetailDialog({ student, className, records, loading, erro
         )
       : null;
 
-  const projects = records?.projects || [];
+  const projectOrder = { MIDTERM: 0, FINALS: 1 };
+  const projects = [...(records?.projects || [])].sort(
+    (a, b) =>
+      (projectOrder[a.project?.type] ?? 99) -
+      (projectOrder[b.project?.type] ?? 99)
+  );
   const gradedProjects = projects.filter(
-    (p) => !p.isAbsent && p.score !== null
+    (p) => !p.isAbsent && p.score !== null && p.score !== undefined
   );
 
+  const studentObj = student || records?.student || {};
+  const studentEmail = records?.student?.email || studentObj.email;
+  const studentAddress = records?.student?.address || studentObj.address;
+
   return (
-    <div
-      className="student-detail-backdrop"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
+    <>
       <div className="sr-only" aria-live="polite" aria-atomic="true">
         {isFlipped
           ? "Showing back of card: quizzes, activities and projects"
           : "Showing front of card: profile, attendance and recitation"}
       </div>
 
+      {banner ? <div className="index-card-banner-slot">{banner}</div> : null}
+
       <div
-        ref={dialogRef}
-        className="index-card-scene"
-        role="dialog"
-        aria-modal="true"
+        ref={sceneRef}
+        tabIndex={-1}
+        className={`index-card-scene${isDialog ? "" : " index-card-scene-inline"}`}
+        role={isDialog ? "dialog" : "region"}
+        aria-modal={isDialog ? "true" : undefined}
         aria-labelledby={isFlipped ? "student-detail-back-title" : "student-detail-title"}
       >
         <div className={`index-card${isFlipped ? " is-flipped" : ""}`}>
@@ -290,29 +350,33 @@ export function StudentDetailDialog({ student, className, records, loading, erro
             <div className="index-card-header">
               <div className="student-detail-profile">
                 <Avatar
-                  src={student.photo}
-                  name={student.name}
+                  src={studentObj.photo}
+                  name={studentObj.name}
                   size="lg"
                   className="student-detail-photo"
                 />
                 <div className="student-detail-profile-text">
                   <span className="eyebrow">
-                    <Icon name="book" size={13} /> {className} · index card
+                    <Icon name="book" size={13} /> {className}
+                    {classCode ? ` · ${classCode}` : ""} · index card
                   </span>
                   <h2
                     id="student-detail-title"
                     ref={frontHeadingRef}
                     tabIndex={-1}
                   >
-                    {formatStudentName(student.name)}
+                    {formatStudentName(studentObj.name)}
                   </h2>
                   <p className="student-detail-id">
-                    Student ID · {student.studentId}
+                    Student ID · {studentObj.studentId}
                   </p>
                 </div>
               </div>
 
               <div className="index-card-header-actions">
+                {statusBadges ? (
+                  <div className="index-card-status-badges">{statusBadges}</div>
+                ) : null}
                 <button
                   type="button"
                   className="index-card-flip-btn"
@@ -323,36 +387,38 @@ export function StudentDetailDialog({ student, className, records, loading, erro
                   <Icon name="flip" size={15} />
                   <span>Flip card</span>
                 </button>
-                <button
-                  type="button"
-                  className="student-detail-close"
-                  aria-label="Close student profile"
-                  onClick={onClose}
-                >
-                  <Icon name="x" size={18} />
-                </button>
+                {isDialog && onClose ? (
+                  <button
+                    type="button"
+                    className="student-detail-close"
+                    aria-label="Close student profile"
+                    onClick={onClose}
+                  >
+                    <Icon name="x" size={18} />
+                  </button>
+                ) : null}
               </div>
             </div>
 
             <div className="student-detail-info">
               <div>
                 <span>Program</span>
-                <strong>{student.program || "Not provided"}</strong>
+                <strong>{studentObj.program || "Not provided"}</strong>
               </div>
               <div>
                 <span>Section</span>
-                <strong>{student.section || "Not provided"}</strong>
+                <strong>{studentObj.section || "Not provided"}</strong>
               </div>
-              {records?.student?.email ? (
+              {studentEmail ? (
                 <div>
                   <span>Email</span>
-                  <strong>{records.student.email}</strong>
+                  <strong>{studentEmail}</strong>
                 </div>
               ) : null}
-              {records?.student?.address ? (
+              {studentAddress ? (
                 <div>
                   <span>Address</span>
-                  <strong>{records.student.address}</strong>
+                  <strong>{studentAddress}</strong>
                 </div>
               ) : null}
             </div>
@@ -374,22 +440,24 @@ export function StudentDetailDialog({ student, className, records, loading, erro
                   {/* Attendance Column */}
                   <div className="index-card-col">
                     <h4 className="index-card-col-title">
-                      <Icon name="clipboardCheck" size={15} />
-                      <span>Attendance</span>
-                      <span className="index-card-col-count">
-                        ({records?.attendance?.length || 0})
+                      <div className="index-card-col-title-left">
+                        <Icon name="clipboardCheck" size={15} />
+                        <span>Attendance</span>
+                      </div>
+                      <span className="index-card-col-summary">
+                        Present {presentCount} · Late {lateCount} · Absent {absentCount}
                       </span>
                     </h4>
                     <div className="index-card-records">
-                      {records?.attendance?.length ? (
+                      {attendanceList.length ? (
                         <ul className="index-card-list">
-                          {records.attendance.map((record) => (
+                          {attendanceList.map((record) => (
                             <li key={record.id} className="index-card-row">
                               <time dateTime={record.session?.date}>
                                 {formatDate(record.session?.date)}
                               </time>
                               <span
-                                className={`student-status status-${record.status.toLowerCase()}`}
+                                className={`student-status status-${(record.status || "UNMARKED").toLowerCase()}`}
                               >
                                 {DETAIL_STATUS_LABELS[record.status] || record.status}
                               </span>
@@ -407,34 +475,43 @@ export function StudentDetailDialog({ student, className, records, loading, erro
                   {/* Recitation Column */}
                   <div className="index-card-col">
                     <h4 className="index-card-col-title">
-                      <Icon name="message" size={15} />
-                      <span>Recitation</span>
+                      <div className="index-card-col-title-left">
+                        <Icon name="message" size={15} />
+                        <span>Recitation</span>
+                      </div>
                       <span className="index-card-col-count">
-                        ({records?.recitations?.length || 0})
+                        ({recitationsList.length})
                       </span>
                     </h4>
                     <div className="index-card-records">
-                      {records?.recitations?.length ? (
+                      {recitationsList.length ? (
                         <ul className="index-card-list">
-                          {records.recitations.map((record) => (
-                            <li key={record.id} className="index-card-row">
-                              <time dateTime={record.calledAt}>
-                                {formatDate(record.calledAt)}
-                              </time>
-                              <span className="index-card-mode">
-                                {formatMode(record.method || record.mode)}
-                              </span>
-                              <strong className="index-card-score">
-                                {record.score === null
-                                  ? "No score"
-                                  : `Score ${record.score}`}
-                              </strong>
-                            </li>
-                          ))}
+                          {recitationsList.map((record) => {
+                            const calledDate = record.calledAt || record.session?.date;
+                            return (
+                              <li key={record.id} className="index-card-row">
+                                <time dateTime={calledDate}>
+                                  {formatDate(calledDate)}
+                                </time>
+                                <span className="index-card-mode">
+                                  {formatMode(record.method || record.mode)}
+                                </span>
+                                {record.score === null || record.score === undefined ? (
+                                  <span className="index-card-ungraded">
+                                    Not scored
+                                  </span>
+                                ) : (
+                                  <strong className="index-card-score">
+                                    Score {record.score}
+                                  </strong>
+                                )}
+                              </li>
+                            );
+                          })}
                         </ul>
                       ) : (
                         <p className="student-detail-message">
-                          No recitation records yet.
+                          No recitation calls yet.
                         </p>
                       )}
                     </div>
@@ -473,8 +550,8 @@ export function StudentDetailDialog({ student, className, records, loading, erro
             <div className="index-card-header index-card-header-compact">
               <div className="student-detail-profile student-detail-profile-compact">
                 <Avatar
-                  src={student.photo}
-                  name={student.name}
+                  src={studentObj.photo}
+                  name={studentObj.name}
                   size="sm"
                   className="index-card-back-avatar"
                 />
@@ -485,15 +562,18 @@ export function StudentDetailDialog({ student, className, records, loading, erro
                     ref={backHeadingRef}
                     tabIndex={-1}
                   >
-                    {formatStudentName(student.name)}
+                    {formatStudentName(studentObj.name)}
                   </h2>
                   <p className="student-detail-id">
-                    Student ID · {student.studentId}
+                    Student ID · {studentObj.studentId}
                   </p>
                 </div>
               </div>
 
               <div className="index-card-header-actions">
+                {statusBadges ? (
+                  <div className="index-card-status-badges">{statusBadges}</div>
+                ) : null}
                 <button
                   type="button"
                   className="index-card-flip-btn"
@@ -504,14 +584,16 @@ export function StudentDetailDialog({ student, className, records, loading, erro
                   <Icon name="flip" size={15} />
                   <span>Flip card</span>
                 </button>
-                <button
-                  type="button"
-                  className="student-detail-close"
-                  aria-label="Close student profile"
-                  onClick={onClose}
-                >
-                  <Icon name="x" size={18} />
-                </button>
+                {isDialog && onClose ? (
+                  <button
+                    type="button"
+                    className="student-detail-close"
+                    aria-label="Close student profile"
+                    onClick={onClose}
+                  >
+                    <Icon name="x" size={18} />
+                  </button>
+                ) : null}
               </div>
             </div>
 
@@ -561,7 +643,7 @@ export function StudentDetailDialog({ student, className, records, loading, erro
                                   <span className="student-status status-absent">
                                     Absent
                                   </span>
-                                ) : quiz.score === null ? (
+                                ) : quiz.score === null || quiz.score === undefined ? (
                                   <span className="index-card-ungraded">
                                     Not graded
                                   </span>
@@ -615,7 +697,7 @@ export function StudentDetailDialog({ student, className, records, loading, erro
                                   <span className="student-status status-absent">
                                     Absent
                                   </span>
-                                ) : act.score === null ? (
+                                ) : act.score === null || act.score === undefined ? (
                                   <span className="index-card-ungraded">
                                     Not graded
                                   </span>
@@ -631,7 +713,7 @@ export function StudentDetailDialog({ student, className, records, loading, erro
                         </ul>
                       ) : (
                         <p className="student-detail-message">
-                          No activities recorded yet.
+                          No activity scores yet.
                         </p>
                       )}
                     </div>
@@ -673,7 +755,7 @@ export function StudentDetailDialog({ student, className, records, loading, erro
                                   <span className="student-status status-absent">
                                     Absent
                                   </span>
-                                ) : proj.score === null ? (
+                                ) : proj.score === null || proj.score === undefined ? (
                                   <span className="index-card-ungraded">
                                     Not graded
                                   </span>
@@ -688,7 +770,7 @@ export function StudentDetailDialog({ student, className, records, loading, erro
                         </ul>
                       ) : (
                         <p className="student-detail-message">
-                          No projects recorded yet.
+                          No project scores yet.
                         </p>
                       )}
                     </div>
@@ -727,6 +809,30 @@ export function StudentDetailDialog({ student, className, records, loading, erro
           </section>
         </div>
       </div>
+    </>
+  );
+}
+
+export function StudentDetailDialog({ student, className, classCode, statusBadges, banner, records, loading, error, onClose }) {
+  return (
+    <div
+      className="student-detail-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose?.();
+      }}
+    >
+      <IndexCardView
+        variant="dialog"
+        student={student}
+        className={className}
+        classCode={classCode}
+        statusBadges={statusBadges}
+        banner={banner}
+        records={records}
+        loading={loading}
+        error={error}
+        onClose={onClose}
+      />
     </div>
   );
 }

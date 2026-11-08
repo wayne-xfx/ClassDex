@@ -2,40 +2,40 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import Icon from "../components/Icon";
-import { Badge, Card, PageHeader, Skeleton } from "../components/DesignSystem";
+import { ErrorState, Skeleton } from "../components/DesignSystem";
+import { IndexCardView } from "../components/classroom/ClassroomComponents";
+import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
+
+const SUMMARY_FIELDS = [
+  { key: "attendance", label: "Attendance" },
+  { key: "recitation", label: "Recitation" },
+  { key: "activities", label: "Activities" },
+  { key: "quiz", label: "Quiz" },
+];
+
+function isEmptySummaryValue(value) {
+  if (value === null || value === undefined) return true;
+  const normalized = String(value).trim();
+  return !normalized || normalized === "-" || normalized === "—";
+}
 
 export default function StudentClassRecord() {
   const { id } = useParams();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const [error, setError] = useState("");
   const [classRecord, setClassRecord] = useState(null);
   const [records, setRecords] = useState(null);
-  const quizStats = useMemo(() => {
-    const quizzes = records?.quizzes || [];
-    const scored = quizzes.filter((item) => item.score !== null && item.score !== undefined);
-    const totalPossible = scored.reduce((sum, item) => sum + (item.session.totalItems || 0), 0);
-    const totalScore = scored.reduce((sum, item) => sum + item.score, 0);
-    const bestItem = scored.reduce((best, item) => {
-      const currentPercent = item.session.totalItems ? item.score / item.session.totalItems : 0;
-      const bestPercent = best && best.session.totalItems ? best.score / best.session.totalItems : -1;
-      return currentPercent > bestPercent ? item : best;
-    }, null);
-    return {
-      attempts: quizzes.length,
-      average: totalPossible ? `${Math.round((totalScore / totalPossible) * 100)}%` : "—",
-      best: bestItem
-        ? `${Math.round((bestItem.session.totalItems ? (bestItem.score / bestItem.session.totalItems) * 100 : 0))}%`
-        : "—",
-      latest: scored[0]?.score === undefined ? "—" : scored[0]?.score,
-    };
-  }, [records]);
 
   useEffect(() => {
     let cancelled = false;
-    api.studentClassRecord(id)
+    api
+      .studentClassRecord(id)
       .then((data) => {
         if (cancelled) return;
+        setError("");
         setClassRecord(data.class);
         setRecords(data);
       })
@@ -48,222 +48,231 @@ export default function StudentClassRecord() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, reloadNonce]);
+
+  function retryLoadRecord() {
+    setError("");
+    setLoading(true);
+    setReloadNonce((current) => current + 1);
+  }
+
+  const adaptedRecords = useMemo(() => {
+    if (!records) return null;
+    const projectOrder = { MIDTERM: 0, FINALS: 1 };
+    return {
+      student: records.student,
+      attendance: records.attendance || [],
+      recitations: (records.recitations || []).map((r) => ({
+        ...r,
+        calledAt: r.calledAt || r.session?.date || null,
+      })),
+      quizzes: (records.quizzes || []).map((q) => ({
+        ...q,
+        session: q.session || {},
+      })),
+      activities: (records.activities || []).map((a) => ({
+        ...a,
+        activity: a.activity || { title: a.title, maxScore: a.maxScore },
+        session: a.session || a.activity?.session || null,
+      })),
+      projects: [...(records.projects || [])].sort(
+        (a, b) =>
+          (projectOrder[a.project?.type] ?? 99) -
+          (projectOrder[b.project?.type] ?? 99)
+      ),
+    };
+  }, [records]);
+
+  const studentIdentity = useMemo(() => {
+    const base = records?.student || {};
+    return {
+      ...base,
+      name: base.name || user?.name || "Student",
+      photo: base.photo || user?.photo || "",
+    };
+  }, [records?.student, user?.name, user?.photo]);
+
+  const isDropped = classRecord?.enrollmentStatus === "DROPPED";
+  const isPending = classRecord?.enrollmentStatus === "PENDING";
+  const isDeclined = classRecord?.enrollmentStatus === "DECLINED";
 
   return (
     <AppShell active="home">
-      <div className="content-wide">
+      <div className="content-wide student-record-page">
         <nav className="class-breadcrumb" aria-label="Breadcrumb">
           <Link to="/student">Dashboard</Link>
           <Icon name="chevron" size={14} />
-          <span aria-current="page">{classRecord?.sectionName || "Class record"}</span>
+          <span aria-current="page">
+            {classRecord?.sectionName || "Class record"}
+          </span>
         </nav>
 
         {loading ? (
-          <div className="student-record-loading">
-            <Skeleton className="student-record-skeleton" />
-            <Skeleton className="student-record-skeleton" />
-            <Skeleton className="student-record-skeleton" />
+          <div
+            className="student-record-loading-shell"
+            role="status"
+            aria-label="Loading class record"
+          >
+            <div className="student-record-header-skeleton">
+              <Skeleton className="student-skeleton-title" />
+              <Skeleton className="student-skeleton-meta" />
+            </div>
+            <div className="student-record-summary-strip is-loading">
+              {SUMMARY_FIELDS.map(({ key }) => (
+                <div key={key} className="student-record-summary-cell">
+                  <Skeleton className="student-skeleton-stat" />
+                </div>
+              ))}
+            </div>
+            <div className="index-card-scene index-card-scene-inline index-card-skeleton-scene">
+              <div className="index-card-face index-card-skeleton-face">
+                <div className="student-skeleton-card-head">
+                  <Skeleton className="student-skeleton-avatar" />
+                  <div className="student-skeleton-lines">
+                    <Skeleton className="student-skeleton-line-lg" />
+                    <Skeleton className="student-skeleton-line-sm" />
+                  </div>
+                </div>
+                <div className="student-skeleton-cols">
+                  <Skeleton className="student-skeleton-col" />
+                  <Skeleton className="student-skeleton-col" />
+                </div>
+              </div>
+            </div>
           </div>
         ) : error ? (
-          <Card className="student-record-error">
-            <Badge tone="danger">Not available</Badge>
-            <h1>Class record unavailable</h1>
-            <p>{error}</p>
-            <Link to="/student" className="button button-secondary">
-              Back to dashboard
-            </Link>
-          </Card>
+          <ErrorState
+            title="Class record unavailable"
+            message={error}
+            onRetry={retryLoadRecord}
+            backTo="/student"
+            backLabel="Back to dashboard"
+          />
         ) : classRecord ? (
           <>
-            <PageHeader
-              eyebrow="Student class record"
-              icon="book"
-              title={classRecord.sectionName}
-              description={classRecord.description || "Your full class record is organized into one clean student view."}
-              action={<Link to="/student" className="button button-secondary"><Icon name="chevron" /> Back to dashboard</Link>}
-            />
-
-            {classRecord.enrollmentStatus === "DROPPED" ? (
-              <div className="notice notice-warm" role="status">
-                <Icon name="info" />
-                <span>
-                  You were dropped from this class
-                  {classRecord.droppedAt
-                    ? ` on ${new Date(classRecord.droppedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Manila" })}`
-                    : ""}
-                  . Your recorded coursework is preserved below as a read-only record.
+            <header className="student-record-header">
+              <div className="student-record-header-main">
+                <span className="eyebrow">
+                  <Icon name="book" size={14} /> Student class record
                 </span>
+                <h1>{classRecord.sectionName}</h1>
+                {classRecord.description ? (
+                  <p className="student-record-description">
+                    {classRecord.description}
+                  </p>
+                ) : null}
               </div>
-            ) : null}
 
-            <section className="student-record-hero panel">
-              <div className="student-record-meta">
-                <Badge tone="neutral">Class code {classRecord.classCode}</Badge>
-                {classRecord.archivedAt ? <Badge tone="neutral">Archived</Badge> : null}
-                <Badge
-                  tone={
-                    classRecord.enrollmentStatus === "PENDING"
-                      ? "warning"
-                      : classRecord.enrollmentStatus === "DROPPED" || classRecord.enrollmentStatus === "DECLINED"
-                      ? "danger"
-                      : "success"
-                  }
+              <div className="student-record-meta" aria-label="Class details">
+                <span className="code-chip student-record-code-chip">
+                  Class code <b>{classRecord.classCode}</b>
+                </span>
+                {classRecord.faculty?.name ? (
+                  <span className="student-record-meta-chip">
+                    <Icon name="user" size={13} />
+                    <span>{classRecord.faculty.name}</span>
+                  </span>
+                ) : null}
+                {classRecord.archivedAt ? (
+                  <span className="enrolled-pill enrolled-pill-archived">
+                    <Icon name="archive" size={12} /> Archived
+                  </span>
+                ) : null}
+                <span
+                  className={`enrolled-pill${
+                    isDropped || isDeclined
+                      ? " enrolled-pill-dropped"
+                      : classRecord.enrollmentStatus !== "APPROVED"
+                      ? " enrolled-pill-pending"
+                      : ""
+                  }`}
                 >
-                  {classRecord.enrollmentStatus === "DROPPED"
+                  {isDropped
                     ? "Dropped"
-                    : classRecord.enrollmentStatus === "PENDING"
+                    : isPending
                     ? "Pending approval"
-                    : classRecord.enrollmentStatus === "DECLINED"
+                    : isDeclined
                     ? "Declined"
                     : "Enrolled"}
-                </Badge>
+                </span>
               </div>
-              <p className="student-record-copy">
-                {classRecord.enrollmentStatus === "DROPPED"
-                  ? "This is a read-only archive of your coursework recorded while you were enrolled in this class."
-                  : "Here is your live class record for this class, scoped to your own student profile and session history."}
-              </p>
-            </section>
+            </header>
 
-            <section className="student-record-summary-grid">
-              {Object.entries(classRecord.recordSummary || { attendance: "—", recitation: "—", activities: "—", quiz: "—" }).map(([label, value]) => (
-                <Card key={label} className="student-record-summary-card">
-                  <span className={`student-record-summary-tone student-record-summary-tone-${label === "attendance" ? "present" : label === "recitation" ? "late" : "neutral"}`} />
-                  <strong>{value}</strong>
-                  <span>{label}</span>
-                </Card>
-              ))}
-            </section>
+            <div className="student-record-card-stage">
+              {isDropped ? (
+                <div
+                  className="notice notice-warm student-record-banner"
+                  role="status"
+                >
+                  <Icon name="info" />
+                  <span>
+                    You were dropped from this class
+                    {classRecord.droppedAt
+                      ? ` on ${new Date(classRecord.droppedAt).toLocaleDateString(
+                          undefined,
+                          {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                            timeZone: "Asia/Manila",
+                          }
+                        )}`
+                      : ""}
+                    . Your recorded coursework is preserved below as a read-only
+                    record.
+                  </span>
+                </div>
+              ) : null}
 
-            <section className="student-record-sections">
-              <Card className="student-record-section">
-                <div className="student-record-section-heading">
-                  <div>
-                    <span className="eyebrow"><Icon name="check" /> Attendance</span>
-                    <h2>Attendance history</h2>
-                  </div>
-                  <Badge tone={classRecord.enrollmentStatus === "DROPPED" ? "neutral" : "success"}>
-                    {classRecord.enrollmentStatus === "DROPPED" ? "Read-only" : "Live data"}
-                  </Badge>
+              {isPending ? (
+                <div
+                  className="notice notice-warm student-record-banner"
+                  role="status"
+                >
+                  <Icon name="clock" />
+                  <span>
+                    Waiting for instructor approval. Your coursework will appear
+                    on this index card once your enrollment is approved.
+                  </span>
                 </div>
-                <div className="student-record-list">
-                  {(records?.attendance || []).map((item) => (
-                    <article key={item.id} className="student-record-item">
-                      <time dateTime={item.session.date}>{new Date(item.session.date).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Manila" })}</time>
-                      <strong>{item.status}</strong>
-                    </article>
-                  ))}
-                  {!records?.attendance?.length ? <p className="student-record-empty">No attendance records yet.</p> : null}
-                </div>
-              </Card>
+              ) : null}
 
-              <Card className="student-record-section">
-                <div className="student-record-section-heading">
-                  <div>
-                    <span className="eyebrow"><Icon name="user" /> Recitation</span>
-                    <h2>Recitation calls</h2>
-                  </div>
-                  <Badge tone={classRecord.enrollmentStatus === "DROPPED" ? "neutral" : "success"}>
-                    {classRecord.enrollmentStatus === "DROPPED" ? "Read-only" : "Live data"}
-                  </Badge>
-                </div>
-                <div className="student-record-list">
-                  {(records?.recitations || []).map((item) => (
-                    <article key={item.id} className="student-record-item">
-                      <time dateTime={item.session.date}>{new Date(item.session.date).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Manila" })}</time>
-                      <strong>{item.method}</strong>
-                      <span>{item.score === null ? "No score" : `Score ${item.score}`}</span>
-                    </article>
-                  ))}
-                  {!records?.recitations?.length ? <p className="student-record-empty">No recitation records yet.</p> : null}
-                </div>
-              </Card>
+              <section
+                className="student-record-summary-strip"
+                aria-label="Class record summary"
+              >
+                {SUMMARY_FIELDS.map(({ key, label }) => {
+                  const rawValue = classRecord.recordSummary?.[key];
+                  const empty = isEmptySummaryValue(rawValue);
+                  return (
+                    <div key={key} className="student-record-summary-cell">
+                      <span className="student-record-summary-label">
+                        {label}
+                      </span>
+                      {empty ? (
+                        <span className="student-record-summary-value is-empty">
+                          none yet
+                        </span>
+                      ) : (
+                        <strong className="student-record-summary-value">
+                          {rawValue}
+                        </strong>
+                      )}
+                    </div>
+                  );
+                })}
+              </section>
 
-              <Card className="student-record-section">
-                <div className="student-record-section-heading">
-                  <div>
-                    <span className="eyebrow"><Icon name="book" /> Activities</span>
-                    <h2>Activity scores</h2>
-                  </div>
-                  <Badge tone={classRecord.enrollmentStatus === "DROPPED" ? "neutral" : "success"}>
-                    {classRecord.enrollmentStatus === "DROPPED" ? "Read-only" : "Live data"}
-                  </Badge>
-                </div>
-                <div className="student-record-list">
-                  {(records?.activities || []).map((item) => (
-                    <article key={item.id} className="student-record-item">
-                      <strong>{item.activity?.title || "Activity"}</strong>
-                      {item.session?.date ? (
-                        <time dateTime={item.session.date}>{new Date(item.session.date).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Manila" })}</time>
-                      ) : null}
-                      <span>{item.isAbsent ? "Absent" : item.score === null || item.score === undefined ? "No score" : `Score ${item.score}${item.activity?.maxScore ? ` / ${item.activity.maxScore}` : ""}`}</span>
-                    </article>
-                  ))}
-                  {!records?.activities?.length ? <p className="student-record-empty">No activity scores yet.</p> : null}
-                </div>
-              </Card>
-
-              <Card className="student-record-section">
-                <div className="student-record-section-heading">
-                  <div>
-                    <span className="eyebrow"><Icon name="folder" /> Projects</span>
-                    <h2>Project scores</h2>
-                  </div>
-                  <Badge tone={classRecord.enrollmentStatus === "DROPPED" ? "neutral" : "success"}>
-                    {classRecord.enrollmentStatus === "DROPPED" ? "Read-only" : "Live data"}
-                  </Badge>
-                </div>
-                <div className="student-record-list">
-                  {(records?.projects || []).map((item) => (
-                    <article key={item.id} className="student-record-item">
-                      <strong>{item.project?.type === "MIDTERM" ? "Midterm project" : item.project?.type === "FINALS" ? "Finals project" : item.project?.type || "Project"}</strong>
-                      {item.session?.date ? (
-                        <time dateTime={item.session.date}>{new Date(item.session.date).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Manila" })}</time>
-                      ) : null}
-                      <span>{item.isAbsent ? "Absent" : item.score === null || item.score === undefined ? "No score" : `Score ${item.score}${item.project?.maxScore ? ` / ${item.project.maxScore}` : ""}`}</span>
-                    </article>
-                  ))}
-                  {!records?.projects?.length ? <p className="student-record-empty">No project scores yet.</p> : null}
-                </div>
-              </Card>
-
-              <Card className="student-record-section">
-                <div className="student-record-section-heading">
-                  <div>
-                    <span className="eyebrow"><Icon name="brain" /> Quiz records</span>
-                    <h2>Quiz performance</h2>
-                  </div>
-                  <Badge tone={classRecord.enrollmentStatus === "DROPPED" ? "neutral" : "success"}>
-                    {classRecord.enrollmentStatus === "DROPPED" ? "Read-only" : "Live data"}
-                  </Badge>
-                </div>
-                <div className="student-record-quiz-stats">
-                  <div>
-                    <strong>{quizStats.average}</strong>
-                    <span>Average</span>
-                  </div>
-                  <div>
-                    <strong>{quizStats.best}</strong>
-                    <span>Best attempt</span>
-                  </div>
-                  <div>
-                    <strong>{quizStats.attempts}</strong>
-                    <span>Recorded quizzes</span>
-                  </div>
-                </div>
-                <div className="student-record-list">
-                  {(records?.quizzes || []).map((item) => (
-                    <article key={item.id} className="student-record-item">
-                      <strong>{item.session.title}</strong>
-                      <time dateTime={item.session.date}>{new Date(item.session.date).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Manila" })}</time>
-                      <span>{item.isAbsent ? "Absent" : item.score === null || item.score === undefined ? "Not yet scored" : `Score ${item.score}${item.session.totalItems ? ` / ${item.session.totalItems}` : ""}`}</span>
-                    </article>
-                  ))}
-                  {!records?.quizzes?.length ? <p className="student-record-empty">No quiz records yet.</p> : null}
-                </div>
-              </Card>
-            </section>
+              <IndexCardView
+                variant="inline"
+                student={studentIdentity}
+                className={classRecord.sectionName}
+                classCode={classRecord.classCode}
+                records={adaptedRecords}
+                loading={false}
+                error=""
+              />
+            </div>
           </>
         ) : null}
       </div>

@@ -9587,3 +9587,348 @@ textarea {
     padding: 16px 16px 14px;
   }
 }
+
+
+/* ==========================================================================
+   Part B: Student Class Record — Inline Flippable Index Card & Summary Strip
+   ========================================================================== */
+
+.design-page-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.student-record-page {
+  padding-bottom: 32px;
+}
+
+.student-record-header,
+.student-record-banner,
+.student-record-summary-strip,
+.student-record-header-skeleton {
+  width: min(960px, 100%, calc((100dvh - 160px) * 5 / 3));
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.student-record-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px 20px;
+  margin-top: 8px;
+  margin-bottom: 16px;
+}
+
+.student-record-header-main {
+  min-width: 0;
+  flex: 1 1 260px;
+}
+
+.student-record-header-main h1 {
+  margin: 6px 0 0;
+  color: var(--navy);
+  font-size: clamp(24px, 3.2vw, 32px);
+  font-weight: 780;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.student-record-description {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.student-record-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.student-record-code-chip {
+  margin-top: 0;
+  background: var(--card);
+}
+
+.student-record-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  padding: 5px 10px;
+  background: var(--card);
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 680;
+}
+
+.student-record-meta-chip svg {
+  color: var(--royal);
+  flex-shrink: 0;
+}
+
+.student-record-banner {
+  margin-top: 0;
+  margin-bottom: 14px;
+}
+
+/* Compact 4-stat summary strip above the card */
+.student-record-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 0;
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--royal);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--card) 96%, var(--accent-amber));
+  box-shadow: var(--shadow-soft);
+}
+
+[data-theme="dark"] .student-record-summary-strip {
+  background: color-mix(in srgb, var(--card) 95%, var(--paper));
+}
+
+.student-record-summary-cell {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 14px;
+  border-right: 1px solid var(--line);
+}
+
+.student-record-summary-cell:last-child {
+  border-right: 0;
+}
+
+.student-record-summary-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.student-record-summary-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--navy);
+  font-size: 15px;
+  font-weight: 780;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.student-record-summary-value.is-empty {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  font-style: italic;
+}
+
+/* Shared index card face refinements */
+.index-card-col-title {
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.index-card-row time {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.student-detail-message {
+  padding: 6px 4px;
+}
+
+.index-card-hint,
+.index-card-tally {
+  min-width: 0;
+  line-height: 1.35;
+}
+
+/* Inline flippable index card sizing */
+.index-card-scene.index-card-scene-inline {
+  width: min(960px, 100%, calc((100dvh - 160px) * 5 / 3));
+  aspect-ratio: 5 / 3;
+  max-height: none;
+  margin: 0 auto;
+}
+
+/* Skeleton loading state matching index card proportions */
+.student-record-header-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+  margin-bottom: 16px;
+}
+
+.student-skeleton-title {
+  width: min(320px, 75%);
+  height: 32px;
+  border-radius: 10px;
+}
+
+.student-skeleton-meta {
+  width: min(240px, 60%);
+  height: 22px;
+  border-radius: 8px;
+}
+
+.student-skeleton-stat {
+  width: 100%;
+  height: 20px;
+  border-radius: 6px;
+}
+
+.index-card-skeleton-face {
+  gap: 16px;
+}
+
+.student-skeleton-card-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.student-skeleton-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  flex-shrink: 0;
+}
+
+.student-skeleton-lines {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.student-skeleton-line-lg {
+  width: min(260px, 80%);
+  height: 22px;
+  border-radius: 8px;
+}
+
+.student-skeleton-line-sm {
+  width: min(160px, 55%);
+  height: 14px;
+  border-radius: 6px;
+}
+
+.student-skeleton-cols {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  min-height: 180px;
+}
+
+.student-skeleton-col {
+  width: 100%;
+  height: 100%;
+  min-height: 160px;
+  border-radius: 12px;
+}
+
+/* Mobile (<= 720px): natural height & 1-column stack for inline index card */
+@media (max-width: 720px) {
+  .student-record-header,
+  .student-record-banner,
+  .student-record-summary-strip,
+  .student-record-header-skeleton,
+  .index-card-scene.index-card-scene-inline {
+    width: 100%;
+  }
+
+  .student-record-summary-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .student-record-summary-cell:nth-child(2) {
+    border-right: 0;
+  }
+
+  .student-record-summary-cell:nth-child(1),
+  .student-record-summary-cell:nth-child(2) {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .index-card-scene.index-card-scene-inline {
+    aspect-ratio: auto;
+    height: auto;
+    max-height: none;
+  }
+
+  .index-card-scene.index-card-scene-inline .index-card {
+    height: auto;
+  }
+
+  .index-card-scene.index-card-scene-inline .index-card-face {
+    height: auto;
+    min-height: 100%;
+    padding: 16px 14px 14px 14px;
+    border-radius: 16px;
+  }
+
+  .index-card-scene.index-card-scene-inline .student-detail-profile-text .eyebrow {
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  .index-card-scene.index-card-scene-inline .student-detail-info {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 8px 0 10px;
+    gap: 6px;
+  }
+
+  .index-card-scene.index-card-scene-inline .index-card-records-wrapper {
+    overflow: visible;
+  }
+
+  .index-card-scene.index-card-scene-inline .index-card-front-columns,
+  .index-card-scene.index-card-scene-inline .index-card-back-columns,
+  .student-skeleton-cols {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    height: auto;
+  }
+
+  .index-card-scene.index-card-scene-inline .index-card-col {
+    height: auto;
+    min-height: 110px;
+  }
+
+  .index-card-scene.index-card-scene-inline .index-card-records {
+    max-height: 240px;
+  }
+
+  .index-card-scene.index-card-scene-inline .index-card-footer {
+    padding-right: 58px;
+  }
+}
+
+@media (max-width: 400px) {
+  .student-record-summary-cell {
+    padding: 8px 10px;
+  }
+
+  .student-record-summary-label {
+    font-size: 10px;
+  }
+
+  .student-record-summary-value {
+    font-size: 13.5px;
+  }
+}
