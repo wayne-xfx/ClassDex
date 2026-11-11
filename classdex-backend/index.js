@@ -2347,7 +2347,14 @@ app.get(
       XLSX.utils.book_append_sheet(wb, ws, "Student List");
 
       const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-      const filename = `${classRecord.classCode}_student_list_template.xlsx`;
+      const sectionSegment = String(classRecord.sectionName || "").trim().replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "");
+      const courseSegment = String(classRecord.courseCode || "").trim().replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "");
+      const templatePrefix = [
+        sectionSegment,
+        courseSegment && !sectionSegment.toLowerCase().includes(courseSegment.toLowerCase()) ? courseSegment : "",
+        classRecord.classCode,
+      ].filter(Boolean).join("_");
+      const filename = `${templatePrefix}_student_list_template.xlsx`;
 
       res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(filename)}"`);
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");

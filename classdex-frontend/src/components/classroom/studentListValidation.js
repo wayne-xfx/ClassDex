@@ -8,6 +8,37 @@ export function normalizeWhitespace(value) {
     .trim();
 }
 
+function sanitizeFilenameSegment(value) {
+  return String(value || "")
+    .trim()
+    .replace(/[^\w.-]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+/**
+ * Builds a descriptive Excel template filename using the class section, course code, and class code.
+ * Example: "AI33_IT_122_IPQ8X7_student_list_template.xlsx"
+ */
+export function buildTemplateFilename(classRecord) {
+  if (!classRecord) return "student_list_template.xlsx";
+  const section = sanitizeFilenameSegment(classRecord.sectionName);
+  const courseCode = sanitizeFilenameSegment(classRecord.courseCode);
+  const classCode = sanitizeFilenameSegment(classRecord.classCode);
+
+  const parts = [];
+  if (section) parts.push(section);
+  if (courseCode && !section.toLowerCase().includes(courseCode.toLowerCase())) {
+    parts.push(courseCode);
+  }
+  if (classCode && !section.toLowerCase().includes(classCode.toLowerCase())) {
+    parts.push(classCode);
+  }
+
+  return parts.length
+    ? `${parts.join("_")}_student_list_template.xlsx`
+    : "student_list_template.xlsx";
+}
+
 export function validateStudentName(rawName) {
   const name = normalizeWhitespace(rawName);
   if (!name) return "Missing name";

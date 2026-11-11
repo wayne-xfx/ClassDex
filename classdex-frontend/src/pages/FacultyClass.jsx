@@ -980,7 +980,7 @@ export default function FacultyClass() {
                 />
               }
             >
-              {activeModule === "student-list" ? <StudentListManager classId={id} onCountChange={setStudentListCount} onAutoApproved={refreshAfterRosterApproval} onRosterChanged={handleRosterChanged} onDirtyChange={setStudentListDirty} onClose={() => handleModuleChange("deck")} tabCache={tabCache} readOnly={isArchived} /> : activeModule === "deck" ? (
+              {activeModule === "student-list" ? <StudentListManager classId={id} classRecord={classRecord} onCountChange={setStudentListCount} onAutoApproved={refreshAfterRosterApproval} onRosterChanged={handleRosterChanged} onDirtyChange={setStudentListDirty} onClose={() => handleModuleChange("deck")} tabCache={tabCache} readOnly={isArchived} /> : activeModule === "deck" ? (
                 <>
                   <div className="deck-toolbar">
                     <div className="deck-title">

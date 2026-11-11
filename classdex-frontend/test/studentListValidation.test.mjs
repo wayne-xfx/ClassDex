@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildTemplateFilename,
   parseLines,
   validateNewStudentEntry,
   validateRows,
@@ -131,4 +132,24 @@ test("parseLines supports Name, ID; Last, First, ID; ID, Name; and tab-separated
     { name: "Jose Rizal", studentId: "2300042", photo: "" },
     { name: "Andres Bonifacio", studentId: "2300043", photo: "" },
   ]);
+});
+
+test("buildTemplateFilename uses class section, course code, and class code", () => {
+  assert.equal(buildTemplateFilename(null), "student_list_template.xlsx");
+  assert.equal(
+    buildTemplateFilename({
+      sectionName: "AI33",
+      courseCode: "IT 121/121L",
+      classCode: "IPQ8X7",
+    }),
+    "AI33_IT_121_121L_IPQ8X7_student_list_template.xlsx",
+  );
+  assert.equal(
+    buildTemplateFilename({
+      sectionName: "AI33 - IT-121/121L",
+      courseCode: "IT-121/121L",
+      classCode: "IPQ8X7",
+    }),
+    "AI33_-_IT-121_121L_IPQ8X7_student_list_template.xlsx",
+  );
 });

@@ -8,6 +8,7 @@ import ModuleSkeleton from "./ModuleSkeleton";
 import { ModuleHeader } from "./ClassShell";
 import { formatStudentDisplayName, formatStudentName } from "./studentNames";
 import {
+  buildTemplateFilename,
   normalizeWhitespace,
   parseLines,
   validateNewStudentEntry,
@@ -16,6 +17,7 @@ import {
 
 export default function StudentListManager({
   classId,
+  classRecord,
   onClose,
   onCountChange,
   onAutoApproved,
@@ -286,7 +288,7 @@ export default function StudentListManager({
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "student_list_template.xlsx";
+      a.download = buildTemplateFilename(classRecord);
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
