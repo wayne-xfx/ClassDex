@@ -1,3 +1,5 @@
+const { getClientUrl } = require("./mailer");
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -114,6 +116,7 @@ function buildResetPasswordEmail({ to, name, resetUrl, ttlMinutes = 30 }) {
 }
 
 function buildPasswordChangedEmail({ to, name, loginUrl }) {
+  const resolvedLoginUrl = loginUrl || `${getClientUrl()}/login`;
   const subject = "Your ClassDex password was changed";
   const bodyHtml = `
     <p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#1c2940;">
@@ -128,14 +131,14 @@ function buildPasswordChangedEmail({ to, name, loginUrl }) {
     heading: "Your password was changed",
     greetingName: name,
     bodyHtml,
-    ctaLabel: loginUrl ? "Go to ClassDex Login" : "",
-    ctaUrl: loginUrl || "",
+    ctaLabel: resolvedLoginUrl ? "Go to ClassDex Login" : "",
+    ctaUrl: resolvedLoginUrl || "",
   });
   const text = [
     `Hello ${name || "there"},`,
     "",
     "This is a confirmation that the password for your ClassDex account was just updated, and any earlier sessions on other devices have been signed out.",
-    ...(loginUrl ? ["", `Sign in: ${loginUrl}`] : []),
+    ...(resolvedLoginUrl ? ["", `Sign in: ${resolvedLoginUrl}`] : []),
     "",
     "If you did not make this change, please reset your password immediately from the login page.",
   ].join("\n");
@@ -175,8 +178,170 @@ function buildVerifyEmail({ to, name, verifyUrl, ttlHours = 24 }) {
   return { to, subject, html, text };
 }
 
+function buildJoinEmail({
+  studentName,
+  studentEmail,
+  classSectionName,
+  classCode,
+  status,
+  facultyName,
+  dashboardUrl,
+}) {
+  const isPending = status === "PENDING";
+  const ctaUrl = dashboardUrl || `${getClientUrl()}/student`;
+  const subject = isPending
+    ? `Your request to join ${classSectionName} is pending`
+    : `You joined ${classSectionName}`;
+  const heading = isPending
+    ? "Class join request pending"
+    : `You joined ${classSectionName}`;
+  const bodyHtml = isPending
+    ? `
+      <p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#1c2940;">
+        Your request to join <strong>${escapeHtml(classSectionName)}</strong> is waiting for instructor approval.
+      </p>
+      <p style="margin:0;font-size:13px;line-height:1.6;color:#65738a;">
+        Class code: <strong>${escapeHtml(classCode)}</strong>
+      </p>
+    `
+    : `
+      <p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#1c2940;">
+        You are now enrolled in <strong>${escapeHtml(classSectionName)}</strong>.
+      </p>
+      ${
+        facultyName
+          ? `<p style="margin:0;font-size:13px;line-height:1.6;color:#65738a;">Your faculty member is <strong>${escapeHtml(facultyName)}</strong>.</p>`
+          : ""
+      }
+    `;
+  const html = wrapEmailLayout({
+    preheader: subject,
+    heading,
+    greetingName: studentName,
+    bodyHtml,
+    ctaLabel: "Open Student Dashboard",
+    ctaUrl,
+  });
+  const text = isPending
+    ? [
+        `Hello ${studentName || "there"},`,
+        "",
+        `Your request to join ${classSectionName} is waiting for instructor approval.`,
+        "",
+        `Class code: ${classCode}`,
+        "",
+        `Open your dashboard: ${ctaUrl}`,
+      ].join("\n")
+    : [
+        `Hello ${studentName || "there"},`,
+        "",
+        `You are now enrolled in ${classSectionName}.`,
+        ...(facultyName ? [`Your faculty member is ${facultyName}.`] : []),
+        "",
+        `Open your dashboard: ${ctaUrl}`,
+      ].join("\n");
+
+  return { to: studentEmail, subject, html, text };
+}
+
+function buildFacultyJoinEmail({
+  facultyEmail,
+  facultyName,
+  studentName,
+  classSectionName,
+  classCode,
+  classId,
+  status,
+  classUrl,
+}) {
+  const isPending = status === "PENDING";
+  const ctaUrl =
+    classUrl ||
+    (classId
+      ? `${getClientUrl()}/faculty/classes/${encodeURIComponent(classId)}`
+      : `${getClientUrl()}/faculty`);
+  const subject = isPending
+    ? `${studentName} requested to join ${classSectionName}`
+    : `${studentName} joined ${classSectionName}`;
+  const heading = isPending
+    ? "New class join request"
+    : "New student enrolled";
+  const bodyHtml = `
+    <p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#1c2940;">
+      <strong>${escapeHtml(studentName)}</strong> ${isPending ? "requested to join" : "joined"} <strong>${escapeHtml(classSectionName)}</strong>.
+    </p>
+    <p style="margin:0;font-size:13px;line-height:1.6;color:#65738a;">
+      Class code: <strong>${escapeHtml(classCode)}</strong>
+    </p>
+  `;
+  const html = wrapEmailLayout({
+    preheader: subject,
+    heading,
+    greetingName: facultyName || "faculty",
+    bodyHtml,
+    ctaLabel: classId ? "View Class in ClassDex" : "Open Faculty Dashboard",
+    ctaUrl,
+  });
+  const text = [
+    `Hello ${facultyName || "faculty"},`,
+    "",
+    `${studentName} ${isPending ? "requested to join" : "joined"} ${classSectionName}.`,
+    "",
+    `Class code: ${classCode}`,
+    "",
+    `Open ClassDex: ${ctaUrl}`,
+  ].join("\n");
+
+  return { to: facultyEmail, subject, html, text };
+}
+
+function buildDecisionEmail({
+  studentName,
+  studentEmail,
+  classSectionName,
+  decision,
+  facultyName,
+  dashboardUrl,
+}) {
+  const isApproved = decision === "APPROVED";
+  const ctaUrl = dashboardUrl || `${getClientUrl()}/student`;
+  const subject = isApproved
+    ? `You were approved for ${classSectionName}`
+    : `Your request for ${classSectionName} was declined`;
+  const heading = isApproved
+    ? `Approved for ${classSectionName}`
+    : `Join request for ${classSectionName} declined`;
+  const bodyHtml = `
+    <p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#1c2940;">
+      Your join request for <strong>${escapeHtml(classSectionName)}</strong> was <strong>${isApproved ? "approved" : "declined"}</strong>${facultyName ? ` by <strong>${escapeHtml(facultyName)}</strong>` : ""}.
+    </p>
+  `;
+  const html = wrapEmailLayout({
+    preheader: subject,
+    heading,
+    greetingName: studentName,
+    bodyHtml,
+    ctaLabel: "Open Student Dashboard",
+    ctaUrl,
+  });
+  const text = [
+    `Hello ${studentName || "there"},`,
+    "",
+    `Your join request for ${classSectionName} was ${isApproved ? "approved" : "declined"}${facultyName ? ` by ${facultyName}` : ""}.`,
+    "",
+    `Open your dashboard: ${ctaUrl}`,
+  ].join("\n");
+
+  return { to: studentEmail, subject, html, text };
+}
+
 module.exports = {
+  escapeHtml,
+  wrapEmailLayout,
   buildResetPasswordEmail,
   buildPasswordChangedEmail,
   buildVerifyEmail,
+  buildJoinEmail,
+  buildFacultyJoinEmail,
+  buildDecisionEmail,
 };
