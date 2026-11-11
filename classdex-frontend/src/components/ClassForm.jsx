@@ -360,7 +360,7 @@ export default function ClassForm({
             required={isEdit}
             minLength={3}
             maxLength={20}
-            pattern="[A-Za-z0-9-]{3,20}"
+            pattern="[A-Za-z0-9\-]{3,20}"
             value={form.classCode}
             onChange={update("classCode")}
             placeholder={isEdit ? "e.g. ENG3A25" : "Leave blank to generate one"}
