@@ -56,6 +56,15 @@ const {
 const FORGOT_PASSWORD_GENERIC_MESSAGE =
   "If an account exists for that email, we've sent a reset link.";
 
+const ACTIVE_SESSION_FILTER = {
+  OR: [
+    { startedAt: { not: null } },
+    { attendance: { some: {} } },
+    { recitations: { some: {} } },
+    { activities: { some: {} } },
+  ],
+};
+
 const { studentPhotoUrl } = require("./src/utils/studentPhotoUrl");
 const { manilaDate } = require("./src/utils/dates");
 const path = require("node:path");
@@ -1612,12 +1621,7 @@ app.get(
         ? await prisma.classSession.findMany({
             where: {
               classId: { in: classIds },
-              OR: [
-                { startedAt: { not: null } },
-                { attendance: { some: {} } },
-                { recitations: { some: {} } },
-                { activities: { some: {} } },
-              ],
+              ...ACTIVE_SESSION_FILTER,
             },
             select: { classId: true, date: true },
             orderBy: { date: "desc" },
@@ -3260,7 +3264,7 @@ app.get(
           },
           _count: { id: true },
         }),
-        prisma.classSession.count({ where: { classId: classRecord.id } }),
+        prisma.classSession.count({ where: { classId: classRecord.id, ...ACTIVE_SESSION_FILTER } }),
         prisma.recitationLog.count({ where: { session: { classId: classRecord.id } } }),
         prisma.activity.count({ where: { classId: classRecord.id } }),
         prisma.projectScore.count({
@@ -3359,7 +3363,7 @@ app.get(
       ] = await Promise.all([
         prisma.classRoster.count({ where: { classId: classRecord.id, droppedAt: null } }),
         prisma.classEnrollment.count({ where: { classId: classRecord.id, status: "PENDING" } }),
-        prisma.classSession.count({ where: { classId: classRecord.id } }),
+        prisma.classSession.count({ where: { classId: classRecord.id, ...ACTIVE_SESSION_FILTER } }),
         prisma.recitationLog.count({ where: { session: { classId: classRecord.id } } }),
         prisma.activity.count({ where: { classId: classRecord.id } }),
         prisma.projectScore.count({
@@ -5130,6 +5134,7 @@ app.get(
             orderBy: { joinedAt: "asc" },
           },
           sessions: {
+            where: ACTIVE_SESSION_FILTER,
             include: {
               attendance: {
                 include: {
@@ -5233,6 +5238,7 @@ app.get(
             orderBy: { joinedAt: "asc" },
           },
           sessions: {
+            where: ACTIVE_SESSION_FILTER,
             include: {
               attendance: {
                 include: {
