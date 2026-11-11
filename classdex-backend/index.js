@@ -1515,48 +1515,56 @@ app.put(
             select: { classId: true, status: true },
           });
 
-          for (const enrollment of enrollments) {
-            const oldRosterRow = await tx.classRoster.findUnique({
+          if (enrollments.length) {
+            const enrollmentByClass = new Map(enrollments.map((enrollment) => [enrollment.classId, enrollment]));
+            const rosterRows = await tx.classRoster.findMany({
               where: {
-                classId_studentId: {
-                  classId: enrollment.classId,
-                  studentId: existingProfile.studentId,
-                },
+                classId: { in: enrollments.map((enrollment) => enrollment.classId) },
+                studentId: { in: [existingProfile.studentId, studentId] },
               },
+              select: { id: true, classId: true, studentId: true, droppedAt: true },
             });
 
-            if (!oldRosterRow) continue;
-
-            const existingNewRosterRow = await tx.classRoster.findUnique({
-              where: {
-                classId_studentId: {
-                  classId: enrollment.classId,
-                  studentId,
-                },
-              },
-            });
-
-            if (existingNewRosterRow) {
-              if (enrollment.status === "APPROVED" && existingNewRosterRow.droppedAt !== null) {
-                await tx.classRoster.update({
-                  where: { id: existingNewRosterRow.id },
-                  data: { droppedAt: null },
-                });
-              }
-              await tx.classRoster.delete({
-                where: { id: oldRosterRow.id },
-              });
-            } else {
-              await tx.classRoster.update({
-                where: { id: oldRosterRow.id },
-                data: { studentId },
-              });
+            const oldRowsByClass = new Map();
+            const newRowsByClass = new Map();
+            for (const row of rosterRows) {
+              if (row.studentId === existingProfile.studentId) oldRowsByClass.set(row.classId, row);
+              else if (row.studentId === studentId) newRowsByClass.set(row.classId, row);
             }
+
+            const reviveNewIds = [];
+            const deleteOldIds = [];
+            const renameOldIds = [];
+
+            for (const [classId, oldRow] of oldRowsByClass) {
+              const existingNewRosterRow = newRowsByClass.get(classId);
+              if (existingNewRosterRow) {
+                const enrollment = enrollmentByClass.get(classId);
+                if (enrollment?.status === "APPROVED" && existingNewRosterRow.droppedAt !== null) {
+                  reviveNewIds.push(existingNewRosterRow.id);
+                }
+                deleteOldIds.push(oldRow.id);
+              } else {
+                renameOldIds.push(oldRow.id);
+              }
+            }
+
+            const syncOps = [];
+            if (reviveNewIds.length) {
+              syncOps.push(tx.classRoster.updateMany({ where: { id: { in: reviveNewIds } }, data: { droppedAt: null } }));
+            }
+            if (deleteOldIds.length) {
+              syncOps.push(tx.classRoster.deleteMany({ where: { id: { in: deleteOldIds } } }));
+            }
+            if (renameOldIds.length) {
+              syncOps.push(tx.classRoster.updateMany({ where: { id: { in: renameOldIds } }, data: { studentId } }));
+            }
+            if (syncOps.length) await Promise.all(syncOps);
           }
         }
 
         return savedProfile;
-      });
+      }, { maxWait: 10_000, timeout: 15_000 });
 
       return res.json({ profile });
     } catch (error) {
