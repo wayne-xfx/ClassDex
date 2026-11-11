@@ -247,6 +247,18 @@ test("SCRUM-65: Recording Modules API Suite (REC-01..07, REC-09..11, REC-13..15,
       "2026-11-12T00:00:00.000Z",
     );
 
+    const concurrentDecks = await Promise.all([
+      jsonReq(baseUrl, "GET", `/api/classes/${mainClass.id}/deck`, { cookie: facCookie }),
+      jsonReq(baseUrl, "GET", `/api/classes/${mainClass.id}/deck`, { cookie: facCookie }),
+      jsonReq(baseUrl, "GET", `/api/classes/${mainClass.id}/deck`, { cookie: facCookie }),
+    ]);
+    for (const deckRes of concurrentDecks) {
+      assert.equal(deckRes.status, 200);
+      assert.ok(deckRes.data.session?.id);
+      assert.equal(deckRes.data.session.id, concurrentDecks[0].data.session.id);
+      assert.equal(deckRes.data.session.startedAt, null);
+    }
+
     const createRes = await jsonReq(baseUrl, "POST", `/api/classes/${mainClass.id}/sessions/today`, {
       cookie: facCookie,
     });

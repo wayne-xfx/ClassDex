@@ -3168,73 +3168,72 @@ app.get(
         return res.status(404).json({ message: "Class not found." });
       }
 
+      const today = manilaDate();
+      const deckSessionInclude = {
+        attendance: {
+          select: { studentId: true, status: true, markedAt: true },
+          orderBy: { markedAt: "asc" },
+        },
+        recitations: {
+          include: {
+            studentProfile: {
+              select: {
+                id: true,
+                name: true,
+                updatedAt: true,
+                studentId: true,
+                program: true,
+                section: true,
+                firstName: true,
+                middleName: true,
+                lastName: true,
+                suffix: true,
+              },
+            },
+          },
+          orderBy: { calledAt: "desc" },
+        },
+      };
+
       let session = await prisma.classSession.findUnique({
         where: {
           classId_date: {
             classId: classRecord.id,
-            date: manilaDate(),
+            date: today,
           },
         },
-        include: {
-          attendance: {
-            select: { studentId: true, status: true, markedAt: true },
-            orderBy: { markedAt: "asc" },
-          },
-          recitations: {
-            include: {
-              studentProfile: {
-                select: {
-                  id: true,
-                  name: true,
-                  updatedAt: true,
-                  studentId: true,
-                  program: true,
-                  section: true,
-                  firstName: true,
-                  middleName: true,
-                  lastName: true,
-                  suffix: true,
-                },
-              },
-            },
-            orderBy: { calledAt: "desc" },
-          },
-        },
+        include: deckSessionInclude,
       });
 
       if (!session && !classRecord.archivedAt) {
-        session = await prisma.classSession.create({
-          data: {
-            classId: classRecord.id,
-            date: manilaDate(),
-            startedAt: null,
-          },
-          include: {
-            attendance: {
-              select: { studentId: true, status: true, markedAt: true },
-              orderBy: { markedAt: "asc" },
-            },
-            recitations: {
-              include: {
-                studentProfile: {
-                  select: {
-                    id: true,
-                    name: true,
-                    updatedAt: true,
-                    studentId: true,
-                    program: true,
-                    section: true,
-                    firstName: true,
-                    middleName: true,
-                    lastName: true,
-                    suffix: true,
-                  },
-                },
+        try {
+          session = await prisma.classSession.upsert({
+            where: {
+              classId_date: {
+                classId: classRecord.id,
+                date: today,
               },
-              orderBy: { calledAt: "desc" },
             },
-          },
-        });
+            create: {
+              classId: classRecord.id,
+              date: today,
+              startedAt: null,
+            },
+            update: {},
+            include: deckSessionInclude,
+          });
+        } catch (upsertError) {
+          if (upsertError?.code !== "P2002") throw upsertError;
+          session = await prisma.classSession.findUnique({
+            where: {
+              classId_date: {
+                classId: classRecord.id,
+                date: today,
+              },
+            },
+            include: deckSessionInclude,
+          });
+        }
       }
 
       if (!classRecord.archivedAt) {
