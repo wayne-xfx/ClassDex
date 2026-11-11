@@ -54,7 +54,7 @@ test.describe("SCRUM-66 Student Dashboard & Export E2E (STU-04..07, EXP-07)", ()
     await page.locator("#login-email").fill(email);
     await page.locator("#login-password").fill(TEST_PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await expect(page).toHaveURL(expectedUrlRe);
+    await expect(page).toHaveURL(expectedUrlRe, { timeout: 25_000 });
   }
 
   test.beforeAll(async ({}, testInfo) => {

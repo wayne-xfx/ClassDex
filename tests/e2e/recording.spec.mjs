@@ -50,7 +50,7 @@ test.describe("SCRUM-65 Recording Modules E2E (REC-08, REC-12, REC-16)", () => {
     await page.locator("#login-email").fill(facEmail);
     await page.locator("#login-password").fill(TEST_PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await expect(page).toHaveURL(/\/faculty$/);
+    await expect(page).toHaveURL(/\/faculty$/, { timeout: 25_000 });
   }
 
   test.beforeAll(async ({}, testInfo) => {

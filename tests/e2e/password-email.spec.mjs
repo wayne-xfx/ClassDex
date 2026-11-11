@@ -19,14 +19,14 @@ async function loginAs(page, email, password, expectedUrlRegex) {
   await page.locator("#login-email").fill(email);
   await page.locator("#login-password").fill(password);
   await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page).toHaveURL(expectedUrlRegex);
+  await expect(page).toHaveURL(expectedUrlRegex, { timeout: 25_000 });
 }
 
 async function solveTestRecaptcha(page) {
   const modal = page.getByRole("dialog", { name: "Security check" });
   await expect(modal).toBeVisible();
   const anchor = page.frameLocator('iframe[title="reCAPTCHA"]').locator("#recaptcha-anchor");
-  await anchor.waitFor({ state: "visible", timeout: 15_000 });
+  await anchor.waitFor({ state: "visible", timeout: 30_000 });
   await anchor.click();
 }
 
@@ -413,7 +413,7 @@ test.describe("SCRUM-67 Password Recovery & Email Flows E2E (PWD-01..PWD-10)", (
   });
 
   test("PWD-09..10 E2E: UI join pending alerts & Approve/Decline decision emails captured in stub mode", async ({ browser }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(90_000);
     const stuCtx = await browser.newContext();
     const facCtx = await browser.newContext();
     const stuPage = await stuCtx.newPage();

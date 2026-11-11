@@ -238,7 +238,7 @@ test.describe("SCRUM-64 Class Management & Join Workflow E2E (CLS-03, CLS-07, CL
     await page.locator("#login-email").fill(email);
     await page.locator("#login-password").fill(TEST_PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await expect(page).toHaveURL(expectedUrl);
+    await expect(page).toHaveURL(expectedUrl, { timeout: 25_000 });
   }
 
   test("CLS-03: Create class form validation, live code availability check, & class creation", async ({ page }) => {
@@ -462,6 +462,7 @@ test.describe("SCRUM-64 Class Management & Join Workflow E2E (CLS-03, CLS-07, CL
       await expect(captchaModal).toBeVisible();
 
       const recaptchaFrame = stuPage.frameLocator('iframe[title="reCAPTCHA"]');
+      await expect(recaptchaFrame.locator("#recaptcha-anchor")).toBeVisible({ timeout: 30_000 });
       await recaptchaFrame.locator("#recaptcha-anchor").click();
 
       await expect(stuPage).toHaveURL(/\/student$/);

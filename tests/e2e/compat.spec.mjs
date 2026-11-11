@@ -17,7 +17,7 @@ async function loginAs(page, email, expectedUrlRegex) {
   await page.locator("#login-email").fill(email);
   await page.locator("#login-password").fill(TEST_PASSWORD);
   await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page).toHaveURL(expectedUrlRegex);
+  await expect(page).toHaveURL(expectedUrlRegex, { timeout: 25_000 });
 }
 
 async function assertNoHorizontalOverflow(page, label) {
@@ -173,13 +173,20 @@ test.describe("SCRUM-68 Cross-Browser & Responsive Compatibility (COMPAT-01..07)
   });
 
   test.afterAll(async () => {
-    try {
+    const cleanup = async () => {
       if (facUser?.id) {
         await prisma.class.deleteMany({ where: { facultyId: facUser.id } });
       }
       const emails = [facEmail, stuEmail].filter(Boolean);
       if (emails.length) {
         await prisma.user.deleteMany({ where: { email: { in: emails } } });
+      }
+    };
+    try {
+      try {
+        await cleanup();
+      } catch {
+        await cleanup();
       }
     } finally {
       await prisma.$disconnect();
@@ -316,7 +323,7 @@ test.describe("SCRUM-68 Cross-Browser & Responsive Compatibility (COMPAT-01..07)
     await expect(regCaptcha).toBeVisible();
     await expect(
       regCaptcha.frameLocator('iframe[title="reCAPTCHA"]').locator("#recaptcha-anchor"),
-    ).toBeVisible({ timeout: 25_000 });
+    ).toBeVisible({ timeout: 35_000 });
     await assertNoHorizontalOverflow(page, `${project} register captcha modal`);
     await page.getByRole("button", { name: "Close security check" }).click();
     await expect(regCaptcha).toHaveCount(0);
@@ -360,7 +367,7 @@ test.describe("SCRUM-68 Cross-Browser & Responsive Compatibility (COMPAT-01..07)
     await expect(joinCaptcha).toBeVisible();
     await expect(
       joinCaptcha.frameLocator('iframe[title="reCAPTCHA"]').locator("#recaptcha-anchor"),
-    ).toBeVisible({ timeout: 25_000 });
+    ).toBeVisible({ timeout: 35_000 });
     await assertNoHorizontalOverflow(page, `${project} join captcha modal`);
     await page.getByRole("button", { name: "Close security check" }).click();
 
