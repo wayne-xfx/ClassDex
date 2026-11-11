@@ -45,6 +45,7 @@ const {
 const {
   getClientUrl,
   sendMail,
+  validateMailerConfig,
 } = require("./src/services/mailer");
 const {
   buildResetPasswordEmail,
@@ -5518,6 +5519,7 @@ app.post(
             studentName: profile.name,
             classSectionName: formatClassLabel(classRecord),
             classCode: classRecord.classCode,
+            classId: classRecord.id,
             status: joinResult.enrollment.status,
           }), "faculty join notice");
         }
@@ -5553,6 +5555,7 @@ app.post(
 );
 
 if (require.main === module) {
+  validateMailerConfig();
   app.listen(PORT, () => {
     console.log(`ClassDex API running on http://localhost:${PORT}`);
   });
