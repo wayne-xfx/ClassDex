@@ -3361,7 +3361,7 @@ app.get(
         projectScoresCount,
         quizzesCount,
       ] = await Promise.all([
-        prisma.classRoster.count({ where: { classId: classRecord.id, droppedAt: null } }),
+        prisma.classEnrollment.count({ where: { classId: classRecord.id, status: "APPROVED" } }),
         prisma.classEnrollment.count({ where: { classId: classRecord.id, status: "PENDING" } }),
         prisma.classSession.count({ where: { classId: classRecord.id, ...ACTIVE_SESSION_FILTER } }),
         prisma.recitationLog.count({ where: { session: { classId: classRecord.id } } }),
