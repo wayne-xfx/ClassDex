@@ -2895,7 +2895,7 @@ app.post("/api/classes/:id/quizzes", requireAuth, requireRole("FACULTY"), async 
   if (!title || !Number.isInteger(totalItems) || totalItems < 1) return res.status(400).json({ message: "Quiz title and a positive whole-number total are required." });
   try {
     if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
-    const session = await prisma.quizSession.create({ data: { classId: req.params.id, title, totalItems } });
+    const session = await prisma.quizSession.create({ data: { classId: req.params.id, title, totalItems }, include: { scores: true } });
     return res.status(201).json({ session });
   } catch (error) { return res.status(500).json({ message: "Unable to create quiz session." }); }
 });

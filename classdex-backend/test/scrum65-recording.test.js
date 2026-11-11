@@ -782,6 +782,7 @@ test("SCRUM-65: Recording Modules API Suite (REC-01..07, REC-09..11, REC-13..15,
       body: { title: "qa_Quiz 1", totalItems: 20 },
     });
     assert.equal(createRes.status, 201);
+    assert.deepEqual(createRes.data.session.scores, []);
     const quizId = createRes.data.session.id;
 
     // Invalid bulk scores: -1, 1.5, 21

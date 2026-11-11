@@ -115,7 +115,7 @@ export default function QuizModule({
             if (refreshed) {
               setScores(
                 Object.fromEntries(
-                  refreshed.scores.map((item) => [item.studentId, item.score ?? ""]),
+                  (refreshed.scores || []).map((item) => [item.studentId, item.score ?? ""]),
                 ),
               );
               return refreshed;
@@ -138,7 +138,7 @@ export default function QuizModule({
       current
         ? {
             ...current,
-            scores: current.scores.map((item) => {
+            scores: (current.scores || []).map((item) => {
               const student = students.find((candidate) => candidate.id === item.studentId);
               return student && ["PRESENT", "LATE"].includes(student.attendanceStatus)
                 ? { ...item, isAbsent: false }
@@ -154,7 +154,7 @@ export default function QuizModule({
     setTitle(session.title);
     setTotalItems(session.totalItems);
     setScores(
-      Object.fromEntries(session.scores.map((item) => [item.studentId, item.score ?? ""])),
+      Object.fromEntries((session.scores || []).map((item) => [item.studentId, item.score ?? ""])),
     );
     setSaved(true);
     setMessage("");
@@ -320,7 +320,7 @@ export default function QuizModule({
                   </small>
                 </span>
                 <span className="quiz-list-meta">
-                  {session.scores.filter((item) => item.score !== null).length} scored · Saved
+                  {(session.scores || []).filter((item) => item.score !== null).length} scored · Saved
                 </span>
                 <Icon name="chevron" />
               </button>
