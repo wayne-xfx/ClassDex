@@ -236,30 +236,9 @@ test.describe("SCRUM-68 Cross-Browser & Responsive Compatibility (COMPAT-01..07)
     await setAndVerifyTheme(page, "light");
     await assertNoHorizontalOverflow(page, `${project} class deck (light)`);
 
-    // Student List inline add + save
-    let pendingListRequests = 0;
-    const trackReq = (req) => {
-      if (req.method() === "GET" && /\/api\/classes\/[^/]+\/(roster|drop-list)$/.test(req.url())) {
-        pendingListRequests += 1;
-      }
-    };
-    const trackDone = (req) => {
-      if (req.method() === "GET" && /\/api\/classes\/[^/]+\/(roster|drop-list)$/.test(req.url())) {
-        pendingListRequests = Math.max(0, pendingListRequests - 1);
-      }
-    };
-    page.on("request", trackReq);
-    page.on("requestfinished", trackDone);
-    page.on("requestfailed", trackDone);
-    try {
-      await page.locator("#module-tab-student-list").click();
-      await expect(page.locator("table.student-list-table tbody tr")).toHaveCount(1);
-      await expect.poll(() => pendingListRequests).toBe(0);
-    } finally {
-      page.off("request", trackReq);
-      page.off("requestfinished", trackDone);
-      page.off("requestfailed", trackDone);
-    }
+    // Student List inline add + save immediately upon opening tab (regression check for DEF-12)
+    await page.locator("#module-tab-student-list").click();
+    await expect(page.getByLabel("Student name")).toBeVisible();
     await assertNoHorizontalOverflow(page, `${project} student list tab`);
     await page.getByLabel("Student name").fill("qa_Compat Extra Row");
     await page.getByLabel("7-digit student ID").fill("8995511");
