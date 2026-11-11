@@ -14,10 +14,10 @@
 | `SCRUM-63` | Authentication & Role-Based Access (`AUTH-01`..`AUTH-16`) | 16 | 16 | 0 | 0 | 0 | Complete (`DEF-02` logged) |
 | `SCRUM-64` | Class Management & Join Workflow (`CLS-01`..`CLS-21`) | 21 | 21 | 0 | 0 | 0 | Complete (`DEF-01` observed) |
 | `SCRUM-65` | Recording Modules (`REC-01`..`REC-17`) | 17 | 15 | 2 | 0 | 0 | Complete (`DEF-03..06` logged) |
-| `SCRUM-66` | Student Dashboard & Data Export (`STU-01`..`07`, `EXP-01`..`07`) | 14 | 0 | 0 | 0 | 14 | Pending |
+| `SCRUM-66` | Student Dashboard & Data Export (`STU-01`..`07`, `EXP-01`..`07`) | 14 | 11 | 3 | 0 | 0 | Complete (`DEF-07..09` logged) |
 | `SCRUM-67` | Password Recovery & Email Flows (`PWD-01`..`11`) | 11 | 0 | 0 | 1 | 10 | Pending |
 | `SCRUM-68` | Cross-Browser & Device Compatibility (`COMPAT-01`..`10`) | 10 | 0 | 0 | 3 | 7 | Pending |
-| **Total** | | **89** | **52** | **2** | **4** | **31** | |
+| **Total** | | **89** | **63** | **5** | **4** | **17** | |
 
 ---
 
@@ -46,3 +46,11 @@
   - `DEF-04` (Major): `QuizModule.jsx` checks stale `student.attendanceStatus` instead of live `student.status` override for mid-session Absent locking/unlocking.
   - `DEF-05` (Critical): Saving a newly created quiz crashes `QuizModule` into `<ErrorBoundary>` (`Cannot read properties of undefined (reading 'map')` because `POST /api/classes/:id/quizzes` returns `session` without `scores`).
   - `DEF-06` (Major): After navigating via `"Review in Student List"`, `FacultyClass.jsx` snaps `activeModule` back to `"student-list"` when switching tabs due to stale `searchParams` effect interactions.
+
+### SCRUM-66 — Test Student Dashboard and Data Export (`2026-11-11`)
+- **API Suite (`classdex-backend/test/scrum66-student-export.test.js`):** `8/12` subtests passed (`task-1663`: `STU-01`, `STU-02`, `STU-03`, `EXP-02a` cell-by-cell DB parity across all 7 sheets prior to `/deck`, `EXP-03`, `EXP-04`, `EXP-05`, `EXP-06`), `4/12` failed cleanly on two backend export defects (`EXP-01a` -> `DEF-07`; `EXP-01b` & `EXP-02b` -> `DEF-08`).
+- **E2E Suite (`tests/e2e/student-export.spec.mjs` via Playwright Chromium Desktop):** `4/5` passed (`task-1771`: `STU-04`, `STU-06`, `STU-07`, `EXP-07`), `1/5` failed cleanly on `DEF-09` (`STU-05` verified `BSCS`/`CS4B`/name propagation across both student classes plus Faculty deck/modal incl. `Ormoc City, Leyte`, failing only on student `/student/classes/:id` card `Address` omission).
+- **Defects Discovered:**
+  - `DEF-07` (Minor): `GET /api/classes/:id/export-summary` (`index.js:3353`) counts `classRoster` rows (`3` incl. unjoined roster entries) instead of `APPROVED` enrollments (`2`), disagreeing with `ExportModule.jsx` (`"approved students"`) and `export.js`.
+  - `DEF-08` (Major): Opening `/deck` creates an unstarted `ClassSession` (`startedAt: null`) that inflates `exportCounts.sessions` and `/export-summary.sessions` and injects an empty phantom today's-date column into `/export/excel` and `/export/csv`.
+  - `DEF-09` (Minor): `GET /api/student/classes/:classId/records` (`index.js:5322`) omits `address: true` from `studentProfile` select, so updated profile `Address` does not appear on the student's inline class card.
