@@ -2636,7 +2636,7 @@ app.post(
         ...unreadWarnings.map((warning) =>
           prisma.classEnrollment.update({
             where: { id: warning.enrollmentId },
-            data: { warningReadAbsenceCount: warning.absenceCount },
+            data: { warningReadAbsenceCount: warning.absentCount },
           }),
         ),
       ]);
