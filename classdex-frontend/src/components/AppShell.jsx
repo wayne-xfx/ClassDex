@@ -187,6 +187,7 @@ export default function AppShell({
           <nav className="main-nav" aria-label="Main navigation">
             <NavLink
               to={faculty ? "/faculty" : "/student"}
+              aria-label="Dashboard"
               className={active === "home" ? "nav-link active" : "nav-link"}
             >
               <Icon name={faculty ? "book" : "users"} />
@@ -195,6 +196,7 @@ export default function AppShell({
             {faculty ? (
               <NavLink
                 to="/faculty/profile"
+                aria-label="My profile"
                 className={active === "profile" ? "nav-link active" : "nav-link"}
               >
                 <Icon name="user" />
@@ -203,6 +205,7 @@ export default function AppShell({
             ) : (
               <NavLink
                 to="/student/profile"
+                aria-label="My index card"
                 className={active === "profile" ? "nav-link active" : "nav-link"}
               >
                 <Icon name="user" />

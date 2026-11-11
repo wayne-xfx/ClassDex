@@ -353,12 +353,14 @@ test.describe("SCRUM-68 Cross-Browser & Responsive Compatibility (COMPAT-01..07)
       .poll(() => page.evaluate(() => document.documentElement.dataset.theme))
       .toBe("light");
 
-    // Mobile/tablet/desktop nav -> My index card
+    // Mobile/tablet/desktop nav -> Dashboard & My index card
+    const dashboardNavLink = page.locator('.main-nav a[href="/student"]');
+    await expect(dashboardNavLink, `${project} Dashboard nav link keeps accessible name`).toHaveAccessibleName(/Dashboard/i);
     const profileNavLink = page.locator('.main-nav a[href="/student/profile"]');
     await expect(profileNavLink).toBeVisible();
-    await expect
-      .soft(profileNavLink, `${project} nav link keeps accessible name even on mobile`)
-      .toHaveAccessibleName(/My index card/i);
+    await expect(profileNavLink, `${project} nav link keeps accessible name even on mobile`).toHaveAccessibleName(
+      /My index card/i,
+    );
     await profileNavLink.click();
     await expect(page).toHaveURL(/\/student\/profile$/);
     await assertNoHorizontalOverflow(page, `${project} student profile (light)`);
