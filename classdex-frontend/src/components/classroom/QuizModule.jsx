@@ -318,7 +318,7 @@ export default function QuizModule({
                 <span>
                   <strong>{session.title}</strong>
                   <small>
-                    {new Date(session.date).toLocaleDateString()} · /{session.totalItems}
+                    {new Date(session.date).toLocaleDateString(undefined, { timeZone: "Asia/Manila" })} · /{session.totalItems}
                   </small>
                 </span>
                 <span className="quiz-list-meta">

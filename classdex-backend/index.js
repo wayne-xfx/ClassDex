@@ -2853,13 +2853,14 @@ app.patch("/api/classes/:id/pending/:enrollmentId", requireAuth, requireRole("FA
 app.get("/api/classes/:id/quizzes", requireAuth, requireRole("FACULTY"), async (req, res) => {
   try {
     if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
-    const sessions = await prisma.quizSession.findMany({ where: { classId: req.params.id }, include: { scores: true }, orderBy: { date: "desc" } });
+    const sessions = await prisma.quizSession.findMany({ where: { classId: req.params.id }, include: { scores: true }, orderBy: [{ date: "desc" }, { createdAt: "desc" }] });
     if (!sessions.length) return res.json({ sessions: [] });
 
     const dateMap = new Map();
     for (const s of sessions) {
-      const dStr = new Date(s.date).toISOString().slice(0, 10);
-      if (!dateMap.has(dStr)) dateMap.set(dStr, new Date(dStr));
+      const normalizedDate = manilaDate(new Date(s.date));
+      const dStr = normalizedDate.toISOString().slice(0, 10);
+      if (!dateMap.has(dStr)) dateMap.set(dStr, normalizedDate);
     }
     const distinctDates = [...dateMap.values()];
 
@@ -2876,7 +2877,7 @@ app.get("/api/classes/:id/quizzes", requireAuth, requireRole("FACULTY"), async (
 
     const absentIdsByDate = new Map();
     for (const attSession of attendanceSessions) {
-      const dStr = attSession.date.toISOString().slice(0, 10);
+      const dStr = manilaDate(new Date(attSession.date)).toISOString().slice(0, 10);
       const absentIds = new Set(
         attSession.attendance
           .filter((record) => record.status === "ABSENT")
@@ -2886,7 +2887,7 @@ app.get("/api/classes/:id/quizzes", requireAuth, requireRole("FACULTY"), async (
     }
 
     const enriched = sessions.map((session) => {
-      const dStr = new Date(session.date).toISOString().slice(0, 10);
+      const dStr = manilaDate(new Date(session.date)).toISOString().slice(0, 10);
       const absentIds = absentIdsByDate.get(dStr) || new Set();
       return {
         ...session,
@@ -2907,7 +2908,7 @@ app.post("/api/classes/:id/quizzes", requireAuth, requireRole("FACULTY"), async 
   if (!title || !Number.isInteger(totalItems) || totalItems < 1) return res.status(400).json({ message: "Quiz title and a positive whole-number total are required." });
   try {
     if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
-    const session = await prisma.quizSession.create({ data: { classId: req.params.id, title, totalItems }, include: { scores: true } });
+    const session = await prisma.quizSession.create({ data: { classId: req.params.id, title, totalItems, date: manilaDate() }, include: { scores: true } });
     return res.status(201).json({ session });
   } catch (error) { return res.status(500).json({ message: "Unable to create quiz session." }); }
 });
@@ -2965,7 +2966,7 @@ app.put("/api/quizzes/:sessionId/scores", requireAuth, requireRole("FACULTY"), a
       where: {
         classId_date: {
           classId: session.classId,
-          date: new Date(new Date(session.date).toISOString().slice(0, 10)),
+          date: manilaDate(new Date(session.date)),
         },
       },
       select: {
@@ -3023,7 +3024,7 @@ app.put("/api/quizzes/:sessionId/scores/:studentId", requireAuth, requireRole("F
     if (score > session.totalItems) return res.status(400).json({ message: `Score cannot be higher than ${session.totalItems}.` });
     const enrollment = await prisma.classEnrollment.findFirst({ where: { classId: session.classId, studentProfileId: req.params.studentId, status: "APPROVED" } });
     if (!enrollment) return res.status(404).json({ message: "Student is not approved for this class." });
-    const attendanceSession = await prisma.classSession.findUnique({ where: { classId_date: { classId: session.classId, date: new Date(new Date(session.date).toISOString().slice(0, 10)) } }, select: { attendance: { where: { studentId: req.params.studentId }, select: { status: true } } } });
+    const attendanceSession = await prisma.classSession.findUnique({ where: { classId_date: { classId: session.classId, date: manilaDate(new Date(session.date)) } }, select: { attendance: { where: { studentId: req.params.studentId }, select: { status: true } } } });
     if (attendanceSession?.attendance[0]?.status === "ABSENT") {
       await prisma.quizScore.upsert({ where: { sessionId_studentId: { sessionId: session.id, studentId: req.params.studentId } }, create: { sessionId: session.id, studentId: req.params.studentId, score: null, isAbsent: true }, update: { score: null, isAbsent: true } });
       return res.status(409).json({ message: "This student is absent and cannot be scored." });
@@ -5193,7 +5194,7 @@ app.get(
                 orderBy: { updatedAt: "asc" },
               },
             },
-            orderBy: { date: "asc" },
+            orderBy: [{ date: "asc" }, { createdAt: "asc" }],
           },
         },
       });
@@ -5297,7 +5298,7 @@ app.get(
                 orderBy: { updatedAt: "asc" },
               },
             },
-            orderBy: { date: "asc" },
+            orderBy: [{ date: "asc" }, { createdAt: "asc" }],
           },
         },
       });
@@ -5307,7 +5308,7 @@ app.get(
       }
 
       const csv = buildCsvExport(classRecord, req.query.types);
-      const dateStr = new Date().toISOString().slice(0, 10);
+      const dateStr = manilaDate().toISOString().slice(0, 10);
       const safeCode = (classRecord.classCode || "").replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "") || "class";
       const safeSection = (classRecord.sectionName || "").replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "") || "section";
       const csvFilename = `${safeCode}_${safeSection}_${dateStr}.csv`;
