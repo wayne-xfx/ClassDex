@@ -139,15 +139,17 @@ Create `.env` files in both `classdex-backend/` and `classdex-frontend/` based o
 | `PORT` | Port for the backend Express API | `5000` |
 | `SESSION_SECRET` | Secret key for signing session cookies | `replace-with-a-long-random-string` |
 | `FRONTEND_ORIGIN` | Allowed CORS origin for the frontend | `http://localhost:5173` |
-| `FRONTEND_URL` | Base URL fallback for classroom notification links | `http://localhost:5173` |
-| `CLIENT_URL` | Base client URL used in password reset and email verification links (falls back to `FRONTEND_URL` / `FRONTEND_ORIGIN`) | `http://localhost:5173` |
+| `APP_BASE_URL` | Primary base URL for all links in transactional emails (falls back to `FRONTEND_URL` → `CLIENT_URL` → `FRONTEND_ORIGIN` → `http://localhost:5173`) | `http://localhost:5173` |
+| `FRONTEND_URL` | Fallback base URL for email links | `http://localhost:5173` |
+| `CLIENT_URL` | Fallback client URL for email links | `http://localhost:5173` |
 | `RESET_TOKEN_TTL_MINUTES` | Expiry window (minutes) for single-use password reset links | `30` *(Optional)* |
 | `VERIFY_TOKEN_TTL_HOURS` | Expiry window (hours) for single-use email verification links | `24` *(Optional)* |
 | `VERIFY_RESEND_COOLDOWN_SECONDS` | Per-user cooldown (seconds) between resend-verification requests | `60` *(Optional)* |
 | `TRUST_PROXY` | Express `trust proxy` hop count for IP rate limiting behind proxies | `1` *(Optional)* |
 | `RECAPTCHA_SECRET_KEY`| Google reCAPTCHA v2 secret key | *(Optional in development)* |
-| `RESEND_API_KEY` | Resend API key (account recovery & verification use the dev console mailer in `src/services/mailer.js` until Resend is wired) | *(Optional; logs formatted emails to server console in dev)* |
-| `EMAIL_FROM` | Sender email address for notifications | `ClassDex <no-reply@classdex.local>` |
+| `EMAIL_MODE` | Mail transport mode: `resend` (live Resend API), `log` (console print only), or `stub` (in-memory capture for automated tests) | `log` *(Defaults to `stub` in `npm test`; when unset outside tests, uses `resend` if `RESEND_API_KEY` + verified `EMAIL_FROM` are present, else `log`)* |
+| `RESEND_API_KEY` | Resend API secret key (`re_...`, stored only in `.env`) | `re_xxxxxxxx` *(Required when `EMAIL_MODE=resend`)* |
+| `EMAIL_FROM` | Verified sender email address on `classdex.me` (falls back to `ClassDex <no-reply@classdex.local>` only in `log`/`stub` modes) | `ClassDex <no-reply@classdex.me>` |
 
 #### Frontend Configuration (`classdex-frontend/.env`)
 
@@ -222,9 +224,19 @@ The client starts on `http://localhost:5173`. Open `http://localhost:5173` in yo
 5. Add the generated Secret Key to `classdex-backend/.env` as `RECAPTCHA_SECRET_KEY`.
 
 ### Email Notifications (Resend)
-- Register at [Resend](https://resend.com) to obtain an API key.
-- Set `RESEND_API_KEY` in `classdex-backend/.env`.
-- If omitted, registration and join flows proceed normally, logging `Email skipped: RESEND_API_KEY is not configured` to the backend console.
+- All ClassDex emails (account verification, password reset, password-changed notice, student class join confirmation, faculty class join alert, and enrollment approval/decline decisions) are consolidated through `classdex-backend/src/services/mailer.js` and `classdex-backend/src/services/emailTemplates.js`.
+- **Domain Verification Requirement (`classdex.me`):**
+  - Add and verify `classdex.me` in the Resend Dashboard with the required SPF, DKIM, and DMARC DNS records on Namecheap.
+  - Until `classdex.me` is verified in Resend, Resend's sandbox restriction only permits sending from `onboarding@resend.dev` to the Resend account owner's own email address (returning HTTP `403` for any other recipient).
+- **Transport Modes (`EMAIL_MODE`):**
+  - `resend`: Sends live emails through the Resend SDK (`RESEND_API_KEY` and a verified `EMAIL_FROM` such as `ClassDex <no-reply@classdex.me>` are required; server startup fails fast if either is missing or uses `@classdex.local`).
+  - `log`: Prints formatted emails and links to the server console with no network call.
+  - `stub`: Captures emails in memory for automated tests (`npm test` always defaults to `stub` mode so test suites never hit the live Resend API).
+- **Bounce & Sender Reputation Safety (Important):**
+  - When testing with `EMAIL_MODE=resend`, **only** send to your own real email address (or `+tag` aliases like `you+student1@gmail.com`) or Resend's simulator address `delivered@resend.dev`.
+  - **Never** send live Resend emails to fake or non-existent addresses (`@example.com`, `@test.local`, random domains), as hard bounces damage `classdex.me`'s sender reputation.
+- **CLI Smoke Test:**
+  - From `classdex-backend/`, run `node scripts/send-test-email.js <your-real-email>` (requires `EMAIL_MODE=resend` in `classdex-backend/.env`).
 
 ### Profile Photos (Cloudinary)
 - Register at [Cloudinary](https://cloudinary.com) and create an **unsigned upload preset**.
@@ -242,6 +254,7 @@ The client starts on `http://localhost:5173`. Open `http://localhost:5173` in yo
 - `npm run start`: Starts backend production server (`node index.js`).
 - `npm run db:setup`: Generates Prisma client and applies schema migrations (`prisma generate && node scripts/apply-schema.js`).
 - `node scripts/backfill-name-parts.js [--dry-run] [--batch-size=50]`: Parses and populates `firstName`, `middleName`, `lastName`, `suffix`, and `sortKey` across existing `StudentProfile` and `ClassRoster` records. Run with `--dry-run` to verify name parsing without writing to the database.
+- `node scripts/send-test-email.js <recipient>`: Sends a live smoke-test email via Resend when `EMAIL_MODE=resend` is set in `classdex-backend/.env` (refuses `.local` and `@example.com` addresses).
 
 ### Frontend (`classdex-frontend`)
 - `npm run dev`: Starts Vite local development server (`vite`).
@@ -309,9 +322,9 @@ The script is idempotent and reports processed counts across both `StudentProfil
 - **CORS / Session Cookie Not Saved**:
   - *Symptom*: Frontend shows unauthorized errors immediately after logging in.
   - *Solution*: Ensure `FRONTEND_ORIGIN` in `classdex-backend/.env` exactly matches the browser address (e.g. `http://localhost:5173`).
-- **Email Skipped Warning**:
-  - *Symptom*: Backend logs `Email skipped: RESEND_API_KEY is not configured`.
-  - *Explanation*: Normal developmental behavior when running without a Resend API key. The account is created and usable immediately.
+- **Mailer Fallback / Resend Warnings**:
+  - *Symptom*: Backend logs `[ClassDex Mailer] RESEND_API_KEY/EMAIL_FROM not fully configured; defaulting to EMAIL_MODE=log.`
+  - *Explanation*: Normal development behavior when `EMAIL_MODE` is unset and `RESEND_API_KEY` or a verified `EMAIL_FROM` is omitted. Emails are printed to the server console instead of sent over the network.
 - **Windows Line Endings (`CRLF`)**:
   - Ensure Git checkout preserves line endings using `git config core.autocrlf true` on Windows systems.
 
