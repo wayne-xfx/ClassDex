@@ -1,3 +1,6 @@
+const dns = require("node:dns");
+dns.setDefaultResultOrder("ipv4first");
+
 const http = require("node:http");
 const { loadBackendTestEnv } = require("../../scripts/load-test-env.cjs");
 
@@ -22,6 +25,7 @@ const {
 const {
   getStubEmails,
   clearStubEmails,
+  validateMailerConfig,
 } = require("../../../classdex-backend/src/services/mailer");
 
 const server = http.createServer((req, res) => {
@@ -63,8 +67,9 @@ async function warmDatabase() {
 
 warmDatabase().finally(() => {
   server.listen(E2E_PORT, "127.0.0.1", () => {
+    const mailerStatus = validateMailerConfig();
     console.log(
-      `[ClassDex E2E Backend] Listening on http://127.0.0.1:${E2E_PORT} (DB host: ${testHost}, EMAIL_MODE=${process.env.EMAIL_MODE})`,
+      `[ClassDex E2E Backend] Listening on http://127.0.0.1:${E2E_PORT} (DB host: ${testHost}, EMAIL_MODE=${mailerStatus.mode})`,
     );
   });
 });
