@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import { test, expect } from "@playwright/test";
+import { installRecaptchaIpv4Relay } from "./support/recaptcha-env.mjs";
 
 const require = createRequire(import.meta.url);
 const { loadBackendTestEnv } = require("../scripts/load-test-env.cjs");
@@ -367,7 +368,11 @@ test.describe("SCRUM-64 Class Management & Join Workflow E2E (CLS-03, CLS-07, CL
     const facPage = await facContext.newPage();
     try {
       await loginAs(facPage, facEmail, /\/faculty$/);
+      const emptyDeckLoaded = facPage.waitForResponse(
+        (res) => res.url().includes(`/api/classes/${classEmptyRoster.id}/deck`) && res.request().method() === "GET" && res.status() === 200,
+      );
       await facPage.goto(`/faculty/classes/${classEmptyRoster.id}`);
+      await emptyDeckLoaded;
       await expect(facPage.getByRole("heading", { name: /Student deck/i })).toBeVisible();
 
       await facPage.getByRole("button", { name: "Invite", exact: true }).click();
@@ -396,6 +401,7 @@ test.describe("SCRUM-64 Class Management & Join Workflow E2E (CLS-03, CLS-07, CL
     const stuContext = await browser.newContext();
     const stuPage = await stuContext.newPage();
     try {
+      await installRecaptchaIpv4Relay(stuPage);
       await loginAs(stuPage, stuActiveEmail, /\/student$/);
 
       await stuPage.goto(`/join/${classEmptyRoster.classCode}`);
@@ -407,7 +413,7 @@ test.describe("SCRUM-64 Class Management & Join Workflow E2E (CLS-03, CLS-07, CL
       await expect(captchaModal).toBeVisible();
 
       const recaptchaFrame = stuPage.frameLocator('iframe[title="reCAPTCHA"]');
-      await expect(recaptchaFrame.locator("#recaptcha-anchor")).toBeVisible({ timeout: 55_000 });
+      await expect(recaptchaFrame.locator("#recaptcha-anchor")).toBeVisible({ timeout: 25_000 });
       await recaptchaFrame.locator("#recaptcha-anchor").click();
 
       await expect(stuPage).toHaveURL(/\/student$/, { timeout: 20_000 });

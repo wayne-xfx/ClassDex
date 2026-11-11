@@ -230,7 +230,7 @@ test.describe("SCRUM-68 Cross-Browser & Responsive Compatibility (COMPAT-01..07)
 
       await page.getByRole("button", { name: /Create class/i }).click();
       await expect(page).toHaveURL(/\/faculty$/);
-      await expect(page.getByText("qa_Compat Created")).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByText("Section: qa_Compat Created")).toBeVisible({ timeout: 20_000 });
 
       // 3. Seeded Class Modules across Dark + Light themes
       await page.goto(`/faculty/classes/${seededClass.id}`);
