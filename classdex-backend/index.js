@@ -5332,7 +5332,7 @@ app.get(
     try {
       const profile = await prisma.studentProfile.findUnique({
         where: { userId: req.session.userId },
-        select: { id: true, name: true, studentId: true, email: true, photo: true, program: true, section: true },
+        select: { id: true, name: true, address: true, studentId: true, email: true, photo: true, program: true, section: true },
       });
       if (!profile) {
         return res.status(409).json({ message: "Create your student profile before joining a class." });

@@ -478,6 +478,7 @@ test("SCRUM-66: Student Dashboard & Data Export API Suite (STU-01..03, EXP-01..0
     assert.equal(res.status, 200);
     assert.equal(res.data.student.id, stu1.studentProfile.id);
     assert.equal(res.data.student.studentId, stu1.studentProfile.studentId);
+    assert.equal(res.data.student.address, "Tacloban City");
 
     // Every attendance, recitation, activity, project, and quiz record must match only stu1's data
     assert.equal(res.data.attendance.length, 2);
