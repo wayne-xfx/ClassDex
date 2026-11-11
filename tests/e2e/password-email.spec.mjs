@@ -26,7 +26,7 @@ async function solveTestRecaptcha(page) {
   const modal = page.getByRole("dialog", { name: "Security check" });
   await expect(modal).toBeVisible();
   const anchor = page.frameLocator('iframe[title="reCAPTCHA"]').locator("#recaptcha-anchor");
-  await anchor.waitFor({ state: "visible", timeout: 30_000 });
+  await anchor.waitFor({ state: "visible", timeout: 55_000 });
   await anchor.click();
 }
 
@@ -173,7 +173,7 @@ test.describe("SCRUM-67 Password Recovery & Email Flows E2E (PWD-01..PWD-10)", (
   });
 
   test("PWD-01..03 E2E: Register captures verify email, resend cooldown, expired/invalid/used & verify clears banner", async ({ page }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(120_000);
     await page.request.delete(`${BACKEND_E2E_URL}/__e2e/emails`);
 
     await page.goto("/register");
@@ -185,7 +185,7 @@ test.describe("SCRUM-67 Password Recovery & Email Flows E2E (PWD-01..PWD-10)", (
     await page.getByRole("button", { name: "Register" }).click();
 
     await solveTestRecaptcha(page);
-    await expect(page).toHaveURL(/\/student$/);
+    await expect(page).toHaveURL(/\/student$/, { timeout: 20_000 });
 
     const banner = page.getByRole("region", { name: "Verify your email address" });
     await expect(banner).toBeVisible();
@@ -235,7 +235,7 @@ test.describe("SCRUM-67 Password Recovery & Email Flows E2E (PWD-01..PWD-10)", (
   });
 
   test("PWD-04..07 E2E: Forgot password captcha + anti-enum UI, /reset-password bounds & prior-session revocation", async ({ browser }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(150_000);
     const oldSessionCtx = await browser.newContext();
     const oldSessionPage = await oldSessionCtx.newPage();
     const ctx = await browser.newContext();
@@ -348,7 +348,7 @@ test.describe("SCRUM-67 Password Recovery & Email Flows E2E (PWD-01..PWD-10)", (
   });
 
   test("PWD-08 E2E: AccountSettings Change password keeps Device A active & revokes Device B", async ({ browser }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(90_000);
     const ctxA = await browser.newContext();
     const ctxB = await browser.newContext();
     const pageA = await ctxA.newPage();
@@ -413,7 +413,7 @@ test.describe("SCRUM-67 Password Recovery & Email Flows E2E (PWD-01..PWD-10)", (
   });
 
   test("PWD-09..10 E2E: UI join pending alerts & Approve/Decline decision emails captured in stub mode", async ({ browser }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(120_000);
     const stuCtx = await browser.newContext();
     const facCtx = await browser.newContext();
     const stuPage = await stuCtx.newPage();

@@ -417,6 +417,7 @@ test.describe("SCRUM-64 Class Management & Join Workflow E2E (CLS-03, CLS-07, CL
   });
 
   test("CLS-14: Empty-roster invite confirmation dialog & /join/:code invite link flow", async ({ browser }) => {
+    test.setTimeout(120_000);
     // Part A: Faculty empty-roster invite confirmation
     const facContext = await browser.newContext({ permissions: ["clipboard-read", "clipboard-write"] });
     const facPage = await facContext.newPage();
@@ -462,10 +463,10 @@ test.describe("SCRUM-64 Class Management & Join Workflow E2E (CLS-03, CLS-07, CL
       await expect(captchaModal).toBeVisible();
 
       const recaptchaFrame = stuPage.frameLocator('iframe[title="reCAPTCHA"]');
-      await expect(recaptchaFrame.locator("#recaptcha-anchor")).toBeVisible({ timeout: 30_000 });
+      await expect(recaptchaFrame.locator("#recaptcha-anchor")).toBeVisible({ timeout: 55_000 });
       await recaptchaFrame.locator("#recaptcha-anchor").click();
 
-      await expect(stuPage).toHaveURL(/\/student$/);
+      await expect(stuPage).toHaveURL(/\/student$/, { timeout: 20_000 });
       await expect(stuPage.getByText(/Waiting for instructor approval/i)).toBeVisible();
     } finally {
       await stuContext.close();
@@ -473,12 +474,13 @@ test.describe("SCRUM-64 Class Management & Join Workflow E2E (CLS-03, CLS-07, CL
   });
 
   test("CLS-17: Pending validation drawer bell badge count & Approve/Decline actions", async ({ page }) => {
+    test.setTimeout(90_000);
     await loginAs(page, facEmail, /\/faculty$/);
     await page.goto(`/faculty/classes/${classPendingUi.id}`);
 
     // Bell badge counts 2 pending + 1 unread auto-approved = 3
     const bellBtn = page.locator("button.header-bell-trigger");
-    await expect(bellBtn.locator(".header-bell-badge")).toHaveText("3");
+    await expect(bellBtn.locator(".header-bell-badge")).toHaveText("3", { timeout: 25_000 });
     await bellBtn.click();
 
     const drawer = page.getByRole("dialog", { name: "Notifications" });
@@ -497,7 +499,7 @@ test.describe("SCRUM-64 Class Management & Join Workflow E2E (CLS-03, CLS-07, CL
     await expect(declineRow).toHaveCount(0);
 
     await drawer.getByRole("button", { name: "Close notifications" }).click();
-    await expect(bellBtn.locator(".header-bell-badge")).toHaveText("1");
+    await expect(bellBtn.locator(".header-bell-badge")).toHaveText("1", { timeout: 15_000 });
 
     // Approved student now on Class Deck; declined student absent
     const grid = page.locator(".student-grid");

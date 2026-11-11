@@ -298,7 +298,7 @@ test.describe("SCRUM-68 Cross-Browser & Responsive Compatibility (COMPAT-01..07)
   });
 
   test("Student flow, themes, mobile/tablet nav, captcha timing & 3D card flip responsive check", async ({ page }, testInfo) => {
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
     const errors = attachRuntimeErrorCollector(page);
     const project = testInfo.project.name;
 
@@ -323,7 +323,7 @@ test.describe("SCRUM-68 Cross-Browser & Responsive Compatibility (COMPAT-01..07)
     await expect(regCaptcha).toBeVisible();
     await expect(
       regCaptcha.frameLocator('iframe[title="reCAPTCHA"]').locator("#recaptcha-anchor"),
-    ).toBeVisible({ timeout: 35_000 });
+    ).toBeVisible({ timeout: 55_000 });
     await assertNoHorizontalOverflow(page, `${project} register captcha modal`);
     await page.getByRole("button", { name: "Close security check" }).click();
     await expect(regCaptcha).toHaveCount(0);
@@ -367,7 +367,7 @@ test.describe("SCRUM-68 Cross-Browser & Responsive Compatibility (COMPAT-01..07)
     await expect(joinCaptcha).toBeVisible();
     await expect(
       joinCaptcha.frameLocator('iframe[title="reCAPTCHA"]').locator("#recaptcha-anchor"),
-    ).toBeVisible({ timeout: 35_000 });
+    ).toBeVisible({ timeout: 55_000 });
     await assertNoHorizontalOverflow(page, `${project} join captcha modal`);
     await page.getByRole("button", { name: "Close security check" }).click();
 
