@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Avatar from "../Avatar";
 import Icon from "../Icon";
 import { Button, Modal } from "../DesignSystem";
@@ -102,34 +102,58 @@ export default function QuizModule({
   const [attendanceWarning, setAttendanceWarning] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
 
+  const mountedRef = useRef(true);
+  const loadReqIdRef = useRef(0);
+  const selectedRef = useRef(null);
+  const draftDirtyRef = useRef(false);
+
+  useEffect(() => {
+    selectedRef.current = selected;
+  }, [selected]);
+
   const loadSessions = useCallback(
-    () =>
-      api
-        .quizSessions(classId)
-        .then(({ sessions: result }) => {
-          setSessions(result);
-          tabCache?.set(`quizzes:${classId}`, result);
-          setSelected((current) => {
-            if (!current) return current;
-            const refreshed = result.find((item) => item.id === current.id);
-            if (refreshed) {
+    async ({ syncEditor = false } = {}) => {
+      const reqId = ++loadReqIdRef.current;
+      try {
+        const { sessions: result } = await api.quizSessions(classId);
+        if (!mountedRef.current || reqId !== loadReqIdRef.current) return;
+        setSessions(result);
+        tabCache?.set(`quizzes:${classId}`, result);
+        const currentSelected = selectedRef.current;
+        if (currentSelected) {
+          const refreshed = result.find((item) => item.id === currentSelected.id);
+          if (refreshed) {
+            selectedRef.current = refreshed;
+            setSelected(refreshed);
+            if (syncEditor || !draftDirtyRef.current) {
               setScores(
                 Object.fromEntries(
                   (refreshed.scores || []).map((item) => [item.studentId, item.score ?? ""]),
                 ),
               );
-              return refreshed;
             }
-            return current;
-          });
-        })
-        .catch((loadError) => setError(loadError.message))
-        .finally(() => setLoading(false)),
+          }
+        }
+      } catch (loadError) {
+        if (mountedRef.current && reqId === loadReqIdRef.current) {
+          setError(loadError.message);
+        }
+      } finally {
+        if (mountedRef.current && reqId === loadReqIdRef.current) {
+          setLoading(false);
+        }
+      }
+    },
     [classId, tabCache],
   );
 
   useEffect(() => {
+    mountedRef.current = true;
     loadSessions();
+    return () => {
+      mountedRef.current = false;
+      loadReqIdRef.current += 1;
+    };
   }, [loadSessions]);
 
   useEffect(() => {
@@ -150,6 +174,8 @@ export default function QuizModule({
   }, [students, selected?.id]);
 
   function openQuiz(session) {
+    selectedRef.current = session;
+    draftDirtyRef.current = false;
     setSelected(session);
     setTitle(session.title);
     setTotalItems(session.totalItems);
@@ -171,6 +197,8 @@ export default function QuizModule({
   }
 
   function newQuiz({ title: nextTitle, totalItems: nextTotal }) {
+    selectedRef.current = null;
+    draftDirtyRef.current = true;
     setSelected(null);
     setTitle(nextTitle);
     setTotalItems(nextTotal);
@@ -203,6 +231,7 @@ export default function QuizModule({
     const absent = liveStatus === "ABSENT" || (!["PRESENT", "LATE"].includes(liveStatus) && selected?.scores?.some((item) => item.studentId === studentId && item.isAbsent));
     if (absent) return;
     if (value === "") {
+      draftDirtyRef.current = true;
       setScores((current) => ({ ...current, [studentId]: "" }));
       setSaved(false);
       return;
@@ -213,6 +242,7 @@ export default function QuizModule({
       return;
     }
     setError("");
+    draftDirtyRef.current = true;
     setScores((current) => ({ ...current, [studentId]: score }));
     setSaved(false);
   }
@@ -249,6 +279,7 @@ export default function QuizModule({
           title: title.trim(),
           totalItems: total,
         }));
+        selectedRef.current = session;
         setSelected(session);
       }
       const scorePayload = Object.entries(scores)
@@ -257,8 +288,9 @@ export default function QuizModule({
       if (scorePayload.length > 0) {
         await api.setQuizScoresBulk(session.id, scorePayload);
       }
+      draftDirtyRef.current = false;
       tabCache?.invalidate(`quizzes:${classId}`);
-      await loadSessions();
+      await loadSessions({ syncEditor: true });
       setSaved(true);
       setMessage("All changes saved.");
     } catch (saveError) {
@@ -271,6 +303,8 @@ export default function QuizModule({
     try {
       tabCache?.invalidate(`quizzes:${classId}`);
       await api.deleteQuizSession(selected.id);
+      selectedRef.current = null;
+      draftDirtyRef.current = false;
       setSelected(null);
       setView("list");
       await loadSessions();
@@ -430,6 +464,7 @@ export default function QuizModule({
             disabled={readOnly}
             onChange={(event) => {
               if (!readOnly) {
+                draftDirtyRef.current = true;
                 setTitle(event.target.value);
                 setSaved(false);
               }
@@ -448,6 +483,7 @@ export default function QuizModule({
             disabled={readOnly}
             onChange={(event) => {
               if (!readOnly) {
+                draftDirtyRef.current = true;
                 setTotalItems(event.target.value);
                 setSaved(false);
               }

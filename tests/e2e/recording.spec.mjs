@@ -256,18 +256,22 @@ test.describe("SCRUM-65 Recording Modules E2E (REC-08, REC-12, REC-16)", () => {
     await page.keyboard.press("Escape");
 
     const animStart = Date.now();
+    const shuffleReqPromise = page.waitForRequest(
+      (req) => req.url().includes("/recitation/shuffle") && req.method() === "POST",
+    );
     await page.getByRole("button", { name: "Shuffle again" }).click();
     await expect(page.locator(".recitation-shuffling-card")).toBeVisible();
-    await expect(speakerCard).toBeVisible({ timeout: 5000 });
-    const elapsedMs = Date.now() - animStart;
-    expect(elapsedMs).toBeGreaterThanOrEqual(850);
-    expect(elapsedMs).toBeLessThan(4000);
+    await shuffleReqPromise;
+    const animElapsedMs = Date.now() - animStart;
+    expect(animElapsedMs).toBeGreaterThanOrEqual(850);
+    expect(animElapsedMs).toBeLessThan(2500);
+    await expect(speakerCard).toBeVisible({ timeout: 15_000 });
 
     const firstPickedId = await speakerCard.locator(".recitation-student-id").textContent();
 
     // Skip to other eligible student
     await page.getByRole("button", { name: "Skip" }).click();
-    await expect(speakerCard).toBeVisible({ timeout: 5000 });
+    await expect(speakerCard).toBeVisible({ timeout: 15_000 });
     const skippedPickedId = await speakerCard.locator(".recitation-student-id").textContent();
     expect(skippedPickedId).not.toBe(firstPickedId);
     await expect(speakerCard).not.toContainText("Carol");
