@@ -6249,7 +6249,7 @@ textarea {
 .student-list-table-wrap { overflow-x: auto; margin-top: .75rem; }
 .student-list-table { width: 100%; border-collapse: collapse; }
 .student-list-table th, .student-list-table td { text-align: left; padding: .75rem; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
-.student-list-row-error { color: var(--danger, #b42318); font-size: .82rem; }.student-list-row-valid { color: var(--success, #16794b); font-size: .82rem; }.student-list-empty { margin-top: .75rem; min-height: 12rem; }
+.student-list-row-error { color: var(--danger, #b42318); font-size: .82rem; }.student-list-row-valid { color: var(--success, #16794b); font-size: .82rem; }.student-list-row-pending { color: var(--royal, #3b82f6); font-size: .82rem; font-weight: 500; }.student-list-entry-error { margin: .45rem 0 0; color: var(--danger, #b42318); font-size: .82rem; }.student-list-status-cell { display: inline-flex; align-items: center; flex-wrap: wrap; gap: .5rem; }.student-list-undo-btn { border: 1px solid var(--border-color); background: transparent; color: var(--text-muted); border-radius: .375rem; padding: .1rem .45rem; font-size: .75rem; cursor: pointer; }.student-list-undo-btn:hover { color: var(--text-color); border-color: var(--royal, #3b82f6); }.student-list-empty { margin-top: .75rem; min-height: 12rem; }
 @media (max-width: 800px) { .student-list-input-grid, .student-list-entry-form { grid-template-columns: 1fr; } .student-list-manager-heading { flex-direction: column; } }
 /* Reusable Avatar component */
 .avatar {

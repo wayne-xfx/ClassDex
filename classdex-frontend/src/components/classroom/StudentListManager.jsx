@@ -7,30 +7,12 @@ import { api } from "../../api";
 import ModuleSkeleton from "./ModuleSkeleton";
 import { ModuleHeader } from "./ClassShell";
 import { formatStudentDisplayName, formatStudentName } from "./studentNames";
-
-const ID_PATTERN = /^\d{7}$/;
-
-function validateRows(rows) {
-  const seen = new Set();
-  return rows.map((row) => {
-    const errors = [];
-    if (!row.name.trim()) errors.push("Missing name");
-    if (!ID_PATTERN.test(row.studentId.trim())) errors.push("Student ID must be exactly 7 digits");
-    if (row.studentId.trim() && seen.has(row.studentId.trim())) errors.push("Duplicate student ID");
-    if (row.studentId.trim()) seen.add(row.studentId.trim());
-    return { ...row, errors };
-  });
-}
-
-function parseLines(value) {
-  return value
-    .split(/\r?\n/)
-    .map((line) => {
-      const parts = line.includes(",") ? line.split(",") : line.split(/\s*[-\t]\s*/);
-      return { name: String(parts[0] || "").trim(), studentId: String(parts[1] || "").trim() };
-    })
-    .filter((row) => row.name || row.studentId);
-}
+import {
+  normalizeWhitespace,
+  parseLines,
+  validateNewStudentEntry,
+  validateRows,
+} from "./studentListValidation";
 
 export default function StudentListManager({
   classId,
@@ -48,11 +30,13 @@ export default function StudentListManager({
   const cachedRoster = tabCache?.get(`roster:${classId}`);
   const [activeTab, setActiveTab] = useState("active"); // "active" | "dropList"
   const [rows, setRows] = useState(cachedRoster || []);
+  const [savedRoster, setSavedRoster] = useState(cachedRoster || []);
   const initialRosterRef = useRef(cachedRoster ? JSON.stringify(cachedRoster) : "");
   const [dropList, setDropList] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [name, setName] = useState("");
   const [studentId, setStudentId] = useState("");
+  const [entryError, setEntryError] = useState({ field: null, message: "" });
   const [pasteValue, setPasteValue] = useState("");
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -67,21 +51,53 @@ export default function StudentListManager({
   const [dropSortField, setDropSortField] = useState("droppedAt"); // "name" | "studentId" | "droppedAt" | "recordCount"
   const [dropSortOrder, setDropSortOrder] = useState("desc"); // "asc" | "desc"
 
-  const checkedRows = useMemo(() => validateRows(rows), [rows]);
-  const invalidCount = checkedRows.filter((row) => row.errors.length).length;
+  const savedById = useMemo(
+    () =>
+      new Map(
+        savedRoster
+          .filter((r) => r.id)
+          .map((r) => [
+            r.id,
+            {
+              name: normalizeWhitespace(r.name),
+              studentId: String(r.studentId || "").trim(),
+            },
+          ]),
+      ),
+    [savedRoster],
+  );
+
+  const droppedIds = useMemo(
+    () =>
+      new Set(
+        dropList
+          .map((entry) => String(entry.studentId || "").trim())
+          .filter(Boolean),
+      ),
+    [dropList],
+  );
+
+  const checkedRows = useMemo(
+    () => validateRows(rows, { savedById, droppedIds }),
+    [rows, savedById, droppedIds],
+  );
+  const invalidCount = checkedRows.filter((row) => row.errors.length > 0).length;
+  const unsavedCount = checkedRows.filter(
+    (row) => row.status === "unsaved-new" || row.status === "unsaved-edited",
+  ).length;
 
   // Unsaved changes detection
   const isDirty = useMemo(() => {
     if (readOnly || activeTab !== "active") return false;
-    if (!initialRosterRef.current) return false;
+    if (!initialRosterRef.current) return rows.length > 0;
     const currentSimplified = rows.map((r) => ({
-      name: r.name.trim(),
-      studentId: r.studentId.trim(),
+      name: normalizeWhitespace(r.name),
+      studentId: String(r.studentId || "").trim(),
     }));
     try {
       const initialParsed = JSON.parse(initialRosterRef.current).map((r) => ({
-        name: r.name.trim(),
-        studentId: r.studentId.trim(),
+        name: normalizeWhitespace(r.name),
+        studentId: String(r.studentId || "").trim(),
       }));
       return JSON.stringify(currentSimplified) !== JSON.stringify(initialParsed);
     } catch {
@@ -116,6 +132,7 @@ export default function StudentListManager({
         }));
         initialRosterRef.current = JSON.stringify(mapped);
         tabCache?.set(`roster:${classId}`, mapped);
+        setSavedRoster(mapped);
         setRows(mapped);
         onCountChange?.(roster.length);
       })
@@ -179,19 +196,54 @@ export default function StudentListManager({
 
   function addRow(event) {
     event.preventDefault();
-    setRows((current) => [...current, { name, studentId, photo: "" }]);
+    const validation = validateNewStudentEntry(
+      { name, studentId },
+      { existingRows: rows, droppedIds },
+    );
+    if (!validation.valid) {
+      setEntryError({ field: validation.field, message: validation.message });
+      return;
+    }
+    setEntryError({ field: null, message: "" });
+    setMessage("");
+    setErrorMessage("");
+    setRows((current) => [...current, validation.entry]);
     setName("");
     setStudentId("");
   }
 
   function updateRow(index, field, value) {
+    setMessage("");
     setRows((current) =>
       current.map((row, rowIndex) => (rowIndex === index ? { ...row, [field]: value } : row)),
     );
   }
 
+  function normalizeRowName(index) {
+    setRows((current) =>
+      current.map((row, rowIndex) => {
+        if (rowIndex !== index) return row;
+        const normalized = normalizeWhitespace(row.name);
+        return normalized === row.name ? row : { ...row, name: normalized };
+      }),
+    );
+  }
+
+  function revertRow(index) {
+    setRows((current) =>
+      current.map((row, rowIndex) => {
+        if (rowIndex !== index || !row.id) return row;
+        const saved = savedById.get(row.id);
+        if (!saved) return row;
+        return { ...row, name: saved.name, studentId: saved.studentId };
+      }),
+    );
+  }
+
   function importPasted() {
-    setRows((current) => [...current, ...parseLines(pasteValue)]);
+    const parsed = parseLines(pasteValue);
+    if (!parsed.length) return;
+    setRows((current) => [...current, ...parsed]);
     setPasteValue("");
     setErrorMessage("");
     setMessage("Pasted rows added to the preview. Review validation before saving.");
@@ -251,7 +303,10 @@ export default function StudentListManager({
     try {
       const { roster, autoApprovedCount = 0 } = await api.saveClassRoster(
         classId,
-        checkedRows.map((row) => ({ studentName: row.name, studentId: row.studentId })),
+        checkedRows.map((row) => ({
+          studentName: normalizeWhitespace(row.name),
+          studentId: String(row.studentId || "").trim(),
+        })),
       );
       const mapped = roster.map((entry) => ({
         id: entry.id,
@@ -261,6 +316,7 @@ export default function StudentListManager({
       }));
       initialRosterRef.current = JSON.stringify(mapped);
       tabCache?.set(`roster:${classId}`, mapped);
+      setSavedRoster(mapped);
       setRows(mapped);
       onCountChange?.(roster.length);
       setMessage(
@@ -317,8 +373,12 @@ export default function StudentListManager({
     try {
       const outcome = await api.deleteClassRosterEntry(classId, row.id);
       tabCache?.invalidate();
-      setRows((current) => current.filter((_, rowIndex) => rowIndex !== index));
-      onCountChange?.(rows.length - 1);
+      const nextRows = rows.filter((_, rowIndex) => rowIndex !== index);
+      const nextSaved = savedRoster.filter((entry) => entry.id !== row.id);
+      initialRosterRef.current = JSON.stringify(nextSaved);
+      setSavedRoster(nextSaved);
+      setRows(nextRows);
+      onCountChange?.(nextRows.length);
       setMessage(
         outcome.result === "dropped"
           ? `${row.name} was moved to the Drop List (${outcome.recordCount} records preserved).`
@@ -358,11 +418,7 @@ export default function StudentListManager({
       .map((row, index) => ({ row, index }))
       .filter(({ row }) => {
         if (!q) return true;
-        const statusText = readOnly
-          ? "read-only"
-          : row.errors.length
-          ? row.errors.join(" ")
-          : "ready to save";
+        const statusText = readOnly ? "read-only" : row.statusLabel;
         return (
           row.name.toLowerCase().includes(q) ||
           row.studentId.includes(q) ||
@@ -495,31 +551,46 @@ export default function StudentListManager({
                 </div>
               ) : null}
               <div className="student-list-input-grid">
-                <form className="student-list-entry-form" onSubmit={addRow}>
-                  <label className="field">
-                    <span>Student name</span>
-                    <input
-                      className="input"
-                      value={name}
-                      onChange={(event) => setName(event.target.value)}
-                      placeholder="e.g., Juan Dela Cruz"
-                    />
-                  </label>
-                  <label className="field">
-                    <span>7-digit student ID</span>
-                    <input
-                      className="input"
-                      inputMode="numeric"
-                      maxLength={7}
-                      value={studentId}
-                      onChange={(event) => setStudentId(event.target.value.replace(/\D/g, "").slice(0, 7))}
-                      placeholder="2300039"
-                    />
-                  </label>
-                  <button type="submit" className="button button-secondary">
-                    <Icon name="plus" /> Add student
-                  </button>
-                </form>
+                <div>
+                  <form className="student-list-entry-form" onSubmit={addRow} noValidate>
+                    <label className="field">
+                      <span>Student name</span>
+                      <input
+                        className={`input ${entryError.field === "name" ? "input-invalid" : ""}`}
+                        value={name}
+                        onChange={(event) => {
+                          setName(event.target.value);
+                          if (entryError.message) setEntryError({ field: null, message: "" });
+                        }}
+                        placeholder="e.g., Juan Dela Cruz"
+                        aria-invalid={entryError.field === "name" ? "true" : undefined}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>7-digit student ID</span>
+                      <input
+                        className={`input ${entryError.field === "studentId" ? "input-invalid" : ""}`}
+                        inputMode="numeric"
+                        maxLength={7}
+                        value={studentId}
+                        onChange={(event) => {
+                          setStudentId(event.target.value.replace(/\D/g, "").slice(0, 7));
+                          if (entryError.message) setEntryError({ field: null, message: "" });
+                        }}
+                        placeholder="2300039"
+                        aria-invalid={entryError.field === "studentId" ? "true" : undefined}
+                      />
+                    </label>
+                    <button type="submit" className="button button-secondary">
+                      <Icon name="plus" /> Add student
+                    </button>
+                  </form>
+                  {entryError.message ? (
+                    <p className="student-list-entry-error" role="alert">
+                      {entryError.message}
+                    </p>
+                  ) : null}
+                </div>
                 <div className="student-list-import-box">
                   <label className="field">
                     <span>Paste one student per line</span>
@@ -550,11 +621,19 @@ export default function StudentListManager({
 
           <div className="student-list-preview-heading">
             <div>
-              <h3>{readOnly ? "Student list" : "Student list preview"}</h3>
+              <h3>
+                {readOnly || (!isDirty && !invalidCount) ? "Student list" : "Student list preview"}
+              </h3>
               <span>
                 {filteredRowsWithIndices.length} {filteredRowsWithIndices.length === 1 ? "row" : "rows"}
                 {searchTerm ? ` (filtered from ${rows.length})` : ""}
-                {!readOnly && invalidCount ? ` · ${invalidCount} need${invalidCount === 1 ? "s" : ""} attention` : ""}
+                {!readOnly && invalidCount
+                  ? ` · ${invalidCount} need${invalidCount === 1 ? "s" : ""} attention`
+                  : !readOnly && unsavedCount
+                  ? ` · ${unsavedCount} unsaved ${unsavedCount === 1 ? "change" : "changes"}`
+                  : !readOnly && rows.length
+                  ? " · All changes saved"
+                  : ""}
               </span>
             </div>
             {!readOnly ? (
@@ -562,9 +641,13 @@ export default function StudentListManager({
                 type="button"
                 className="button button-primary"
                 onClick={saveStudentList}
-                disabled={saving || !rows.length || invalidCount}
+                disabled={saving || !rows.length || Boolean(invalidCount) || !isDirty}
               >
-                {saving ? "Saving…" : "Save student list"}
+                {saving
+                  ? "Saving…"
+                  : !isDirty && !invalidCount && rows.length
+                  ? "Saved"
+                  : "Save student list"}
               </button>
             ) : null}
           </div>
@@ -592,7 +675,7 @@ export default function StudentListManager({
 
                     return (
                       <tr
-                        key={`${index}-${row.studentId}`}
+                        key={row.id || `draft-${index}`}
                         className={isFocused ? "is-focused-student-row" : ""}
                         ref={(el) => {
                           if (el && isFocused) {
@@ -604,20 +687,23 @@ export default function StudentListManager({
                           <div className="student-list-name-cell">
                             <Avatar src={row.photo} name={row.name} size="sm" className="student-list-avatar" />
                             <input
-                              className="input"
+                              className={`input ${!readOnly && row.nameError ? "input-invalid" : ""}`}
                               value={row.name}
                               disabled={readOnly}
+                              aria-invalid={!readOnly && row.nameError ? "true" : undefined}
                               onChange={(event) => updateRow(index, "name", event.target.value)}
+                              onBlur={() => normalizeRowName(index)}
                             />
                           </div>
                         </td>
                         <td>
                           <input
-                            className="input"
+                            className={`input ${!readOnly && row.idError ? "input-invalid" : ""}`}
                             inputMode="numeric"
                             maxLength={7}
                             value={row.studentId}
                             disabled={readOnly}
+                            aria-invalid={!readOnly && row.idError ? "true" : undefined}
                             onChange={(event) =>
                               updateRow(index, "studentId", event.target.value.replace(/\D/g, "").slice(0, 7))
                             }
@@ -626,10 +712,34 @@ export default function StudentListManager({
                         <td>
                           {readOnly ? (
                             <span className="student-list-row-valid">Read-only</span>
-                          ) : row.errors.length ? (
-                            <span className="student-list-row-error">{row.errors.join(" · ")}</span>
+                          ) : row.status === "invalid" ? (
+                            <div className="student-list-status-cell">
+                              <span className="student-list-row-error">{row.statusLabel}</span>
+                              {row.id && row.isModified ? (
+                                <button
+                                  type="button"
+                                  className="student-list-undo-btn"
+                                  onClick={() => revertRow(index)}
+                                >
+                                  Undo
+                                </button>
+                              ) : null}
+                            </div>
+                          ) : row.status === "unsaved-new" || row.status === "unsaved-edited" ? (
+                            <div className="student-list-status-cell">
+                              <span className="student-list-row-pending">{row.statusLabel}</span>
+                              {row.status === "unsaved-edited" ? (
+                                <button
+                                  type="button"
+                                  className="student-list-undo-btn"
+                                  onClick={() => revertRow(index)}
+                                >
+                                  Undo
+                                </button>
+                              ) : null}
+                            </div>
                           ) : (
-                            <span className="student-list-row-valid">Ready to save</span>
+                            <span className="student-list-row-valid">{row.statusLabel}</span>
                           )}
                         </td>
                         {!readOnly ? (
