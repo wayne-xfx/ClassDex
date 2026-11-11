@@ -33,47 +33,7 @@ export function getAvatarThumbnailUrl(url, variant = "md", px = 48) {
   return `${prefix}${transformation}/${rest}`;
 }
 
-export async function uploadPhoto(file) {
-  if (!ALLOWED_TYPES.has(file.type)) {
-    throw new Error("Choose a JPG, PNG, or WebP image.");
-  }
-  if (file.size > MAX_PHOTO_SIZE) {
-    throw new Error("Choose an image smaller than 5 MB.");
-  }
-
-  const cloudName = String(import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || "").trim();
-  const uploadPreset = String(import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || "").trim();
-  if (cloudName && uploadPreset) {
-    const form = new FormData();
-    form.append("file", file);
-    form.append("upload_preset", uploadPreset);
-    let response;
-    try {
-      response = await fetch(
-        `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/image/upload`,
-        { method: "POST", body: form },
-      );
-    } catch {
-      throw new Error("Unable to upload photo right now. Please try again.");
-    }
-    let result = null;
-    try {
-      result = await response.json();
-    } catch {
-      result = null;
-    }
-    if (!response.ok || !result?.secure_url) {
-      throw new Error("Unable to upload photo right now. Please try again.");
-    }
-    return result.secure_url;
-  }
-
-  if (import.meta.env.DEV) {
-    console.warn(
-      "Cloudinary is not configured (VITE_CLOUDINARY_CLOUD_NAME / VITE_CLOUDINARY_UPLOAD_PRESET). Using local data URL photo fallback for development.",
-    );
-  }
-
+function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -85,3 +45,68 @@ export async function uploadPhoto(file) {
   });
 }
 
+export async function uploadPhoto(file, options = {}) {
+  if (!file || !ALLOWED_TYPES.has(file.type)) {
+    throw new Error("Choose a JPG, PNG, or WebP image.");
+  }
+  if (file.size > MAX_PHOTO_SIZE) {
+    throw new Error("Choose an image smaller than 5 MB.");
+  }
+
+  const hasViteEnv = typeof import.meta !== "undefined" && Boolean(import.meta.env);
+  const cloudName = String(
+    options.cloudName ?? (hasViteEnv ? import.meta.env.VITE_CLOUDINARY_CLOUD_NAME : "") ?? "",
+  ).trim();
+  const uploadPreset = String(
+    options.uploadPreset ?? (hasViteEnv ? import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET : "") ?? "",
+  ).trim();
+  const isDev = options.isDev ?? (hasViteEnv ? Boolean(import.meta.env.DEV) : false);
+  const fetchImpl = options.fetch ?? fetch;
+  const readDataUrl = options.readAsDataUrl ?? readFileAsDataUrl;
+
+  if (cloudName && uploadPreset) {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("upload_preset", uploadPreset);
+
+    let failureReason = "";
+    try {
+      const response = await fetchImpl(
+        `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/image/upload`,
+        { method: "POST", body: form },
+      );
+      let result = null;
+      try {
+        result = await response.json();
+      } catch {
+        result = null;
+      }
+      if (response.ok && result?.secure_url) {
+        return result.secure_url;
+      }
+      failureReason =
+        result?.error?.message ||
+        (!response.ok ? `HTTP ${response.status}` : "Cloudinary response missing secure_url");
+    } catch (networkError) {
+      failureReason = networkError?.message || "Network request failed";
+    }
+
+    if (isDev) {
+      console.warn(
+        `Cloudinary upload failed (${failureReason}). Using local data URL photo fallback for development.`,
+      );
+      return readDataUrl(file);
+    }
+
+    console.error("Cloudinary upload failed:", failureReason);
+    throw new Error("Unable to upload photo right now. Please try again.");
+  }
+
+  if (isDev) {
+    console.warn(
+      "Cloudinary is not configured (VITE_CLOUDINARY_CLOUD_NAME / VITE_CLOUDINARY_UPLOAD_PRESET). Using local data URL photo fallback for development.",
+    );
+  }
+
+  return readDataUrl(file);
+}
