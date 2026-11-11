@@ -123,7 +123,7 @@ export default defineConfig({
       command: `node "${path.join(__dirname, "tests/e2e/support/e2e-backend.cjs")}"`,
       url: `http://127.0.0.1:${E2E_BACKEND_PORT}/api/status`,
       reuseExistingServer: false,
-      timeout: 30_000,
+      timeout: 60_000,
       env: {
         ...process.env,
         EMAIL_MODE: "stub",
@@ -136,7 +136,7 @@ export default defineConfig({
       command: `node "${path.join(__dirname, "classdex-frontend/node_modules/vite/bin/vite.js")}" --config "${path.join(__dirname, "tests/e2e/support/vite.e2e.config.mjs")}" --port ${E2E_FRONTEND_PORT} --strictPort`,
       url: BASE_URL,
       reuseExistingServer: false,
-      timeout: 30_000,
+      timeout: 60_000,
       env: {
         ...process.env,
         E2E_BACKEND_PORT,

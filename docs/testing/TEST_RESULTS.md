@@ -16,8 +16,8 @@
 | `SCRUM-65` | Recording Modules (`REC-01`..`REC-17`) | 17 | 15 | 2 | 0 | 0 | Complete (`DEF-03..06` logged) |
 | `SCRUM-66` | Student Dashboard & Data Export (`STU-01`..`07`, `EXP-01`..`07`) | 14 | 11 | 3 | 0 | 0 | Complete (`DEF-07..09` logged) |
 | `SCRUM-67` | Password Recovery & Email Flows (`PWD-01`..`11`) | 11 | 9 | 1 | 1 | 0 | Complete (`DEF-10` logged; `PWD-11` manual) |
-| `SCRUM-68` | Cross-Browser & Device Compatibility (`COMPAT-01`..`10`) | 10 | 0 | 0 | 3 | 7 | Pending |
-| **Total** | | **89** | **72** | **6** | **4** | **7** | |
+| `SCRUM-68` | Cross-Browser & Device Compatibility (`COMPAT-01`..`10`) | 10 | 2 | 5 | 3 | 0 | Complete (`DEF-11..14` logged; `COMPAT-08..10` manual) |
+| **Total** | | **89** | **74** | **11** | **4** | **0** | |
 
 ---
 
@@ -61,3 +61,14 @@
 - **Manual Item (`PWD-11`):** Remains `MANUAL – NOT RUN` for user live Resend inbox/spam verification (instructions in `docs/testing/MANUAL_DEVICE_CHECKLIST.md`).
 - **Defect Discovered:**
   - `DEF-10` (Major): `POST /api/auth/change-password` (`index.js:1279`) intermittently fails with `P2028: Unable to start a transaction in the given time` due to Prisma v7 default interactive transaction `maxWait` (`2000ms`) / `timeout` (`5000ms`) in `classdex-backend/db.js:25` over remote Neon.
+
+### SCRUM-68 — Test Cross-Browser and Device Compatibility (`2026-11-11`)
+- **Playwright Multi-Browser Matrix (`tests/e2e/compat.spec.mjs` across 10 configured browser/viewport projects):**
+  - **Chromium & Edge (`task-2381`):** `7/8` passed (`chromium-desktop` 2/2 `Pass`, `chromium-tablet` 2/2 `Pass`, `edge-desktop` 2/2 incl. `375x812` mobile smoke `Pass`, `chromium-mobile` Faculty `Pass`; `chromium-mobile` Student failed only on `DEF-11` empty accessible name on `.main-nav` link below `680px`).
+  - **Firefox & WebKit (`task-2392`):** `4/12` passed (`firefox-desktop`, `firefox-tablet`, `webkit-desktop`, `webkit-tablet` Student tests incl. 3D index card flip passed with 0 horizontal overflow), while failures cleanly isolated three defects:
+    - `DEF-11` (Minor): `.main-nav .nav-link` accessible name becomes `""` below `680px` (`firefox-mobile`, `webkit-mobile`).
+    - `DEF-13` (Minor): Firefox flags `ClassForm.jsx:363` `<input pattern="[A-Za-z0-9-]{3,20}">` as invalid ES2024 `/v` regexp (`firefox-desktop`, `firefox-tablet`, `firefox-mobile`).
+    - `DEF-14` (Major): WebKit React `StrictMode` triggers concurrent `GET /api/classes/:id/deck` calls creating a race on `ClassSession_classId_date_key` (`500` `P2002` in `webkit-desktop`, `webkit-tablet`, `webkit-mobile`).
+  - Previously observed in Chromium desktop before gating in-flight initial fetch in test (`DEF-12` Minor): `StudentListManager.jsx` late initial `roster`/`drop-list` fetch overwrites locally added unsaved rows.
+- **3D Card Rendering Note:** WebKit Student and Faculty Class Deck 3D index card flip & perspective rendered cleanly once hydrated with zero layout defects (no visual CSS changes needed).
+- **Manual Device Matrix (`COMPAT-08..10`):** Remains `MANUAL – NOT RUN` with step-by-step instructions written in `docs/testing/MANUAL_DEVICE_CHECKLIST.md`.

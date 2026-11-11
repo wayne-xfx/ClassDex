@@ -1,5 +1,4 @@
 const http = require("node:http");
-const path = require("node:path");
 const { loadBackendTestEnv } = require("../../scripts/load-test-env.cjs");
 
 const { testHost } = loadBackendTestEnv();
@@ -15,6 +14,7 @@ process.env.NODE_ENV = "test";
 process.env.RECAPTCHA_SECRET_KEY =
   process.env.E2E_RECAPTCHA_SECRET_KEY || "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe";
 
+const { prisma } = require("../../../classdex-backend/db");
 const {
   app,
   resetRateLimitersForTests,
@@ -46,8 +46,25 @@ const server = http.createServer((req, res) => {
   return app(req, res);
 });
 
-server.listen(E2E_PORT, "127.0.0.1", () => {
-  console.log(
-    `[ClassDex E2E Backend] Listening on http://127.0.0.1:${E2E_PORT} (DB host: ${testHost}, EMAIL_MODE=${process.env.EMAIL_MODE})`,
-  );
+async function warmDatabase() {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await prisma.$queryRawUnsafe("SELECT 1");
+      return;
+    } catch (error) {
+      if (attempt === 3) {
+        console.warn("[ClassDex E2E Backend] DB warmup warning:", error?.message || error);
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+    }
+  }
+}
+
+warmDatabase().finally(() => {
+  server.listen(E2E_PORT, "127.0.0.1", () => {
+    console.log(
+      `[ClassDex E2E Backend] Listening on http://127.0.0.1:${E2E_PORT} (DB host: ${testHost}, EMAIL_MODE=${process.env.EMAIL_MODE})`,
+    );
+  });
 });
