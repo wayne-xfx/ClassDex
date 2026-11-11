@@ -789,19 +789,22 @@ app.post("/api/auth/login", async (req, res) => {
     });
     if (!user) {
       clearTimeout(timeout);
+      if (res.headersSent) return;
       return res.status(401).json({ message: "Invalid email or password." });
     }
 
     const matches = await bcrypt.compare(password, user.password);
     if (!matches) {
       clearTimeout(timeout);
+      if (res.headersSent) return;
       return res.status(401).json({ message: "Invalid email or password." });
     }
 
+    clearTimeout(timeout);
+    if (res.headersSent) return;
     req.session.userId = user.id;
     req.session.role = user.role;
     req.session.issuedAt = Math.max(Date.now(), (user.passwordChangedAt?.getTime() ?? 0) + 1);
-    clearTimeout(timeout);
     return res.json({ user: publicUser(user) });
   } catch (error) {
     clearTimeout(timeout);
@@ -1285,8 +1288,8 @@ app.post(
       );
       const passwordChangedAt = new Date(changedAtMs);
 
-      const updatedUser = await prisma.$transaction(async (tx) => {
-        const saved = await tx.user.update({
+      const [updatedUser] = await prisma.$transaction([
+        prisma.user.update({
           where: { id: user.id },
           data: {
             password: hashedPassword,
@@ -1296,15 +1299,12 @@ app.post(
             facultyProfile: { select: { photo: true, name: true, department: true, email: true } },
             studentProfile: { select: { photo: true, name: true, studentId: true } },
           },
-        });
-
-        await tx.passwordResetToken.updateMany({
+        }),
+        prisma.passwordResetToken.updateMany({
           where: { userId: user.id, usedAt: null },
           data: { usedAt: now },
-        });
-
-        return saved;
-      });
+        }),
+      ]);
 
       await changePasswordWrongCurrentStore.resetKey(`change-pw-user:${user.id}`);
 
