@@ -64,10 +64,18 @@ function attachRuntimeErrorCollector(page) {
     if (msg.type() === "error") {
       const text = msg.text();
       const locUrl = msg.location()?.url || "";
+      // Playwright Firefox's Juggler network shim attributes intercepted third-party
+      // reCAPTCHA frame Report-Only CSP logs to chrome://juggler/content/NetworkObserver.js
+      // rather than google.com (ClassDex sets no CSP / frame-ancestors headers).
+      const isFirefoxJugglerThirdPartyCspNoise =
+        (locUrl.startsWith("chrome://juggler/") ||
+          /chrome:\/\/juggler\/content\/NetworkObserver\.js/i.test(text)) &&
+        /Content-Security-Policy:\s*\(Report-Only policy\).*frame-ancestors/i.test(text);
       const isThirdPartyCaptchaNoise =
         locUrl.includes("google.com") ||
         locUrl.includes("gstatic.com") ||
-        /requestStorageAccess/i.test(text);
+        /requestStorageAccess/i.test(text) ||
+        isFirefoxJugglerThirdPartyCspNoise;
       if (
         !isThirdPartyCaptchaNoise &&
         !/favicon\.ico/i.test(text) &&
@@ -373,6 +381,7 @@ test.describe("SCRUM-68 Cross-Browser & Responsive Compatibility (COMPAT-01..07)
       ).toBeVisible({ timeout: 25_000 });
       await assertNoHorizontalOverflow(page, `${project} join captcha modal`);
       await page.getByRole("button", { name: "Close security check" }).click();
+      await expect(joinCaptcha).toHaveCount(0);
 
       // 4. Student inline class record & 3D flip
       await page.goto(`/student/classes/${seededClass.id}`);
