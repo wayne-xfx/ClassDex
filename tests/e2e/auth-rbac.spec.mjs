@@ -179,7 +179,7 @@ test.describe("SCRUM-63 Auth & RBAC E2E (AUTH-08, AUTH-09, AUTH-13, AUTH-14)", (
 
     await page.locator("button.user-menu-trigger").click();
     await page.getByRole("menuitem", { name: /Log out/i }).click();
-    await expect(page).toHaveURL(/\/(|login)$/);
+    await expect(page).toHaveURL(/\/$/);
 
     const meRes = await page.request.get("/api/auth/me");
     expect(meRes.status()).toBe(401);

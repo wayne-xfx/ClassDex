@@ -173,8 +173,7 @@ export default function AppShell({
 
   async function handleLogout() {
     try {
-      await logout();
-      navigate("/", { replace: true });
+      await logout(() => navigate("/", { replace: true }));
     } catch (logoutError) {
       setError(logoutError.message);
     }

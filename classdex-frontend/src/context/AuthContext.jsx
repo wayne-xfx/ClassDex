@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, startTransition, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 
 const AuthContext = createContext(null);
@@ -56,9 +56,12 @@ export function AuthProvider({ children }) {
         setUser(data.user);
         return data.user;
       },
-      async logout() {
+      async logout(beforeClear) {
         await api.logout();
-        setUser(null);
+        beforeClear?.();
+        startTransition(() => {
+          setUser(null);
+        });
       },
       async refreshUser() {
         try {
