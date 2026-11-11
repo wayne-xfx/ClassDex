@@ -15,9 +15,9 @@
 | `SCRUM-64` | Class Management & Join Workflow (`CLS-01`..`CLS-21`) | 21 | 21 | 0 | 0 | 0 | Complete (`DEF-01` observed) |
 | `SCRUM-65` | Recording Modules (`REC-01`..`REC-17`) | 17 | 15 | 2 | 0 | 0 | Complete (`DEF-03..06` logged) |
 | `SCRUM-66` | Student Dashboard & Data Export (`STU-01`..`07`, `EXP-01`..`07`) | 14 | 11 | 3 | 0 | 0 | Complete (`DEF-07..09` logged) |
-| `SCRUM-67` | Password Recovery & Email Flows (`PWD-01`..`11`) | 11 | 0 | 0 | 1 | 10 | Pending |
+| `SCRUM-67` | Password Recovery & Email Flows (`PWD-01`..`11`) | 11 | 9 | 1 | 1 | 0 | Complete (`DEF-10` logged; `PWD-11` manual) |
 | `SCRUM-68` | Cross-Browser & Device Compatibility (`COMPAT-01`..`10`) | 10 | 0 | 0 | 3 | 7 | Pending |
-| **Total** | | **89** | **63** | **5** | **4** | **17** | |
+| **Total** | | **89** | **72** | **6** | **4** | **7** | |
 
 ---
 
@@ -54,3 +54,10 @@
   - `DEF-07` (Minor): `GET /api/classes/:id/export-summary` (`index.js:3353`) counts `classRoster` rows (`3` incl. unjoined roster entries) instead of `APPROVED` enrollments (`2`), disagreeing with `ExportModule.jsx` (`"approved students"`) and `export.js`.
   - `DEF-08` (Major): Opening `/deck` creates an unstarted `ClassSession` (`startedAt: null`) that inflates `exportCounts.sessions` and `/export-summary.sessions` and injects an empty phantom today's-date column into `/export/excel` and `/export/csv`.
   - `DEF-09` (Minor): `GET /api/student/classes/:classId/records` (`index.js:5322`) omits `address: true` from `studentProfile` select, so updated profile `Address` does not appear on the student's inline class card.
+
+### SCRUM-67 — Test Password Recovery and Email Flows (`2026-11-11`)
+- **API Suite (`classdex-backend/test/scrum67-password-emails.test.js`):** `9/9` subtests passed (`task-1884`) covering `PWD-01..10` with `EMAIL_MODE=stub`, `getStubEmails()`/`clearStubEmails()`, `setMailTransportForTests()`, `setResendClientForTests()`, and SHA-256 token verification.
+- **E2E Suite (`tests/e2e/password-email.spec.mjs` via Playwright Chromium Desktop):** `3/4` passed (`task-1892`: `PWD-01..03`, `PWD-04..07`, `PWD-09..10` with test reCAPTCHA and `/__e2e/emails`), `1/4` failed cleanly on `PWD-08` E2E (`500` `PrismaClientKnownRequestError P2028: Unable to start a transaction in the given time` at `index.js:1279` over remote Neon -> logged as `DEF-10` Major).
+- **Manual Item (`PWD-11`):** Remains `MANUAL – NOT RUN` for user live Resend inbox/spam verification (instructions in `docs/testing/MANUAL_DEVICE_CHECKLIST.md`).
+- **Defect Discovered:**
+  - `DEF-10` (Major): `POST /api/auth/change-password` (`index.js:1279`) intermittently fails with `P2028: Unable to start a transaction in the given time` due to Prisma v7 default interactive transaction `maxWait` (`2000ms`) / `timeout` (`5000ms`) in `classdex-backend/db.js:25` over remote Neon.
