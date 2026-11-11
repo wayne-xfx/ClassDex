@@ -140,7 +140,7 @@ export default function QuizModule({
             ...current,
             scores: (current.scores || []).map((item) => {
               const student = students.find((candidate) => candidate.id === item.studentId);
-              return student && ["PRESENT", "LATE"].includes(student.attendanceStatus)
+              return student && ["PRESENT", "LATE"].includes(student.status || student.attendanceStatus)
                 ? { ...item, isAbsent: false }
                 : item;
             }),
@@ -198,7 +198,9 @@ export default function QuizModule({
 
   function updateScore(studentId, value) {
     if (readOnly) return;
-    const absent = selected?.scores?.some((item) => item.studentId === studentId && item.isAbsent);
+    const liveStudent = students.find((candidate) => candidate.id === studentId);
+    const liveStatus = liveStudent?.status || liveStudent?.attendanceStatus;
+    const absent = liveStatus === "ABSENT" || (!["PRESENT", "LATE"].includes(liveStatus) && selected?.scores?.some((item) => item.studentId === studentId && item.isAbsent));
     if (absent) return;
     if (value === "") {
       setScores((current) => ({ ...current, [studentId]: "" }));
@@ -455,7 +457,8 @@ export default function QuizModule({
       </div>
       <div className="quiz-card-grid">
         {students.map((student) => {
-          const absent = absentIds.has(student.id) || student.attendanceStatus === "ABSENT";
+          const liveStatus = student.status || student.attendanceStatus;
+          const absent = liveStatus === "ABSENT" || (!["PRESENT", "LATE"].includes(liveStatus) && absentIds.has(student.id));
           const displayName = formatStudentDisplayName(student.name, student) || student.name;
           const programSection = formatProgramSection(student.program, student.section);
           return (
