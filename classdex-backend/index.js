@@ -2960,7 +2960,22 @@ app.put("/api/quizzes/:sessionId/scores", requireAuth, requireRole("FACULTY"), a
       }
     }
 
-    const studentIds = rawItems.map((item) => item.studentId.trim());
+    const studentIds = [...new Set(rawItems.map((item) => item.studentId.trim()))];
+
+    if (studentIds.length > 0) {
+      const approvedEnrollments = await prisma.classEnrollment.findMany({
+        where: {
+          classId: session.classId,
+          studentProfileId: { in: studentIds },
+          status: "APPROVED",
+        },
+        select: { studentProfileId: true },
+      });
+      const approvedSet = new Set(approvedEnrollments.map((e) => e.studentProfileId));
+      if (studentIds.some((id) => !approvedSet.has(id))) {
+        return res.status(400).json({ message: "All students must have an approved enrollment in this class." });
+      }
+    }
 
     const attendanceSession = await prisma.classSession.findUnique({
       where: {

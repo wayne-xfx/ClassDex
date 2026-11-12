@@ -306,7 +306,7 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
     assert.equal(m5.status, 404);
   });
 
-  await t.test("AUTHZ-08b: PUT /api/quizzes/:sessionId/scores must reject unenrolled studentId", { todo: "SEC-01" }, async () => {
+  await t.test("AUTHZ-08b: PUT /api/quizzes/:sessionId/scores must reject unenrolled studentId", async () => {
     const res = await apiRequest(baseUrl, "PUT", `/api/quizzes/${fx.a1Data.quiz.id}/scores`, {
       cookie: facACookie,
       body: { scores: [{ studentId: fx.stuUnrelated.studentProfile.id, score: 15 }] },
@@ -323,6 +323,13 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
       await prisma.quizScore.delete({ where: { id: leakedRow.id } });
     }
     assert.ok([400, 404].includes(res.status) && !leakedRow, `Unenrolled student scored in bulk quiz: status=${res.status}`);
+    for (const unapprovedId of [fx.stuPendingA.studentProfile.id, fx.stuDeclinedA.studentProfile.id, fx.stuDroppedA.studentProfile.id]) {
+      const rUnapp = await apiRequest(baseUrl, "PUT", `/api/quizzes/${fx.a1Data.quiz.id}/scores`, {
+        cookie: facACookie,
+        body: { scores: [{ studentId: unapprovedId, score: 12 }] },
+      });
+      assert.ok([400, 404].includes(rUnapp.status), `Unapproved enrollment ${unapprovedId} scored in bulk quiz: ${rUnapp.status}`);
+    }
   });
 
   await t.test("AUTHZ-08c1: activity single score endpoint must require APPROVED enrollment (reject PENDING)", { todo: "SEC-02" }, async () => {
