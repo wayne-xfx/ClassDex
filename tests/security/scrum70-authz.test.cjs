@@ -407,7 +407,7 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
     }
   });
 
-  await t.test("AUTHZ-09: GET /api/classes/check-code must scope excludeId to owned classes only", { todo: "SEC-08" }, async () => {
+  await t.test("AUTHZ-09: GET /api/classes/check-code must scope excludeId to owned classes only", async () => {
     const res = await apiRequest(
       baseUrl,
       "GET",

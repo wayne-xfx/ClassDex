@@ -2128,7 +2128,7 @@ app.get(
       const existing = await prisma.class.findFirst({
         where: {
           classCode,
-          ...(excludeId ? { id: { not: excludeId } } : {}),
+          ...(excludeId ? { NOT: { id: excludeId, facultyId: req.session.userId } } : {}),
         },
         select: { id: true },
       });
