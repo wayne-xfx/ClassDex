@@ -49,6 +49,11 @@ export default function StudentListManager({
   const [removing, setRemoving] = useState(false);
   const [restoringIds, setRestoringIds] = useState([]);
 
+  const mountedRef = useRef(true);
+  const rosterReqIdRef = useRef(0);
+  const dropReqIdRef = useRef(0);
+  const localDirtyMutationRef = useRef(false);
+
   // Drop list sorting state
   const [dropSortField, setDropSortField] = useState("droppedAt"); // "name" | "studentId" | "droppedAt" | "recordCount"
   const [dropSortOrder, setDropSortOrder] = useState("desc"); // "asc" | "desc"
@@ -123,9 +128,11 @@ export default function StudentListManager({
   }, [isDirty]);
 
   const loadRoster = useCallback(() => {
+    const reqId = ++rosterReqIdRef.current;
     return api
       .classRoster(classId)
       .then(({ roster }) => {
+        if (!mountedRef.current || reqId !== rosterReqIdRef.current) return;
         const mapped = roster.map((entry) => ({
           id: entry.id,
           name: entry.studentName,
@@ -135,37 +142,64 @@ export default function StudentListManager({
         initialRosterRef.current = JSON.stringify(mapped);
         tabCache?.set(`roster:${classId}`, mapped);
         setSavedRoster(mapped);
-        setRows(mapped);
+        setRows((currentRows) => {
+          if (!localDirtyMutationRef.current) return mapped;
+          const currentById = new Map(
+            currentRows.filter((row) => row.id).map((row) => [row.id, row]),
+          );
+          const unsavedRows = currentRows.filter((row) => !row.id);
+          const mergedSaved = mapped.map((entry) => {
+            const local = currentById.get(entry.id);
+            return local
+              ? { ...entry, name: local.name, studentId: local.studentId }
+              : entry;
+          });
+          return [...mergedSaved, ...unsavedRows];
+        });
         onCountChange?.(roster.length);
       })
       .catch((error) => {
+        if (!mountedRef.current || reqId !== rosterReqIdRef.current) return;
         setMessage("");
         setErrorMessage(error.message);
       })
       .finally(() => {
-        setLoading(false);
+        if (mountedRef.current && reqId === rosterReqIdRef.current) {
+          setLoading(false);
+        }
       });
   }, [classId, onCountChange, tabCache]);
 
   const loadDropList = useCallback(() => {
+    const reqId = ++dropReqIdRef.current;
     setDropLoading(true);
     return api
       .dropList(classId)
       .then(({ dropList: list }) => {
+        if (!mountedRef.current || reqId !== dropReqIdRef.current) return;
         setDropList(list || []);
       })
       .catch((error) => {
+        if (!mountedRef.current || reqId !== dropReqIdRef.current) return;
         setMessage("");
         setErrorMessage(error.message);
       })
       .finally(() => {
-        setDropLoading(false);
+        if (mountedRef.current && reqId === dropReqIdRef.current) {
+          setDropLoading(false);
+        }
       });
   }, [classId]);
 
   useEffect(() => {
+    mountedRef.current = true;
     loadRoster();
     loadDropList();
+    return () => {
+      mountedRef.current = false;
+      rosterReqIdRef.current += 1;
+      dropReqIdRef.current += 1;
+    };
   }, [loadRoster, loadDropList]);
 
   // Consume focusStudent query parameter
@@ -209,6 +243,7 @@ export default function StudentListManager({
     setEntryError({ field: null, message: "" });
     setMessage("");
     setErrorMessage("");
+    localDirtyMutationRef.current = true;
     setRows((current) => [...current, validation.entry]);
     setName("");
     setStudentId("");
@@ -216,6 +251,7 @@ export default function StudentListManager({
 
   function updateRow(index, field, value) {
     setMessage("");
+    localDirtyMutationRef.current = true;
     setRows((current) =>
       current.map((row, rowIndex) => (rowIndex === index ? { ...row, [field]: value } : row)),
     );
@@ -226,7 +262,11 @@ export default function StudentListManager({
       current.map((row, rowIndex) => {
         if (rowIndex !== index) return row;
         const normalized = normalizeWhitespace(row.name);
-        return normalized === row.name ? row : { ...row, name: normalized };
+        if (normalized !== row.name) {
+          localDirtyMutationRef.current = true;
+          return { ...row, name: normalized };
+        }
+        return row;
       }),
     );
   }
@@ -245,6 +285,7 @@ export default function StudentListManager({
   function importPasted() {
     const parsed = parseLines(pasteValue);
     if (!parsed.length) return;
+    localDirtyMutationRef.current = true;
     setRows((current) => [...current, ...parsed]);
     setPasteValue("");
     setErrorMessage("");
@@ -260,7 +301,9 @@ export default function StudentListManager({
       try {
         const fileBase64 = String(reader.result).split(",")[1];
         const res = await api.importRosterFile(classId, { fileName: file.name, fileBase64 });
+        if (!mountedRef.current) return;
         if (res.rows?.length) {
+          localDirtyMutationRef.current = true;
           setRows((current) => [
             ...current,
             ...res.rows.map((r) => ({ name: r.studentName, studentId: r.studentId, photo: "" })),
@@ -302,6 +345,7 @@ export default function StudentListManager({
   async function saveStudentList() {
     setSaving(true);
     setErrorMessage("");
+    rosterReqIdRef.current += 1;
     try {
       const { roster, autoApprovedCount = 0 } = await api.saveClassRoster(
         classId,
@@ -316,6 +360,7 @@ export default function StudentListManager({
         studentId: entry.studentId,
         photo: entry.photo || entry.photoUrl || "",
       }));
+      localDirtyMutationRef.current = false;
       initialRosterRef.current = JSON.stringify(mapped);
       tabCache?.set(`roster:${classId}`, mapped);
       setSavedRoster(mapped);
@@ -361,6 +406,7 @@ export default function StudentListManager({
   async function promptRemoveRow(index) {
     const row = rows[index];
     if (!row.id) {
+      localDirtyMutationRef.current = true;
       setRows((current) => current.filter((_, rowIndex) => rowIndex !== index));
       return;
     }
@@ -373,6 +419,7 @@ export default function StudentListManager({
     setRemoving(true);
     setErrorMessage("");
     try {
+      rosterReqIdRef.current += 1;
       const outcome = await api.deleteClassRosterEntry(classId, row.id);
       tabCache?.invalidate();
       const nextRows = rows.filter((_, rowIndex) => rowIndex !== index);

@@ -56,6 +56,15 @@ const {
 const FORGOT_PASSWORD_GENERIC_MESSAGE =
   "If an account exists for that email, we've sent a reset link.";
 
+const ACTIVE_SESSION_FILTER = {
+  OR: [
+    { startedAt: { not: null } },
+    { attendance: { some: {} } },
+    { recitations: { some: {} } },
+    { activities: { some: {} } },
+  ],
+};
+
 const { studentPhotoUrl } = require("./src/utils/studentPhotoUrl");
 const { manilaDate } = require("./src/utils/dates");
 const path = require("node:path");
@@ -780,19 +789,22 @@ app.post("/api/auth/login", async (req, res) => {
     });
     if (!user) {
       clearTimeout(timeout);
+      if (res.headersSent) return;
       return res.status(401).json({ message: "Invalid email or password." });
     }
 
     const matches = await bcrypt.compare(password, user.password);
     if (!matches) {
       clearTimeout(timeout);
+      if (res.headersSent) return;
       return res.status(401).json({ message: "Invalid email or password." });
     }
 
+    clearTimeout(timeout);
+    if (res.headersSent) return;
     req.session.userId = user.id;
     req.session.role = user.role;
     req.session.issuedAt = Math.max(Date.now(), (user.passwordChangedAt?.getTime() ?? 0) + 1);
-    clearTimeout(timeout);
     return res.json({ user: publicUser(user) });
   } catch (error) {
     clearTimeout(timeout);
@@ -1276,8 +1288,8 @@ app.post(
       );
       const passwordChangedAt = new Date(changedAtMs);
 
-      const updatedUser = await prisma.$transaction(async (tx) => {
-        const saved = await tx.user.update({
+      const [updatedUser] = await prisma.$transaction([
+        prisma.user.update({
           where: { id: user.id },
           data: {
             password: hashedPassword,
@@ -1287,15 +1299,12 @@ app.post(
             facultyProfile: { select: { photo: true, name: true, department: true, email: true } },
             studentProfile: { select: { photo: true, name: true, studentId: true } },
           },
-        });
-
-        await tx.passwordResetToken.updateMany({
+        }),
+        prisma.passwordResetToken.updateMany({
           where: { userId: user.id, usedAt: null },
           data: { usedAt: now },
-        });
-
-        return saved;
-      });
+        }),
+      ]);
 
       await changePasswordWrongCurrentStore.resetKey(`change-pw-user:${user.id}`);
 
@@ -1515,48 +1524,56 @@ app.put(
             select: { classId: true, status: true },
           });
 
-          for (const enrollment of enrollments) {
-            const oldRosterRow = await tx.classRoster.findUnique({
+          if (enrollments.length) {
+            const enrollmentByClass = new Map(enrollments.map((enrollment) => [enrollment.classId, enrollment]));
+            const rosterRows = await tx.classRoster.findMany({
               where: {
-                classId_studentId: {
-                  classId: enrollment.classId,
-                  studentId: existingProfile.studentId,
-                },
+                classId: { in: enrollments.map((enrollment) => enrollment.classId) },
+                studentId: { in: [existingProfile.studentId, studentId] },
               },
+              select: { id: true, classId: true, studentId: true, droppedAt: true },
             });
 
-            if (!oldRosterRow) continue;
-
-            const existingNewRosterRow = await tx.classRoster.findUnique({
-              where: {
-                classId_studentId: {
-                  classId: enrollment.classId,
-                  studentId,
-                },
-              },
-            });
-
-            if (existingNewRosterRow) {
-              if (enrollment.status === "APPROVED" && existingNewRosterRow.droppedAt !== null) {
-                await tx.classRoster.update({
-                  where: { id: existingNewRosterRow.id },
-                  data: { droppedAt: null },
-                });
-              }
-              await tx.classRoster.delete({
-                where: { id: oldRosterRow.id },
-              });
-            } else {
-              await tx.classRoster.update({
-                where: { id: oldRosterRow.id },
-                data: { studentId },
-              });
+            const oldRowsByClass = new Map();
+            const newRowsByClass = new Map();
+            for (const row of rosterRows) {
+              if (row.studentId === existingProfile.studentId) oldRowsByClass.set(row.classId, row);
+              else if (row.studentId === studentId) newRowsByClass.set(row.classId, row);
             }
+
+            const reviveNewIds = [];
+            const deleteOldIds = [];
+            const renameOldIds = [];
+
+            for (const [classId, oldRow] of oldRowsByClass) {
+              const existingNewRosterRow = newRowsByClass.get(classId);
+              if (existingNewRosterRow) {
+                const enrollment = enrollmentByClass.get(classId);
+                if (enrollment?.status === "APPROVED" && existingNewRosterRow.droppedAt !== null) {
+                  reviveNewIds.push(existingNewRosterRow.id);
+                }
+                deleteOldIds.push(oldRow.id);
+              } else {
+                renameOldIds.push(oldRow.id);
+              }
+            }
+
+            const syncOps = [];
+            if (reviveNewIds.length) {
+              syncOps.push(tx.classRoster.updateMany({ where: { id: { in: reviveNewIds } }, data: { droppedAt: null } }));
+            }
+            if (deleteOldIds.length) {
+              syncOps.push(tx.classRoster.deleteMany({ where: { id: { in: deleteOldIds } } }));
+            }
+            if (renameOldIds.length) {
+              syncOps.push(tx.classRoster.updateMany({ where: { id: { in: renameOldIds } }, data: { studentId } }));
+            }
+            if (syncOps.length) await Promise.all(syncOps);
           }
         }
 
         return savedProfile;
-      });
+      }, { maxWait: 10_000, timeout: 15_000 });
 
       return res.json({ profile });
     } catch (error) {
@@ -1604,12 +1621,7 @@ app.get(
         ? await prisma.classSession.findMany({
             where: {
               classId: { in: classIds },
-              OR: [
-                { startedAt: { not: null } },
-                { attendance: { some: {} } },
-                { recitations: { some: {} } },
-                { activities: { some: {} } },
-              ],
+              ...ACTIVE_SESSION_FILTER,
             },
             select: { classId: true, date: true },
             orderBy: { date: "desc" },
@@ -2628,7 +2640,7 @@ app.post(
         ...unreadWarnings.map((warning) =>
           prisma.classEnrollment.update({
             where: { id: warning.enrollmentId },
-            data: { warningReadAbsenceCount: warning.absenceCount },
+            data: { warningReadAbsenceCount: warning.absentCount },
           }),
         ),
       ]);
@@ -2841,13 +2853,14 @@ app.patch("/api/classes/:id/pending/:enrollmentId", requireAuth, requireRole("FA
 app.get("/api/classes/:id/quizzes", requireAuth, requireRole("FACULTY"), async (req, res) => {
   try {
     if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
-    const sessions = await prisma.quizSession.findMany({ where: { classId: req.params.id }, include: { scores: true }, orderBy: { date: "desc" } });
+    const sessions = await prisma.quizSession.findMany({ where: { classId: req.params.id }, include: { scores: true }, orderBy: [{ date: "desc" }, { createdAt: "desc" }] });
     if (!sessions.length) return res.json({ sessions: [] });
 
     const dateMap = new Map();
     for (const s of sessions) {
-      const dStr = new Date(s.date).toISOString().slice(0, 10);
-      if (!dateMap.has(dStr)) dateMap.set(dStr, new Date(dStr));
+      const normalizedDate = manilaDate(new Date(s.date));
+      const dStr = normalizedDate.toISOString().slice(0, 10);
+      if (!dateMap.has(dStr)) dateMap.set(dStr, normalizedDate);
     }
     const distinctDates = [...dateMap.values()];
 
@@ -2864,7 +2877,7 @@ app.get("/api/classes/:id/quizzes", requireAuth, requireRole("FACULTY"), async (
 
     const absentIdsByDate = new Map();
     for (const attSession of attendanceSessions) {
-      const dStr = attSession.date.toISOString().slice(0, 10);
+      const dStr = manilaDate(new Date(attSession.date)).toISOString().slice(0, 10);
       const absentIds = new Set(
         attSession.attendance
           .filter((record) => record.status === "ABSENT")
@@ -2874,7 +2887,7 @@ app.get("/api/classes/:id/quizzes", requireAuth, requireRole("FACULTY"), async (
     }
 
     const enriched = sessions.map((session) => {
-      const dStr = new Date(session.date).toISOString().slice(0, 10);
+      const dStr = manilaDate(new Date(session.date)).toISOString().slice(0, 10);
       const absentIds = absentIdsByDate.get(dStr) || new Set();
       return {
         ...session,
@@ -2895,7 +2908,7 @@ app.post("/api/classes/:id/quizzes", requireAuth, requireRole("FACULTY"), async 
   if (!title || !Number.isInteger(totalItems) || totalItems < 1) return res.status(400).json({ message: "Quiz title and a positive whole-number total are required." });
   try {
     if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
-    const session = await prisma.quizSession.create({ data: { classId: req.params.id, title, totalItems } });
+    const session = await prisma.quizSession.create({ data: { classId: req.params.id, title, totalItems, date: manilaDate() }, include: { scores: true } });
     return res.status(201).json({ session });
   } catch (error) { return res.status(500).json({ message: "Unable to create quiz session." }); }
 });
@@ -2953,7 +2966,7 @@ app.put("/api/quizzes/:sessionId/scores", requireAuth, requireRole("FACULTY"), a
       where: {
         classId_date: {
           classId: session.classId,
-          date: new Date(new Date(session.date).toISOString().slice(0, 10)),
+          date: manilaDate(new Date(session.date)),
         },
       },
       select: {
@@ -3011,7 +3024,7 @@ app.put("/api/quizzes/:sessionId/scores/:studentId", requireAuth, requireRole("F
     if (score > session.totalItems) return res.status(400).json({ message: `Score cannot be higher than ${session.totalItems}.` });
     const enrollment = await prisma.classEnrollment.findFirst({ where: { classId: session.classId, studentProfileId: req.params.studentId, status: "APPROVED" } });
     if (!enrollment) return res.status(404).json({ message: "Student is not approved for this class." });
-    const attendanceSession = await prisma.classSession.findUnique({ where: { classId_date: { classId: session.classId, date: new Date(new Date(session.date).toISOString().slice(0, 10)) } }, select: { attendance: { where: { studentId: req.params.studentId }, select: { status: true } } } });
+    const attendanceSession = await prisma.classSession.findUnique({ where: { classId_date: { classId: session.classId, date: manilaDate(new Date(session.date)) } }, select: { attendance: { where: { studentId: req.params.studentId }, select: { status: true } } } });
     if (attendanceSession?.attendance[0]?.status === "ABSENT") {
       await prisma.quizScore.upsert({ where: { sessionId_studentId: { sessionId: session.id, studentId: req.params.studentId } }, create: { sessionId: session.id, studentId: req.params.studentId, score: null, isAbsent: true }, update: { score: null, isAbsent: true } });
       return res.status(409).json({ message: "This student is absent and cannot be scored." });
@@ -3160,73 +3173,72 @@ app.get(
         return res.status(404).json({ message: "Class not found." });
       }
 
+      const today = manilaDate();
+      const deckSessionInclude = {
+        attendance: {
+          select: { studentId: true, status: true, markedAt: true },
+          orderBy: { markedAt: "asc" },
+        },
+        recitations: {
+          include: {
+            studentProfile: {
+              select: {
+                id: true,
+                name: true,
+                updatedAt: true,
+                studentId: true,
+                program: true,
+                section: true,
+                firstName: true,
+                middleName: true,
+                lastName: true,
+                suffix: true,
+              },
+            },
+          },
+          orderBy: { calledAt: "desc" },
+        },
+      };
+
       let session = await prisma.classSession.findUnique({
         where: {
           classId_date: {
             classId: classRecord.id,
-            date: manilaDate(),
+            date: today,
           },
         },
-        include: {
-          attendance: {
-            select: { studentId: true, status: true, markedAt: true },
-            orderBy: { markedAt: "asc" },
-          },
-          recitations: {
-            include: {
-              studentProfile: {
-                select: {
-                  id: true,
-                  name: true,
-                  updatedAt: true,
-                  studentId: true,
-                  program: true,
-                  section: true,
-                  firstName: true,
-                  middleName: true,
-                  lastName: true,
-                  suffix: true,
-                },
-              },
-            },
-            orderBy: { calledAt: "desc" },
-          },
-        },
+        include: deckSessionInclude,
       });
 
       if (!session && !classRecord.archivedAt) {
-        session = await prisma.classSession.create({
-          data: {
-            classId: classRecord.id,
-            date: manilaDate(),
-            startedAt: null,
-          },
-          include: {
-            attendance: {
-              select: { studentId: true, status: true, markedAt: true },
-              orderBy: { markedAt: "asc" },
-            },
-            recitations: {
-              include: {
-                studentProfile: {
-                  select: {
-                    id: true,
-                    name: true,
-                    updatedAt: true,
-                    studentId: true,
-                    program: true,
-                    section: true,
-                    firstName: true,
-                    middleName: true,
-                    lastName: true,
-                    suffix: true,
-                  },
-                },
+        try {
+          session = await prisma.classSession.upsert({
+            where: {
+              classId_date: {
+                classId: classRecord.id,
+                date: today,
               },
-              orderBy: { calledAt: "desc" },
             },
-          },
-        });
+            create: {
+              classId: classRecord.id,
+              date: today,
+              startedAt: null,
+            },
+            update: {},
+            include: deckSessionInclude,
+          });
+        } catch (upsertError) {
+          if (upsertError?.code !== "P2002") throw upsertError;
+          session = await prisma.classSession.findUnique({
+            where: {
+              classId_date: {
+                classId: classRecord.id,
+                date: today,
+              },
+            },
+            include: deckSessionInclude,
+          });
+        }
       }
 
       if (!classRecord.archivedAt) {
@@ -3253,7 +3265,7 @@ app.get(
           },
           _count: { id: true },
         }),
-        prisma.classSession.count({ where: { classId: classRecord.id } }),
+        prisma.classSession.count({ where: { classId: classRecord.id, ...ACTIVE_SESSION_FILTER } }),
         prisma.recitationLog.count({ where: { session: { classId: classRecord.id } } }),
         prisma.activity.count({ where: { classId: classRecord.id } }),
         prisma.projectScore.count({
@@ -3350,9 +3362,9 @@ app.get(
         projectScoresCount,
         quizzesCount,
       ] = await Promise.all([
-        prisma.classRoster.count({ where: { classId: classRecord.id, droppedAt: null } }),
+        prisma.classEnrollment.count({ where: { classId: classRecord.id, status: "APPROVED" } }),
         prisma.classEnrollment.count({ where: { classId: classRecord.id, status: "PENDING" } }),
-        prisma.classSession.count({ where: { classId: classRecord.id } }),
+        prisma.classSession.count({ where: { classId: classRecord.id, ...ACTIVE_SESSION_FILTER } }),
         prisma.recitationLog.count({ where: { session: { classId: classRecord.id } } }),
         prisma.activity.count({ where: { classId: classRecord.id } }),
         prisma.projectScore.count({
@@ -5123,6 +5135,7 @@ app.get(
             orderBy: { joinedAt: "asc" },
           },
           sessions: {
+            where: ACTIVE_SESSION_FILTER,
             include: {
               attendance: {
                 include: {
@@ -5181,7 +5194,7 @@ app.get(
                 orderBy: { updatedAt: "asc" },
               },
             },
-            orderBy: { date: "asc" },
+            orderBy: [{ date: "asc" }, { createdAt: "asc" }],
           },
         },
       });
@@ -5226,6 +5239,7 @@ app.get(
             orderBy: { joinedAt: "asc" },
           },
           sessions: {
+            where: ACTIVE_SESSION_FILTER,
             include: {
               attendance: {
                 include: {
@@ -5284,7 +5298,7 @@ app.get(
                 orderBy: { updatedAt: "asc" },
               },
             },
-            orderBy: { date: "asc" },
+            orderBy: [{ date: "asc" }, { createdAt: "asc" }],
           },
         },
       });
@@ -5294,7 +5308,7 @@ app.get(
       }
 
       const csv = buildCsvExport(classRecord, req.query.types);
-      const dateStr = new Date().toISOString().slice(0, 10);
+      const dateStr = manilaDate().toISOString().slice(0, 10);
       const safeCode = (classRecord.classCode || "").replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "") || "class";
       const safeSection = (classRecord.sectionName || "").replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "") || "section";
       const csvFilename = `${safeCode}_${safeSection}_${dateStr}.csv`;
@@ -5319,7 +5333,7 @@ app.get(
     try {
       const profile = await prisma.studentProfile.findUnique({
         where: { userId: req.session.userId },
-        select: { id: true, name: true, studentId: true, email: true, photo: true, program: true, section: true },
+        select: { id: true, name: true, address: true, studentId: true, email: true, photo: true, program: true, section: true },
       });
       if (!profile) {
         return res.status(409).json({ message: "Create your student profile before joining a class." });
