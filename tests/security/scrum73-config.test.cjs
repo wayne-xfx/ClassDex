@@ -489,11 +489,22 @@ test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Depende
     assert.deepEqual(unexpected, [], `Unexpected remaining backend leaf audit advisories: ${unexpected.join(", ")}`);
   });
 
-  await t.test("CONF-10: frontend dev dependencies must keep Vite/build toolchains free of High audit advisories", { todo: "SEC-29" }, async () => {
-    const lock = JSON.parse(fs.readFileSync(path.join(repoRoot, "classdex-frontend", "package-lock.json"), "utf8"));
-    const viteVer = lock.packages?.["node_modules/vite"]?.version;
-    const smVer = lock.packages?.["node_modules/source-map-js"]?.version;
-    assert.ok(false, `Frontend devDependencies use vite@${viteVer} (High, fixed in 8.3.8) and source-map-js@${smVer} (High, dev/build-only)`);
+  await t.test("CONF-10: frontend dev dependencies must keep Vite/build toolchains free of High audit advisories", async () => {
+    let auditOut = "";
+    try {
+      auditOut = execSync("npm audit --json", {
+        cwd: path.join(repoRoot, "classdex-frontend"),
+        encoding: "utf8",
+      });
+    } catch (err) {
+      auditOut = String(err.stdout || "");
+    }
+    const audit = JSON.parse(auditOut);
+    const vulns = audit.metadata?.vulnerabilities || {};
+    assert.equal(vulns.critical || 0, 0, "Expected 0 critical vulnerabilities in frontend");
+    assert.equal(vulns.high || 0, 0, "Expected 0 high vulnerabilities in frontend");
+    assert.equal(vulns.moderate || 0, 0, "Expected 0 moderate vulnerabilities in frontend");
+    assert.equal(vulns.low || 0, 0, "Expected 0 low vulnerabilities in frontend");
   });
 
   await t.test("CONF-11: Cloudinary upload config avoids browser secrets and rejects production base64 fallback when Cloudinary env vars are unset", async () => {
