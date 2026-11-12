@@ -379,14 +379,22 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
     assert.equal(res.json.available, false, "Foreign excludeId allowed faculty A to probe faculty B classCode ownership");
   });
 
-  await t.test("AUTHZ-10a: GET /api/students/:profileId/photo must block DECLINED enrollments", { todo: "SEC-03" }, async () => {
+  await t.test("AUTHZ-10a: GET /api/students/:profileId/photo must block DECLINED enrollments", async () => {
+    await prisma.classEnrollment.updateMany({
+      where: { classId: fx.facAClass1.id, studentProfileId: fx.stuDeclinedA.studentProfile.id },
+      data: { status: "DECLINED" },
+    });
     const declinedPhotoRes = await apiRequest(baseUrl, "GET", `/api/students/${fx.stuDeclinedA.studentProfile.id}/photo`, {
       cookie: facACookie,
     });
     assert.equal(declinedPhotoRes.status, 403, `Faculty fetched DECLINED student photo (${declinedPhotoRes.status})`);
+    for (const allowedId of [fx.stuA1.studentProfile.id, fx.stuPendingA.studentProfile.id, fx.stuDroppedA.studentProfile.id]) {
+      const okPhoto = await apiRequest(baseUrl, "GET", `/api/students/${allowedId}/photo`, { cookie: facACookie });
+      assert.equal(okPhoto.status, 200, `Authorized photo for ${allowedId} returned ${okPhoto.status}`);
+    }
   });
 
-  await t.test("AUTHZ-10b: GET /api/students/:profileId/photo must block arbitrary roster studentId probes when student never joined", { todo: "SEC-03" }, async () => {
+  await t.test("AUTHZ-10b: GET /api/students/:profileId/photo must block arbitrary roster studentId probes when student never joined", async () => {
     const rosterAdd = await apiRequest(baseUrl, "POST", `/api/classes/${fx.facAClass2.id}/roster`, {
       cookie: facACookie,
       body: {

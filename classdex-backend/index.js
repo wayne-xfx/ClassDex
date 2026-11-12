@@ -3097,10 +3097,12 @@ app.get("/api/students/:profileId/photo", requireAuth, async (req, res) => {
         const allowed = await prisma.class.findFirst({
           where: {
             facultyId: req.session.userId,
-            OR: [
-              { enrollments: { some: { studentProfileId: profile.id } } },
-              { roster: { some: { studentId: profile.studentId } } },
-            ],
+            enrollments: {
+              some: {
+                studentProfileId: profile.id,
+                status: { in: ["APPROVED", "PENDING", "DROPPED"] },
+              },
+            },
           },
           select: { id: true },
         });
