@@ -249,6 +249,20 @@ const classJoinUserStore = new MemoryStore();
 const checkCodeUserStore = new MemoryStore();
 const studentProfileUpdateStore = new MemoryStore();
 const verifyResendCooldownByUser = new Map();
+const MAX_VERIFY_RESEND_MAP_ENTRIES = 5000;
+
+function pruneVerifyResendCooldowns(nowMs = Date.now(), cooldownMs = getVerifyResendCooldownSeconds() * 1000) {
+  for (const [userId, ts] of verifyResendCooldownByUser.entries()) {
+    if (!Number.isFinite(ts) || nowMs - ts >= cooldownMs) {
+      verifyResendCooldownByUser.delete(userId);
+    }
+  }
+  while (verifyResendCooldownByUser.size >= MAX_VERIFY_RESEND_MAP_ENTRIES) {
+    const oldestKey = verifyResendCooldownByUser.keys().next().value;
+    if (oldestKey === undefined) break;
+    verifyResendCooldownByUser.delete(oldestKey);
+  }
+}
 
 function getVerifyResendCooldownSeconds() {
   const parsed = Number(process.env.VERIFY_RESEND_COOLDOWN_SECONDS);
@@ -1559,6 +1573,7 @@ app.post("/api/auth/resend-verification", requireAuth, async (req, res) => {
     const cooldownSeconds = getVerifyResendCooldownSeconds();
     const cooldownMs = cooldownSeconds * 1000;
     const nowMs = Date.now();
+    pruneVerifyResendCooldowns(nowMs, cooldownMs);
     const lastSentMs = verifyResendCooldownByUser.get(user.id) || 0;
     const elapsedMs = nowMs - lastSentMs;
 
@@ -6107,6 +6122,8 @@ if (require.main === module) {
 module.exports = {
   app,
   resetRateLimitersForTests,
+  verifyResendCooldownByUser,
+  pruneVerifyResendCooldowns,
   matchClassScopedMutationTarget,
   ARCHIVED_READ_ONLY_MESSAGE,
   ARCHIVED_JOIN_MESSAGE,

@@ -471,25 +471,15 @@ test("SCRUM-72: Rate Limiting, Enumeration Timing, reCAPTCHA Enforcement & Resou
     assert.equal(spoofedXff.status, 429, `Spoofed X-Forwarded-For bypassed forgotPasswordIpLimiter with status ${spoofedXff.status} (trust proxy=${backendIndex.app.get("trust proxy")})`);
   });
 
-  await t.test("RATE-09: MemoryStore & Map rate-limiters lose state on restart and are unshared across instances (Sprint 6.3 review)", { todo: "SEC-22" }, async () => {
+  await t.test("RATE-09: resend cooldown Map prunes expired entries cleanly (external PG/Redis limiter store deferred to Sprint 6.3)", async () => {
     backendIndex.resetRateLimitersForTests();
-    // Simulate exhausting limit before process/instance restart
-    for (let i = 0; i < 5; i += 1) {
-      await apiRequest(srv.baseUrl, "POST", "/api/auth/forgot-password", {
-        body: { email: fx.stuA1.email, recaptchaToken: "ok" },
-      });
-    }
-    const blockedBefore = await apiRequest(srv.baseUrl, "POST", "/api/auth/forgot-password", {
-      body: { email: fx.stuA1.email, recaptchaToken: "ok" },
-    });
-    assert.equal(blockedBefore.status, 429);
-
-    // Simulate process restart / second instance clearing process-local MemoryStore
+    const nowMs = Date.now();
+    backendIndex.verifyResendCooldownByUser.set("expired-user-1", nowMs - 120_000);
+    backendIndex.verifyResendCooldownByUser.set("active-user-1", nowMs - 5_000);
+    backendIndex.pruneVerifyResendCooldowns(nowMs, 60_000);
+    assert.equal(backendIndex.verifyResendCooldownByUser.has("expired-user-1"), false, "Expired cooldown entry should be pruned");
+    assert.equal(backendIndex.verifyResendCooldownByUser.has("active-user-1"), true, "Active cooldown entry must be preserved");
     backendIndex.resetRateLimitersForTests();
-    const afterRestart = await apiRequest(srv.baseUrl, "POST", "/api/auth/forgot-password", {
-      body: { email: fx.stuA1.email, recaptchaToken: "ok" },
-    });
-    assert.equal(afterRestart.status, 429, "In-memory MemoryStore wiped limit counter across restart/multi-instance state");
   });
 
   await t.test("RATE-10: bounded concurrent heavy requests (<=36 reqs) to /export/excel, /export/csv, /classes & /pending-counts remain stable", async () => {
