@@ -61,10 +61,11 @@ function unwrapExcelCellValue(value) {
 }
 const cors = require("cors");
 const session = require("express-session");
+const PgSessionStore = require("connect-pg-simple")(session);
 const { rateLimit, MemoryStore, ipKeyGenerator } = require("express-rate-limit");
 const bcrypt = require("bcryptjs");
 const { randomBytes } = require("node:crypto");
-const { prisma } = require("./db");
+const { prisma, pool } = require("./db");
 const { applyGracePeriod } = require("./attendance");
 const { eligibleCandidates, selectRecitationCandidate } = require("./recitation");
 const { verifyRecaptchaToken } = require("./recaptcha");
@@ -473,8 +474,16 @@ app.use((req, res, next) => {
   }
   return next();
 });
+const sessionStore = new PgSessionStore({
+  pool,
+  tableName: "session",
+  createTableIfMissing: false,
+  pruneSessionInterval: process.env.NODE_ENV === "test" ? false : 900,
+  errorLog: (err) => console.error("[ClassDex SessionStore]", err?.message || err),
+});
 app.use(
   session({
+    store: sessionStore,
     name: "classdex.sid",
     secret: SESSION_SECRET,
     resave: false,

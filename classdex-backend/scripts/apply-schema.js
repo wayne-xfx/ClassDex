@@ -79,6 +79,7 @@ async function applySchema() {
       "ProjectScore",
       "PasswordResetToken",
       "EmailVerificationToken",
+      "session",
     ];
     const { rows } = await client.query(
       `SELECT table_name
