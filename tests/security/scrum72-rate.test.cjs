@@ -450,7 +450,7 @@ test("SCRUM-72: Rate Limiting, Enumeration Timing, reCAPTCHA Enforcement & Resou
     }
   });
 
-  await t.test("RATE-08: direct connections without TRUST_PROXY configured must ignore spoofed X-Forwarded-For headers", { todo: "SEC-21" }, async () => {
+  await t.test("RATE-08: direct connections without TRUST_PROXY configured must ignore spoofed X-Forwarded-For headers", async () => {
     backendIndex.resetRateLimitersForTests();
     for (let i = 0; i < 5; i += 1) {
       const r = await apiRequest(srv.baseUrl, "POST", "/api/auth/forgot-password", {

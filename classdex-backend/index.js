@@ -160,7 +160,7 @@ const app = express();
 const trustProxyHops =
   process.env.TRUST_PROXY !== undefined && process.env.TRUST_PROXY !== ""
     ? Number(process.env.TRUST_PROXY)
-    : 1;
+    : 0;
 app.set("trust proxy", Number.isNaN(trustProxyHops) ? process.env.TRUST_PROXY : trustProxyHops);
 
 const PORT = process.env.PORT || 5000;
