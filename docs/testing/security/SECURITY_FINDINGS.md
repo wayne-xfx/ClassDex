@@ -32,6 +32,15 @@
 | SEC-20 | `classes/join` and `classes/check-code` lack rate limiting on 24-bit invite code guesses | Medium | A04:2021 - Insecure Design | SCRUM-72 / RATE-05 | Open | — |
 | SEC-21 | Default `trust proxy = 1` permits `X-Forwarded-For` rate-limit bypass on direct connections | Low | A05:2021 - Security Misconfiguration | SCRUM-72 / RATE-08 | Open | — |
 | SEC-22 | In-memory `MemoryStore` limiters & un-pruned resend cooldown `Map` reset on restart and do not scale across instances | Low | A05:2021 - Security Misconfiguration | SCRUM-72 / RATE-09 | Open | — |
+| SEC-23 | Password policy omits 72-byte UTF-8 cap, allowing silent bcrypt truncation of longer passwords | Low | A02:2021 - Cryptographic Failures | SCRUM-73 / CONF-01 | Open | — |
+| SEC-24 | Production session config hardcodes `secure: false`, omits session regeneration on login, and uses `MemoryStore` | Medium | A02:2021 - Cryptographic Failures | SCRUM-73 / CONF-02 | Open | — |
+| SEC-25 | `NODE_ENV=production` lacks fail-fast startup checks and falls back to dev session secret, localhost CORS, and log mailer | High | A05:2021 - Security Misconfiguration | SCRUM-73 / CONF-08 | Open | — |
+| SEC-26 | API responses lack Helmet security headers, expose `X-Powered-By`, and omit `Cache-Control: no-store` | Low | A05:2021 - Security Misconfiguration | SCRUM-73 / CONF-03 | Open | — |
+| SEC-27 | Root `.env` (PORT-only, zero secrets) remains tracked in git index despite `.gitignore` | Info | A02:2021 - Cryptographic Failures | SCRUM-73 / CONF-05 | Open | — |
+| SEC-28 | Backend ships vulnerable `xlsx@0.18.5` (`fixAvailable: false`) plus patchable `body-parser` / `qs` / Prisma CLI advisories | Medium | A06:2021 - Vulnerable and Outdated Components | SCRUM-73 / CONF-09 | Open | — |
+| SEC-29 | Frontend dev dependencies ship `vite@8.3.0` and `source-map-js@1.2.1` High advisories (dev/build-only) | Low | A06:2021 - Vulnerable and Outdated Components | SCRUM-73 / CONF-10 | Open | — |
+| SEC-30 | `photoUpload.js` silently falls back to raw base64 DB URLs in production builds when Cloudinary env vars are unset | Low | A05:2021 - Security Misconfiguration | SCRUM-73 / CONF-11 | Open | — |
+| SEC-31 | `mailer.js` `logTransport` logs plaintext verification/reset token links & bodies to stdout and tokens travel in URL query params | Low | A09:2021 - Security Logging and Monitoring Failures | SCRUM-73 / CONF-12 | Open | — |
 
 ---
 
@@ -452,5 +461,171 @@
   - *Expected:* Document shared store (e.g., Redis) for multi-instance production scaling and prune expired `verifyResendCooldownByUser` entries cleanly in-memory.
   - *Actual:* All rate-limit counters and cooldowns live in process memory (cleared on restart/redeploy, isolated per worker/dyno) and `verifyResendCooldownByUser` never sweeps expired keys.
 - **Impact:** Rate limits reset on container restart and divide across multiple replicas in production (partially deferred to Sprint 6.3 infrastructure; in-memory Map pruning can be fixed in `SCRUM-74`).
+- **Status:** `Open`
+- **Fix commit:** `—`
+
+---
+
+### SEC-23 — Password policy omits 72-byte UTF-8 cap, allowing silent bcrypt truncation of longer passwords
+- **ID:** `SEC-23`
+- **Title:** Password policy omits 72-byte UTF-8 cap, allowing silent bcrypt truncation of longer passwords
+- **Severity:** Low
+- **OWASP category:** `A02:2021 - Cryptographic Failures`
+- **Found in:** `SCRUM-73` / `CONF-01` ([`scrum73-config.test.cjs`](../../../tests/security/scrum73-config.test.cjs))
+- **Affected route or file:** [`shared/passwordRules.json`](../../../shared/passwordRules.json#L1-L13), [`classdex-backend/src/utils/passwordValidator.js`](../../../classdex-backend/src/utils/passwordValidator.js#L1-L36), [`classdex-backend/index.js`](../../../classdex-backend/index.js#L735)
+- **Steps to reproduce:**
+  1. Register a user via `POST /api/auth/register` with a 92-byte password sharing the first 72 ASCII characters (`"A".repeat(72) + "_first_secret_suffix"`).
+  2. Call `POST /api/auth/login` for the same email with a completely different suffix after byte 72 (`"A".repeat(72) + "_completely_different_suffix"`).
+- **Expected vs Actual:**
+  - *Expected:* Shared validation rejects passwords exceeding bcrypt's 72 UTF-8 byte ceiling (e.g., max 72 UTF-8 bytes with HTTP `400`) or pre-hashes consistently so distinct >72-byte passwords never collide.
+  - *Actual:* `CONF-01a` verified bcrypt cost `12` and zero password hashes leaked via API, **but** `CONF-01b` registered `pw1` cleanly and logged in (`HTTP 200`) using mismatched `pw2` due to silent bcrypt truncation at 72 bytes.
+- **Impact:** Users entering long passphrases exceeding 72 UTF-8 bytes gain false confidence that characters beyond byte 72 are enforced; policy also currently enforces only `minLength >= 8` without breach/complexity checks.
+- **Status:** `Open`
+- **Fix commit:** `—`
+
+---
+
+### SEC-24 — Production session config hardcodes `secure: false`, omits session regeneration on login, and uses `MemoryStore`
+- **ID:** `SEC-24`
+- **Title:** Production session config hardcodes `secure: false`, omits session regeneration on login, and uses `MemoryStore`
+- **Severity:** Medium
+- **OWASP category:** `A02:2021 - Cryptographic Failures`
+- **Found in:** `SCRUM-73` / `CONF-02` ([`scrum73-config.test.cjs`](../../../tests/security/scrum73-config.test.cjs))
+- **Affected route or file:** [`classdex-backend/index.js`](../../../classdex-backend/index.js#L177-L190), [`classdex-backend/index.js`](../../../classdex-backend/index.js#L804-L810) (`POST /api/auth/login`)
+- **Steps to reproduce:**
+  1. Inspect `session({ cookie: { secure: false } })` at `index.js:186` and `POST /api/auth/login` at `L805` (`req.session.userId = ...` without `req.session.regenerate`).
+  2. Boot `classdex-backend/index.js` with `NODE_ENV=production` (`CONF-08`) and inspect stdout.
+- **Expected vs Actual:**
+  - *Expected:* In `NODE_ENV=production`, session cookies set `secure: true` (over TLS/reverse-proxy `trust proxy`), login/register regenerate the session ID against fixation, and production uses a persistent external store (e.g., PostgreSQL/Redis in Sprint 6.3).
+  - *Actual:* `CONF-02a` verified `HttpOnly`, `SameSite=Lax`, and 32-byte CSPRNG SHA-256 tokens (`30m`/`24h`), **but** `cookie.secure` is hardcoded `false` in all environments, login does not call `req.session.regenerate`, and `NODE_ENV=production` emits `Warning: connect.session() MemoryStore is not designed for a production environment`.
+- **Impact:** Session cookies could traverse plaintext HTTP if accessed outside TLS without `Secure`, pre-auth session IDs are reused on login, and in-process sessions do not survive restarts or multi-instance scaling (external store configuration continues into Sprint 6.3).
+- **Status:** `Open`
+- **Fix commit:** `—`
+
+---
+
+### SEC-25 — `NODE_ENV=production` lacks fail-fast startup checks and falls back to dev session secret, localhost CORS, and log mailer
+- **ID:** `SEC-25`
+- **Title:** `NODE_ENV=production` lacks fail-fast startup checks and falls back to dev session secret, localhost CORS, and log mailer
+- **Severity:** High
+- **OWASP category:** `A05:2021 - Security Misconfiguration`
+- **Found in:** `SCRUM-73` / `CONF-08` ([`scrum73-config.test.cjs`](../../../tests/security/scrum73-config.test.cjs))
+- **Affected route or file:** [`classdex-backend/index.js`](../../../classdex-backend/index.js#L108), [`L180`](../../../classdex-backend/index.js#L180), [`L5579`](../../../classdex-backend/index.js#L5579), [`classdex-backend/src/services/mailer.js`](../../../classdex-backend/src/services/mailer.js#L50), [`L77-L127`](../../../classdex-backend/src/services/mailer.js#L77-L127)
+- **Steps to reproduce:**
+  1. Spawn `node classdex-backend/index.js` with `NODE_ENV=production`, a valid test `DATABASE_URL`, and empty `SESSION_SECRET`, `FRONTEND_ORIGIN`, `APP_BASE_URL`, `RECAPTCHA_SECRET_KEY`, `RESEND_API_KEY`, and `EMAIL_MODE`.
+  2. Request `GET /api/status`.
+- **Expected vs Actual:**
+  - *Expected:* Under `NODE_ENV=production`, startup throws immediately and exits non-zero when `SESSION_SECRET` (strong random >=32 chars), `FRONTEND_ORIGIN`/`APP_BASE_URL`, `RECAPTCHA_SECRET_KEY`, or Resend configuration are absent.
+  - *Actual:* Server booted cleanly (`HTTP 200` on `/api/status`), silently signing cookies with the public hardcoded 27-char string `"classdex-dev-session-secret"`, allowing ``http://localhost:5173`` CORS/links, disabling server-side reCAPTCHA failure paths gracefully until runtime, and falling back to `EMAIL_MODE=log`.
+- **Impact:** Misconfigured production deployment permits trivial offline session-cookie forgery by anyone reading source code (`"classdex-dev-session-secret"`), breaks production verification links/CORS, and dumps reset/verification tokens to logs instead of delivering email.
+- **Status:** `Open`
+- **Fix commit:** `—`
+
+---
+
+### SEC-26 — API responses lack Helmet security headers, expose `X-Powered-By`, and omit `Cache-Control: no-store`
+- **ID:** `SEC-26`
+- **Title:** API responses lack Helmet security headers, expose `X-Powered-By`, and omit `Cache-Control: no-store`
+- **Severity:** Low
+- **OWASP category:** `A05:2021 - Security Misconfiguration`
+- **Found in:** `SCRUM-73` / `CONF-03` ([`scrum73-config.test.cjs`](../../../tests/security/scrum73-config.test.cjs))
+- **Affected route or file:** [`classdex-backend/index.js`](../../../classdex-backend/index.js#L100-L190), [`classdex-frontend/index.html`](../../../classdex-frontend/index.html)
+- **Steps to reproduce:**
+  1. Authenticate via `POST /api/auth/login` and call `GET /api/auth/me` (and inspect API/page headers in Playwright).
+- **Expected vs Actual:**
+  - *Expected:* Express enables `helmet` (or equivalent middleware) removing `X-Powered-By`, setting `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` / `CSP` (`frame-ancestors 'none'`), `Referrer-Policy: no-referrer` (or `strict-origin-when-cross-origin`), `HSTS` readiness in production HTTPS, and `Cache-Control: no-store` on authenticated API responses.
+  - *Actual:* Responses returned `X-Powered-By: Express` and lacked `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and `Cache-Control: no-store`.
+- **Impact:** Leaves MIME-sniffing, clickjacking (`frame-ancestors`), URL-token `Referer` leakage (`?token=` links), and shared-browser response caching without defense-in-depth browser headers (HSTS & CSP for static frontend hosting also verified/completed in Sprint 6.3).
+- **Status:** `Open`
+- **Fix commit:** `—`
+
+---
+
+### SEC-27 — Root `.env` (PORT-only, zero secrets) remains tracked in git index despite `.gitignore`
+- **ID:** `SEC-27`
+- **Title:** Root `.env` (PORT-only, zero secrets) remains tracked in git index despite `.gitignore`
+- **Severity:** Info
+- **OWASP category:** `A02:2021 - Cryptographic Failures`
+- **Found in:** `SCRUM-73` / `CONF-05` ([`scrum73-config.test.cjs`](../../../tests/security/scrum73-config.test.cjs))
+- **Affected route or file:** [`.env`](../../../.env) (git-tracked root file), [`.gitignore`](../../../.gitignore#L69)
+- **Steps to reproduce:**
+  1. Run `git ls-files "*env*"` in the repository root.
+  2. Run git history scan (`git log -p -S`) for `re_`, `RECAPTCHA`, `CLOUDINARY`, `DATABASE_URL`, `JWT`, `postgres://`, `postgresql://`, `SESSION_SECRET`.
+- **Expected vs Actual:**
+  - *Expected:* Zero `.env*` files are tracked in git (`.env.example` only), and zero real credentials exist in git history.
+  - *Actual:* `CONF-05a` confirmed **zero** real secrets across all commits (`.env.example` `499b6103` holds a placeholder only; `README`/`tests` hold Google public reCAPTCHA test keys `6LeIxAcTAAAA...`) and `classdex-backend/.env` / `.env.test` are properly untracked, **but** root `.env` (`PORT` key only, zero secrets) was committed before `.gitignore` and remains tracked.
+- **Impact:** Zero secret exposure or rotation impact (`0` secrets committed), but untidy index state risks future accidental secret additions to root `.env`. Fix safely via `git rm --cached .env`.
+- **Status:** `Open`
+- **Fix commit:** `—`
+
+---
+
+### SEC-28 — Backend ships vulnerable `xlsx@0.18.5` (`fixAvailable: false`) plus patchable `body-parser` / `qs` / Prisma CLI advisories
+- **ID:** `SEC-28`
+- **Title:** Backend ships vulnerable `xlsx@0.18.5` (`fixAvailable: false`) plus patchable `body-parser` / `qs` / Prisma CLI advisories
+- **Severity:** Medium
+- **OWASP category:** `A06:2021 - Vulnerable and Outdated Components`
+- **Found in:** `SCRUM-73` / `CONF-09` ([`scrum73-config.test.cjs`](../../../tests/security/scrum73-config.test.cjs))
+- **Affected route or file:** [`classdex-backend/package.json`](../../../classdex-backend/package.json#L27), [`classdex-backend/index.js`](../../../classdex-backend/index.js#L3), [`L2400-L2460`](../../../classdex-backend/index.js#L2400-L2460) (`POST /api/classes/:id/roster/import`), [`classdex-backend/export.js`](../../../classdex-backend/export.js#L1)
+- **Steps to reproduce:**
+  1. Run `npm audit --json` and `npm outdated --json` inside `classdex-backend/`.
+- **Expected vs Actual:**
+  - *Expected:* Zero reachable High/Moderate vulnerabilities in production dependencies.
+  - *Actual:* Backend audit reports `8` vulnerabilities (`6 High`, `2 Moderate`, `0 Critical/Low`): **reachable prod** `xlsx@0.18.5` (High — `GHSA-4r6h-8v6p-xvw6` Prototype Pollution & `GHSA-5pgg-2g8v-p4x9` ReDoS, `fixAvailable: false` on npm, parsed in Faculty-only `POST /roster/import`); transitive prod `body-parser@2.3.0` (High `GHSA-27r3-jxmh-p828`, `fixAvailable: true` -> `>=2.4.0`) and `qs@6.16.0` (Moderate `GHSA-6pq8-jhm2-2vcw`, `fixAvailable: true`); dev-only Prisma CLI advisories (`prisma@7.10.0` High -> `7.10.1`, `@prisma/config`, `deepmerge-ts`, unused `mysql2`, `fast-uri`). Direct prod deps also have non-breaking minor/patch updates (`express` `5.2.1->5.3.0`, `express-rate-limit` `8.7.1->8.7.4`, `@prisma/client`/`@prisma/adapter-pg` `7.10.0->7.10.1`, `resend` `6.32.1->6.38.0`, `dotenv` `18.0.2->18.0.10`, `pg` `8.23.0->8.23.1`).
+- **Impact:** Patchable transitive `body-parser`/`qs` DoS risks on Express HTTP parsing plus known unpatched SheetJS `xlsx@0.18.5` Prototype Pollution / ReDoS risks when parsing untrusted spreadsheet uploads in `POST /roster/import` (gated behind `FACULTY` auth, so scored Medium in ClassDex context; requires owner decision in `SCRUM-74` to either migrate `export.js` & roster import to `exceljs` or harden/accept risk until replacement).
+- **Status:** `Open`
+- **Fix commit:** `—`
+
+---
+
+### SEC-29 — Frontend dev dependencies ship `vite@8.3.0` and `source-map-js@1.2.1` High advisories (dev/build-only)
+- **ID:** `SEC-29`
+- **Title:** Frontend dev dependencies ship `vite@8.3.0` and `source-map-js@1.2.1` High advisories (dev/build-only)
+- **Severity:** Low
+- **OWASP category:** `A06:2021 - Vulnerable and Outdated Components`
+- **Found in:** `SCRUM-73` / `CONF-10` ([`scrum73-config.test.cjs`](../../../tests/security/scrum73-config.test.cjs))
+- **Affected route or file:** [`classdex-frontend/package.json`](../../../classdex-frontend/package.json#L25), [`classdex-frontend/package-lock.json`](../../../classdex-frontend/package-lock.json)
+- **Steps to reproduce:**
+  1. Run `npm audit --json` and `npm outdated --json` inside `classdex-frontend/`.
+- **Expected vs Actual:**
+  - *Expected:* Build/dev dependencies stay updated free of known High advisories.
+  - *Actual:* Audit reports `2` High advisories in `devDependencies`: `vite@8.3.0` (6 advisories including `launch-editor` Windows command execution & `server.fs.allow` bypasses, fixed in `8.3.8`) and `source-map-js@1.2.1` (`GHSA-68fv-2mgg-jv7q` event-loop DoS, `fixAvailable: true`). Root workspace has `0` audit vulnerabilities; `CONF-06` confirmed static `dist/` has zero `.map` files and zero Vite runtime shipping.
+- **Impact:** Affects local Vite dev server / build tooling only (never shipped in production static `dist/`), low runtime risk; easily patched via `npm update` in `SCRUM-74`.
+- **Status:** `Open`
+- **Fix commit:** `—`
+
+---
+
+### SEC-30 — `photoUpload.js` silently falls back to raw base64 DB URLs in production builds when Cloudinary env vars are unset
+- **ID:** `SEC-30`
+- **Title:** `photoUpload.js` silently falls back to raw base64 DB URLs in production builds when Cloudinary env vars are unset
+- **Severity:** Low
+- **OWASP category:** `A05:2021 - Security Misconfiguration`
+- **Found in:** `SCRUM-73` / `CONF-11` ([`scrum73-config.test.cjs`](../../../tests/security/scrum73-config.test.cjs))
+- **Affected route or file:** [`classdex-frontend/src/utils/photoUpload.js`](../../../classdex-frontend/src/utils/photoUpload.js#L105-L111), [`classdex-backend/index.js`](../../../classdex-backend/index.js#L278-L285) (`isValidPhoto`)
+- **Steps to reproduce:**
+  1. Audit `uploadPhoto()` in `classdex-frontend/src/utils/photoUpload.js` lines `67-112`.
+- **Expected vs Actual:**
+  - *Expected:* No Cloudinary API secret in browser (verified pass), strict client + server size/MIME checks, signed or fail-closed Cloudinary requirement in production builds, and backend `res.cloudinary.com` domain allowlisting.
+  - *Actual:* Although no browser secret exists and client checks 5MB JPEG/PNG/WebP (`L1-L54`), when `VITE_CLOUDINARY_CLOUD_NAME`/`VITE_CLOUDINARY_UPLOAD_PRESET` are omitted in production (`isDev === false`), `uploadPhoto` silently returns `readDataUrl(file)` (`L111`) — pushing multi-megabyte base64 blobs into PostgreSQL (while upload failures throw cleanly at `L102`).
+- **Impact:** Misconfigured production builds silently degrade to heavy PostgreSQL base64 photo storage instead of failing fast or alerting, compounded by `SEC-10`'s unrestricted external URL handling.
+- **Status:** `Open`
+- **Fix commit:** `—`
+
+---
+
+### SEC-31 — `mailer.js` `logTransport` logs plaintext verification/reset token links & bodies to stdout and tokens travel in URL query params
+- **ID:** `SEC-31`
+- **Title:** `mailer.js` `logTransport` logs plaintext verification/reset token links & bodies to stdout and tokens travel in URL query params
+- **Severity:** Low
+- **OWASP category:** `A09:2021 - Security Logging and Monitoring Failures`
+- **Found in:** `SCRUM-73` / `CONF-12` ([`scrum73-config.test.cjs`](../../../tests/security/scrum73-config.test.cjs))
+- **Affected route or file:** [`classdex-backend/src/services/mailer.js`](../../../classdex-backend/src/services/mailer.js#L129-L145), [`classdex-backend/index.js`](../../../classdex-backend/index.js#L876)
+- **Steps to reproduce:**
+  1. Review all `console.*` statements across `classdex-backend/index.js` and `classdex-backend/src/services/*.js`, plus token link generation.
+- **Expected vs Actual:**
+  - *Expected:* Passwords, raw reset/verification tokens, email bodies, and student PII (`birthdate`, `address`) are never logged; production forbids `logTransport` fallback and sends `Referrer-Policy: no-referrer` when `?token=` links exist.
+  - *Actual:* REST URLs and Express error logs do not log passwords or student PII, **but** `logTransport` (`mailer.js:129-145`) prints `To`, `Subject`, `Link: ${link}` (plaintext password-reset / verify token URL), and full `text` body to stdout (`console.log`) — reachable even in `NODE_ENV=production` due to `SEC-25` — and `?token=` links lack `Referrer-Policy` (`SEC-26`).
+- **Impact:** Any log-aggregation collector or hosting console viewing stdout gains single-use account reset/verification links whenever `EMAIL_MODE=log` is active or defaulted.
 - **Status:** `Open`
 - **Fix commit:** `—`
