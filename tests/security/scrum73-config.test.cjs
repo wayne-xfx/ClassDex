@@ -270,7 +270,7 @@ test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Depende
     assert.ok(!/ep-polished-night|ep-orange-dream/.test(rawExample));
   });
 
-  await t.test("CONF-05b: root .env file must not be tracked in git index", { todo: "SEC-27" }, async () => {
+  await t.test("CONF-05b: root .env file must not be tracked in git index", async () => {
     const tracked = execFileSync("git", ["ls-files", ".env"], { cwd: repoRoot, encoding: "utf8" }).trim();
     assert.equal(tracked, "", "Root .env is currently tracked in git index (contains PORT only, zero secrets)");
   });
