@@ -27,7 +27,24 @@ const dotenv = require("dotenv");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const bcrypt = require("bcryptjs");
-const XLSX = require("xlsx");
+const ExcelJS = require("exceljs");
+
+function readExcelSheetRows(worksheet) {
+  if (!worksheet) return [];
+  const colCount = worksheet.columnCount || 0;
+  const rows = [];
+  for (let r = 1; r <= worksheet.rowCount; r += 1) {
+    const row = worksheet.getRow(r);
+    const width = Math.max(colCount, row.cellCount || 0);
+    const vals = [];
+    for (let c = 1; c <= width; c += 1) {
+      const v = row.getCell(c).value;
+      vals.push(v === null || v === undefined ? "" : v);
+    }
+    rows.push(vals);
+  }
+  return rows;
+}
 const {
   app,
   resetRateLimitersForTests,
@@ -545,8 +562,9 @@ test("SCRUM-66: Student Dashboard & Data Export API Suite (STU-01..03, EXP-01..0
     assert.match(csvRes.headers.get("content-type") || "", /text\/csv/);
 
     const xlsxBuf = Buffer.from(await xlsxRes.arrayBuffer());
-    const wb = XLSX.read(xlsxBuf, { type: "buffer" });
-    assert.deepEqual(wb.SheetNames, [
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(xlsxBuf);
+    assert.deepEqual(wb.worksheets.map((ws) => ws.name), [
       "Class Information",
       "Student List",
       "Attendance",
@@ -561,13 +579,13 @@ test("SCRUM-66: Student Dashboard & Data Export API Suite (STU-01..03, EXP-01..0
     const csvSections = splitCsvSections(csvBuf.toString("utf8"));
 
     // Verify Class Information parity
-    const infoRows = XLSX.utils.sheet_to_json(wb.Sheets["Class Information"], { header: 1, defval: "" });
+    const infoRows = readExcelSheetRows(wb.getWorksheet("Class Information"));
     const infoMap = new Map(infoRows.map((r) => [String(r[0]), String(r[1])]));
     assert.equal(infoMap.get("Class name"), "qa_S66 Rich 3A");
     assert.equal(infoMap.get("Student count"), "2");
 
     // Verify Student List sheet (only APPROVED: stu1 & stu2, not dropped/unjoined)
-    const slRows = XLSX.utils.sheet_to_json(wb.Sheets["Student List"], { header: 1, defval: "" });
+    const slRows = readExcelSheetRows(wb.getWorksheet("Student List"));
     assert.equal(slRows.length, 3); // header + 2 approved students
     const slIds = new Set(slRows.slice(1).map((r) => String(r[0])));
     assert.ok(slIds.has(stu1.studentProfile.studentId));
@@ -580,7 +598,7 @@ test("SCRUM-66: Student Dashboard & Data Export API Suite (STU-01..03, EXP-01..0
     const d2Label = dateLabel(day2);
 
     // Attendance sheet + CSV parity (incl. Dropped section!)
-    const attXlsx = XLSX.utils.sheet_to_json(wb.Sheets.Attendance, { header: 1, defval: "" });
+    const attXlsx = readExcelSheetRows(wb.getWorksheet("Attendance"));
     const attCsv = csvSections.get("Attendance");
     assert.deepEqual(attXlsx[0], ["Student ID", "Student Name", d1Label, d2Label]);
     assert.deepEqual(attCsv[0], attXlsx[0]);
@@ -606,25 +624,25 @@ test("SCRUM-66: Student Dashboard & Data Export API Suite (STU-01..03, EXP-01..0
     assert.deepEqual(rowById(attCsv, stu1.studentProfile.studentId), rowById(attXlsx, stu1.studentProfile.studentId));
 
     // Recitation parity (null -> "")
-    const recXlsx = XLSX.utils.sheet_to_json(wb.Sheets.Recitation, { header: 1, defval: "" });
+    const recXlsx = readExcelSheetRows(wb.getWorksheet("Recitation"));
     const recCsv = csvSections.get("Recitation");
     assert.deepEqual(rowById(recXlsx, stu1.studentProfile.studentId), [stu1.studentProfile.studentId, stu1.name, 4, 5]);
     assert.deepEqual(rowById(recXlsx, stu2.studentProfile.studentId), [stu2.studentProfile.studentId, stu2.name, 2, ""]);
     assert.deepEqual(rowById(recCsv, stu1.studentProfile.studentId), [stu1.studentProfile.studentId, stu1.name, "4", "5"]);
 
     // Activities parity (Absent auto-flag renders "Absent")
-    const actXlsx = XLSX.utils.sheet_to_json(wb.Sheets.Activities, { header: 1, defval: "" });
+    const actXlsx = readExcelSheetRows(wb.getWorksheet("Activities"));
     assert.deepEqual(rowById(actXlsx, stu1.studentProfile.studentId), [stu1.studentProfile.studentId, stu1.name, 40, "Absent"]);
     assert.deepEqual(rowById(actXlsx, stu2.studentProfile.studentId), [stu2.studentProfile.studentId, stu2.name, 50, 45]);
 
     // Projects parity (Midterm Project, Finals Project)
-    const projXlsx = XLSX.utils.sheet_to_json(wb.Sheets.Projects, { header: 1, defval: "" });
+    const projXlsx = readExcelSheetRows(wb.getWorksheet("Projects"));
     assert.deepEqual(projXlsx[0], ["Student ID", "Student Name", "Midterm Project", "Finals Project"]);
     assert.deepEqual(rowById(projXlsx, stu1.studentProfile.studentId), [stu1.studentProfile.studentId, stu1.name, 88, 92]);
     assert.deepEqual(rowById(projXlsx, stu2.studentProfile.studentId), [stu2.studentProfile.studentId, stu2.name, 75, ""]);
 
     // Quizzes parity
-    const quizXlsx = XLSX.utils.sheet_to_json(wb.Sheets.Quiz, { header: 1, defval: "" });
+    const quizXlsx = readExcelSheetRows(wb.getWorksheet("Quiz"));
     assert.deepEqual(quizXlsx[0], [
       "Student ID",
       "Student Name",
@@ -689,8 +707,9 @@ test("SCRUM-66: Student Dashboard & Data Export API Suite (STU-01..03, EXP-01..0
     assert.equal(xlsxRes.status, 200);
     assert.equal(csvRes.status, 200);
 
-    const wb = XLSX.read(Buffer.from(await xlsxRes.arrayBuffer()), { type: "buffer" });
-    const attXlsx = XLSX.utils.sheet_to_json(wb.Sheets.Attendance, { header: 1, defval: "" });
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(await xlsxRes.arrayBuffer()));
+    const attXlsx = readExcelSheetRows(wb.getWorksheet("Attendance"));
     const csvSections = splitCsvSections(Buffer.from(await csvRes.arrayBuffer()).toString("utf8"));
     const d1Label = dateLabel(day1);
     const d2Label = dateLabel(day2);
@@ -710,8 +729,9 @@ test("SCRUM-66: Student Dashboard & Data Export API Suite (STU-01..03, EXP-01..0
     assert.equal(xlsxRes.status, 200);
     assert.equal(csvRes.status, 200);
 
-    const wb = XLSX.read(Buffer.from(await xlsxRes.arrayBuffer()), { type: "buffer" });
-    assert.deepEqual(wb.SheetNames, ["Attendance", "Quiz"]);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(await xlsxRes.arrayBuffer()));
+    assert.deepEqual(wb.worksheets.map((ws) => ws.name), ["Attendance", "Quiz"]);
 
     const csvSections = splitCsvSections(Buffer.from(await csvRes.arrayBuffer()).toString("utf8"));
     assert.deepEqual([...csvSections.keys()], ["Activities"]);
@@ -735,11 +755,12 @@ test("SCRUM-66: Student Dashboard & Data Export API Suite (STU-01..03, EXP-01..0
     assert.equal(xlsxRes.status, 200);
     assert.equal(csvRes.status, 200);
 
-    const wb = XLSX.read(Buffer.from(await xlsxRes.arrayBuffer()), { type: "buffer" });
-    assert.equal(wb.SheetNames.length, 7);
-    const info = new Map(XLSX.utils.sheet_to_json(wb.Sheets["Class Information"], { header: 1 }).map((r) => [String(r[0]), String(r[1])]));
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(await xlsxRes.arrayBuffer()));
+    assert.equal(wb.worksheets.length, 7);
+    const info = new Map(readExcelSheetRows(wb.getWorksheet("Class Information")).map((r) => [String(r[0]), String(r[1])]));
     assert.equal(info.get("Student count"), "0");
-    assert.equal(XLSX.utils.sheet_to_json(wb.Sheets["Student List"], { header: 1 }).length, 1);
+    assert.equal(readExcelSheetRows(wb.getWorksheet("Student List")).length, 1);
 
     const csvBuf = Buffer.from(await csvRes.arrayBuffer());
     assert.equal(csvBuf.subarray(0, 3).toString("hex"), "efbbbf");
@@ -783,15 +804,16 @@ test("SCRUM-66: Student Dashboard & Data Export API Suite (STU-01..03, EXP-01..0
     assert.equal(xlsxRes.status, 200);
     assert.equal(csvRes.status, 200);
 
-    const wb = XLSX.read(Buffer.from(await xlsxRes.arrayBuffer()), { type: "buffer" });
-    const slRows = XLSX.utils.sheet_to_json(wb.Sheets["Student List"], { header: 1, defval: "" });
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(await xlsxRes.arrayBuffer()));
+    const slRows = readExcelSheetRows(wb.getWorksheet("Student List"));
     const slNames = slRows.slice(1).map((r) => String(r[1]));
     for (const prefix of ["'=SUM(A1)", "'+cmd|'/C calc'!A0", "'-1+1", "'@test"]) {
       assert.ok(slNames.includes(prefix), `Excel Student List must escape formula value as ${prefix}`);
     }
     assert.ok(slNames.includes('Dela Cruz, María José "MJ"'), "Excel must preserve commas, quotes, and Unicode accents");
 
-    const infoMap = new Map(XLSX.utils.sheet_to_json(wb.Sheets["Class Information"], { header: 1 }).map((r) => [String(r[0]), String(r[1])]));
+    const infoMap = new Map(readExcelSheetRows(wb.getWorksheet("Class Information")).map((r) => [String(r[0]), String(r[1])]));
     assert.ok(infoMap.get("Class name").startsWith("'="), "Class Information sectionName formula must be prefixed with apostrophe");
 
     const csvText = Buffer.from(await csvRes.arrayBuffer()).toString("utf8");
@@ -901,8 +923,9 @@ test("SCRUM-66: Student Dashboard & Data Export API Suite (STU-01..03, EXP-01..0
     assert.equal(csvRes.status, 200);
     assert.ok(elapsedMs < 30_000, `High-volume export took too long: ${elapsedMs}ms`);
 
-    const wb = XLSX.read(Buffer.from(await xlsxRes.arrayBuffer()), { type: "buffer" });
-    const attSheet = XLSX.utils.sheet_to_json(wb.Sheets.Attendance, { header: 1, defval: "" });
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(await xlsxRes.arrayBuffer()));
+    const attSheet = readExcelSheetRows(wb.getWorksheet("Attendance"));
     assert.equal(attSheet.length, 61, "Expected 1 header row + 60 student rows in Excel Attendance sheet");
     assert.equal(attSheet[0].length, 22, "Expected 2 identity cols + 20 session cols");
 

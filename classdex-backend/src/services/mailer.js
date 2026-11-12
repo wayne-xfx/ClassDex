@@ -47,6 +47,9 @@ function getClientUrl() {
       return cleaned;
     }
   }
+  if (process.env.NODE_ENV === "production" && !isRunningUnderTestRunner()) {
+    throw new Error("[ClassDex Mailer] APP_BASE_URL or FRONTEND_ORIGIN is required in production.");
+  }
   return "http://localhost:5173";
 }
 
@@ -106,7 +109,21 @@ function validateMailerConfig(options = {}) {
     );
   }
 
-  if (explicit === "resend") {
+  const isProduction = process.env.NODE_ENV === "production" && !options.ignoreProductionGuard;
+  if (isProduction && (explicit === "log" || explicit === "stub" || !explicit)) {
+    if (explicit === "log" || explicit === "stub") {
+      throw new Error(
+        `[ClassDex Mailer] NODE_ENV=production forbids EMAIL_MODE="${explicit}". Configure EMAIL_MODE="resend" with RESEND_API_KEY and a verified EMAIL_FROM.`,
+      );
+    }
+    if (!hasValidResendCredentials()) {
+      throw new Error(
+        "[ClassDex Mailer] NODE_ENV=production requires RESEND_API_KEY and a verified non-local EMAIL_FROM (cannot fall back to log mode).",
+      );
+    }
+  }
+
+  if (explicit === "resend" || isProduction) {
     const apiKey = String(process.env.RESEND_API_KEY || "").trim();
     const emailFrom = String(process.env.EMAIL_FROM || "").trim();
     if (!apiKey) {
@@ -126,8 +143,14 @@ function validateMailerConfig(options = {}) {
   return { mode, from: getEmailFrom() };
 }
 
+function redactLinkToken(link) {
+  if (!link) return null;
+  return String(link).replace(/([?&](?:token|code)=)[^&\s]+/gi, "$1[REDACTED]");
+}
+
 async function logTransport({ to, subject, html, text }) {
   const link = extractPrimaryLink(text, html);
+  const safeLink = redactLinkToken(link);
   const lines = [
     "",
     DELIMITER,
@@ -135,9 +158,7 @@ async function logTransport({ to, subject, html, text }) {
     `From:    ${getEmailFrom()}`,
     `To:      ${to}`,
     `Subject: ${subject}`,
-    ...(link ? [`Link:    ${link}`] : []),
-    SUB_DELIMITER,
-    String(text || "").trim(),
+    ...(safeLink ? [`Preview: ${safeLink}`] : []),
     DELIMITER,
     "",
   ];
@@ -273,13 +294,11 @@ function resolveTransport() {
 
   const explicit = String(process.env.EMAIL_MODE || "").trim().toLowerCase();
   if (
-    IS_TEST_RUNNER &&
     process.env.NODE_ENV === "production" &&
-    !explicit &&
-    !process.env.RESEND_API_KEY
+    ((!explicit && !hasValidResendCredentials()) || explicit === "log")
   ) {
     console.warn(
-      "[ClassDex Mailer] Warning: NODE_ENV=production and no mail transport (RESEND_API_KEY) is configured. Skipping email delivery.",
+      "[ClassDex Mailer] Warning: NODE_ENV=production and no valid Resend transport is configured. Skipping email delivery.",
     );
     return async () => ({ ok: false, transport: "none" });
   }

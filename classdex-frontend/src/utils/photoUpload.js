@@ -106,7 +106,11 @@ export async function uploadPhoto(file, options = {}) {
     console.warn(
       "Cloudinary is not configured (VITE_CLOUDINARY_CLOUD_NAME / VITE_CLOUDINARY_UPLOAD_PRESET). Using local data URL photo fallback for development.",
     );
+    return readDataUrl(file);
   }
 
-  return readDataUrl(file);
+  console.error(
+    "Cloudinary is not configured (VITE_CLOUDINARY_CLOUD_NAME / VITE_CLOUDINARY_UPLOAD_PRESET) in production build.",
+  );
+  throw new Error("Photo upload service is not configured. Please contact your administrator.");
 }

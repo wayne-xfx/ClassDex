@@ -2,7 +2,27 @@ require("dotenv").config();
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const bcrypt = require("bcryptjs");
-const XLSX = require("xlsx");
+const ExcelJS = require("exceljs");
+
+function readExcelSheetRows(worksheet) {
+  if (!worksheet) return [];
+  const colCount = worksheet.columnCount || 0;
+  const rows = [];
+  for (let r = 1; r <= worksheet.rowCount; r += 1) {
+    const row = worksheet.getRow(r);
+    const width = Math.max(colCount, row.cellCount || 0);
+    const vals = [];
+    for (let c = 1; c <= width; c += 1) {
+      const v = row.getCell(c).value;
+      if (v === null || v === undefined) vals.push("");
+      else if (typeof v === "object" && Array.isArray(v.richText)) vals.push(v.richText.map((t) => t.text || "").join(""));
+      else if (typeof v === "object" && "result" in v) vals.push(v.result ?? "");
+      else vals.push(v);
+    }
+    rows.push(vals);
+  }
+  return rows;
+}
 const { app, resetRateLimitersForTests } = require("../index");
 const { prisma } = require("../db");
 
@@ -86,10 +106,10 @@ test("§3c: Student List Excel Template & Import", async (t) => {
 
     const arrayBuffer = await res.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    const workbook = XLSX.read(buffer, { type: "buffer" });
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer);
+    const sheet = workbook.worksheets[0];
+    const rows = readExcelSheetRows(sheet);
 
     // Verify Class Information section
     assert.strictEqual(rows[0][0], "CLASS INFORMATION");
@@ -111,7 +131,8 @@ test("§3c: Student List Excel Template & Import", async (t) => {
   // Test 2: Round-trip import
   await t.test("POST /api/classes/:id/roster/import round-trips template rows and ignores Class Information", async () => {
     // Generate an xlsx with STUDENTS marker and data rows
-    const wb = XLSX.utils.book_new();
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Sheet1");
     const wsData = [
       ["CLASS INFORMATION", ""],
       ["Class Name", "Irrelevant Ignored Data"],
@@ -122,9 +143,8 @@ test("§3c: Student List Excel Template & Import", async (t) => {
       ["Rizal, Jose P.", 2500002], // numeric to test left padding & coercion
       ["Al-Mansoor, Tariq", "2500003"],
     ];
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+    wsData.forEach((r) => ws.addRow(r));
+    const buf = Buffer.from(await wb.xlsx.writeBuffer());
 
     const res = await fetch(`${baseUrl}/api/classes/${testClass.id}/roster/import`, {
       method: "POST",
@@ -148,17 +168,14 @@ test("§3c: Student List Excel Template & Import", async (t) => {
     assert.strictEqual(body.rows[2].studentId, "2500003");
   });
 
-  // Test 3: Fallback header detection (no STUDENTS marker)
+  // Test 3: Fallback header detection (no STUDENTS marker, real CSV)
   await t.test("POST /api/classes/:id/roster/import parses plain table without STUDENTS marker", async () => {
-    const wb = XLSX.utils.book_new();
-    const wsData = [
-      ["Student Name", "Student ID"],
-      ["Bonifacio, Andres", "2500004"],
-      ["Silang, Gabriela", "2500005"],
-    ];
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+    const csv = [
+      "Student Name,Student ID",
+      "\"Bonifacio, Andres\",2500004",
+      "\"Silang, Gabriela\",2500005",
+    ].join("\r\n");
+    const buf = Buffer.from(csv, "utf8");
 
     const res = await fetch(`${baseUrl}/api/classes/${testClass.id}/roster/import`, {
       method: "POST",
@@ -180,14 +197,11 @@ test("§3c: Student List Excel Template & Import", async (t) => {
 
   // Test 4: Missing marker and headers error
   await t.test("POST /api/classes/:id/roster/import returns 400 when no headers found", async () => {
-    const wb = XLSX.utils.book_new();
-    const wsData = [
-      ["Random Column", "Another Column"],
-      ["Data 1", "Data 2"],
-    ];
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Sheet1");
+    ws.addRow(["Random Column", "Another Column"]);
+    ws.addRow(["Data 1", "Data 2"]);
+    const buf = Buffer.from(await wb.xlsx.writeBuffer());
 
     const res = await fetch(`${baseUrl}/api/classes/${testClass.id}/roster/import`, {
       method: "POST",

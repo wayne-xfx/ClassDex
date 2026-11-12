@@ -1,9 +1,67 @@
 require("dotenv").config();
 const express = require("express");
-const XLSX = require("xlsx");
+const helmet = require("helmet");
+const ExcelJS = require("exceljs");
+
+function parseCsvMatrix(csvText) {
+  const text = String(csvText || "").replace(/^\uFEFF/, "");
+  const rows = [];
+  let row = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      row.push(field);
+      field = "";
+    } else if (ch === "\r" || ch === "\n") {
+      if (ch === "\r" && text[i + 1] === "\n") i += 1;
+      row.push(field);
+      if (row.some((cell) => String(cell).trim() !== "")) rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += ch;
+    }
+  }
+  row.push(field);
+  if (row.some((cell) => String(cell).trim() !== "")) rows.push(row);
+  return rows;
+}
+
+function unwrapExcelCellValue(value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "object") {
+    if (Array.isArray(value.richText)) {
+      return value.richText.map((part) => part.text || "").join("");
+    }
+    if (Object.prototype.hasOwnProperty.call(value, "formula") || Object.prototype.hasOwnProperty.call(value, "sharedFormula")) {
+      return value.result !== undefined && value.result !== null && typeof value.result !== "object"
+        ? value.result
+        : "";
+    }
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value.text === "string") return value.text;
+    return "";
+  }
+  return value;
+}
 const cors = require("cors");
 const session = require("express-session");
-const { rateLimit, MemoryStore } = require("express-rate-limit");
+const { rateLimit, MemoryStore, ipKeyGenerator } = require("express-rate-limit");
 const bcrypt = require("bcryptjs");
 const { randomBytes } = require("node:crypto");
 const { prisma } = require("./db");
@@ -24,6 +82,7 @@ const {
   queueEmail,
 } = require("./email");
 const {
+  MAX_GRADEBOOK_INT,
   isValidScore,
   syncAttendanceScoreAbsence,
   createAbsentActivityScores,
@@ -101,11 +160,76 @@ const app = express();
 const trustProxyHops =
   process.env.TRUST_PROXY !== undefined && process.env.TRUST_PROXY !== ""
     ? Number(process.env.TRUST_PROXY)
-    : 1;
+    : 0;
 app.set("trust proxy", Number.isNaN(trustProxyHops) ? process.env.TRUST_PROXY : trustProxyHops);
 
 const PORT = process.env.PORT || 5000;
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "http://localhost:5173";
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+const DEV_SESSION_SECRET = "classdex-dev-session-secret";
+const ALLOWED_CORS_ORIGINS = (() => {
+  const parsed = String(process.env.FRONTEND_ORIGIN || "")
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/+$/, ""))
+    .filter(Boolean);
+  if (parsed.length > 0) return parsed;
+  return IS_PRODUCTION ? [] : ["http://localhost:5173"];
+})();
+const SESSION_SECRET = (() => {
+  const configured = String(process.env.SESSION_SECRET || "").trim();
+  if (configured) return configured;
+  return IS_PRODUCTION ? "" : DEV_SESSION_SECRET;
+})();
+
+function assertProductionStartupConfig({ requireMailer = require.main === module } = {}) {
+  if (process.env.NODE_ENV !== "production") {
+    return;
+  }
+  const errors = [];
+  const secret = String(process.env.SESSION_SECRET || "").trim();
+  if (
+    !secret ||
+    secret.length < 32 ||
+    secret === DEV_SESSION_SECRET ||
+    secret === "replace-with-a-long-random-string"
+  ) {
+    errors.push("SESSION_SECRET must be at least 32 non-default characters.");
+  }
+  const origins = String(process.env.FRONTEND_ORIGIN || "")
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/+$/, ""))
+    .filter(Boolean);
+  if (origins.length === 0) {
+    errors.push("FRONTEND_ORIGIN must be explicitly configured.");
+  }
+  const appBase = String(
+    process.env.APP_BASE_URL ||
+      process.env.FRONTEND_URL ||
+      process.env.CLIENT_URL ||
+      process.env.FRONTEND_ORIGIN ||
+      "",
+  ).trim();
+  if (!appBase) {
+    errors.push("APP_BASE_URL or FRONTEND_ORIGIN must be configured.");
+  }
+  if (!String(process.env.RECAPTCHA_SECRET_KEY || "").trim()) {
+    errors.push("RECAPTCHA_SECRET_KEY must be configured.");
+  }
+  if (requireMailer) {
+    try {
+      validateMailerConfig();
+    } catch (err) {
+      errors.push(err.message);
+    }
+  }
+  if (errors.length > 0) {
+    throw new Error(
+      `[ClassDex Startup] Refusing to start in NODE_ENV=production:\n - ${errors.join("\n - ")}`,
+    );
+  }
+}
+
+assertProductionStartupConfig();
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync(randomBytes(16).toString("hex"), 12);
 const ROLES = new Set(["FACULTY", "STUDENT"]);
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -115,7 +239,30 @@ const FORGOT_CAPTCHA_ERROR_MESSAGE = "We couldn't verify you're human. Please tr
 const forgotPasswordIpStore = new MemoryStore();
 const forgotPasswordEmailStore = new MemoryStore();
 const changePasswordWrongCurrentStore = new MemoryStore();
+const loginIpStore = new MemoryStore();
+const loginEmailStore = new MemoryStore();
+const registerIpStore = new MemoryStore();
+const verifyEmailIpStore = new MemoryStore();
+const resetPasswordValidateIpStore = new MemoryStore();
+const resetPasswordIpStore = new MemoryStore();
+const classJoinUserStore = new MemoryStore();
+const checkCodeUserStore = new MemoryStore();
+const studentProfileUpdateStore = new MemoryStore();
 const verifyResendCooldownByUser = new Map();
+const MAX_VERIFY_RESEND_MAP_ENTRIES = 5000;
+
+function pruneVerifyResendCooldowns(nowMs = Date.now(), cooldownMs = getVerifyResendCooldownSeconds() * 1000) {
+  for (const [userId, ts] of verifyResendCooldownByUser.entries()) {
+    if (!Number.isFinite(ts) || nowMs - ts >= cooldownMs) {
+      verifyResendCooldownByUser.delete(userId);
+    }
+  }
+  while (verifyResendCooldownByUser.size >= MAX_VERIFY_RESEND_MAP_ENTRIES) {
+    const oldestKey = verifyResendCooldownByUser.keys().next().value;
+    if (oldestKey === undefined) break;
+    verifyResendCooldownByUser.delete(oldestKey);
+  }
+}
 
 function getVerifyResendCooldownSeconds() {
   const parsed = Number(process.env.VERIFY_RESEND_COOLDOWN_SECONDS);
@@ -160,30 +307,182 @@ const changePasswordWrongCurrentLimiter = rateLimit({
     }),
 });
 
+const loginIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 25,
+  skipSuccessfulRequests: true,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  store: loginIpStore,
+  handler: (_req, res) => res.status(429).json({ message: RATE_LIMIT_MESSAGE }),
+});
+
+const loginEmailLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  skipSuccessfulRequests: true,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  store: loginEmailStore,
+  skip: (req) => !normalizeEmail(req.body?.email),
+  keyGenerator: (req) => `login:${ipKeyGenerator(req.ip)}:${normalizeEmail(req.body?.email)}`,
+  handler: (_req, res) => res.status(429).json({ message: RATE_LIMIT_MESSAGE }),
+});
+
+const registerIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 12,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  store: registerIpStore,
+  handler: (_req, res) => res.status(429).json({ message: RATE_LIMIT_MESSAGE }),
+});
+
+const verifyEmailIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 15,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  store: verifyEmailIpStore,
+  handler: (_req, res) => res.status(429).json({ message: RATE_LIMIT_MESSAGE }),
+});
+
+const resetPasswordValidateIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  store: resetPasswordValidateIpStore,
+  handler: (_req, res) => res.status(429).json({ message: RATE_LIMIT_MESSAGE }),
+});
+
+const resetPasswordIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  store: resetPasswordIpStore,
+  handler: (_req, res) => res.status(429).json({ message: RATE_LIMIT_MESSAGE }),
+});
+
+const classJoinLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  store: classJoinUserStore,
+  keyGenerator: (req) =>
+    req.session?.userId ? `class-join:${req.session.userId}` : `class-join-ip:${ipKeyGenerator(req.ip)}`,
+  handler: (_req, res) => res.status(429).json({ message: RATE_LIMIT_MESSAGE }),
+});
+
+const checkCodeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  store: checkCodeUserStore,
+  keyGenerator: (req) =>
+    req.session?.userId ? `check-code:${req.session.userId}` : `check-code-ip:${ipKeyGenerator(req.ip)}`,
+  handler: (_req, res) => res.status(429).json({ message: RATE_LIMIT_MESSAGE }),
+});
+
+const studentProfileUpdateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 12,
+  skipSuccessfulRequests: true,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  store: studentProfileUpdateStore,
+  keyGenerator: (req) =>
+    req.session?.userId ? `student-profile:${req.session.userId}` : `student-profile-ip:${ipKeyGenerator(req.ip)}`,
+  handler: (_req, res) => res.status(429).json({ message: RATE_LIMIT_MESSAGE }),
+});
+
 function resetRateLimitersForTests() {
   forgotPasswordIpStore.resetAll();
   forgotPasswordEmailStore.resetAll();
   changePasswordWrongCurrentStore.resetAll();
+  loginIpStore.resetAll();
+  loginEmailStore.resetAll();
+  registerIpStore.resetAll();
+  verifyEmailIpStore.resetAll();
+  resetPasswordValidateIpStore.resetAll();
+  resetPasswordIpStore.resetAll();
+  classJoinUserStore.resetAll();
+  checkCodeUserStore.resetAll();
+  studentProfileUpdateStore.resetAll();
   verifyResendCooldownByUser.clear();
 }
 
 app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'none'"],
+        formAction: ["'none'"],
+      },
+    },
+    frameguard: { action: "deny" },
+    referrerPolicy: { policy: "no-referrer" },
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    hsts: IS_PRODUCTION ? { maxAge: 31536000, includeSubDomains: true } : false,
+  }),
+);
+app.use("/api", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
+app.use(
   cors({
-    origin: FRONTEND_ORIGIN,
+    origin(requestOrigin, callback) {
+      if (!requestOrigin) return callback(null, true);
+      return callback(null, ALLOWED_CORS_ORIGINS.includes(requestOrigin));
+    },
     credentials: true,
   }),
 );
 app.use(express.json({ limit: "8mb" }));
+
+function containsNullByte(root) {
+  if (root === undefined || root === null) return false;
+  const stack = [root];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (typeof current === "string") {
+      if (current.includes("\u0000")) return true;
+    } else if (Array.isArray(current)) {
+      for (let i = 0; i < current.length; i += 1) {
+        stack.push(current[i]);
+      }
+    } else if (current && typeof current === "object") {
+      const values = Object.values(current);
+      for (let i = 0; i < values.length; i += 1) {
+        stack.push(values[i]);
+      }
+    }
+  }
+  return false;
+}
+
+app.use((req, res, next) => {
+  if (containsNullByte(req.body) || containsNullByte(req.query) || containsNullByte(req.params)) {
+    return res.status(400).json({ message: "Invalid control character in input." });
+  }
+  return next();
+});
 app.use(
   session({
     name: "classdex.sid",
-    secret: process.env.SESSION_SECRET || "classdex-dev-session-secret",
+    secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
       sameSite: "lax",
-      secure: false,
+      secure: IS_PRODUCTION,
       maxAge: 7 * 24 * 60 * 60 * 1000,
     },
   }),
@@ -254,6 +553,13 @@ async function verifyAuthenticatedSession(req, res) {
   }
 }
 
+function regenerateSession(req) {
+  return new Promise((resolve, reject) => {
+    if (!req.session?.regenerate) return resolve();
+    req.session.regenerate((err) => (err ? reject(err) : resolve()));
+  });
+}
+
 async function requireAuth(req, res, next) {
   if (!(await verifyAuthenticatedSession(req, res))) {
     return;
@@ -275,13 +581,71 @@ function optionalText(value) {
   return text || null;
 }
 
+function parseOptionalString(value, { maxLength = 2000 } = {}) {
+  if (value === undefined || value === null) {
+    return { ok: true, value: null };
+  }
+  if (typeof value !== "string") {
+    return { ok: false, reason: "type" };
+  }
+  const text = value.trim();
+  if (text.length > maxLength) {
+    return { ok: false, reason: "length", maxLength };
+  }
+  return { ok: true, value: text || null };
+}
+
+const CLOUDINARY_PHOTO_URL_RE =
+  /^https:\/\/res\.cloudinary\.com\/[a-z0-9_-]+\/image\/(?:upload|authenticated|private)\/\S+$/i;
+
+function hasValidImageMagicBytes(mimeSubtype, buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0 || buffer.length > 5 * 1024 * 1024) {
+    return false;
+  }
+  const subtype = mimeSubtype.toLowerCase();
+  if (subtype === "jpeg") {
+    return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  }
+  if (subtype === "png") {
+    return (
+      buffer.length >= 8 &&
+      buffer[0] === 0x89 &&
+      buffer[1] === 0x50 &&
+      buffer[2] === 0x4e &&
+      buffer[3] === 0x47 &&
+      buffer[4] === 0x0d &&
+      buffer[5] === 0x0a &&
+      buffer[6] === 0x1a &&
+      buffer[7] === 0x0a
+    );
+  }
+  if (subtype === "webp") {
+    return (
+      buffer.length >= 12 &&
+      buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
+      buffer.subarray(8, 12).toString("ascii") === "WEBP"
+    );
+  }
+  return false;
+}
+
 function isValidPhoto(photo) {
-  return (
-    typeof photo === "string" &&
-    photo.length <= 7_000_000 &&
-    (/^https:\/\/\S+$/i.test(photo) ||
-      /^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/]+=*$/i.test(photo))
-  );
+  if (typeof photo !== "string" || photo.length > 7_000_000) {
+    return false;
+  }
+  if (CLOUDINARY_PHOTO_URL_RE.test(photo)) {
+    return true;
+  }
+  const match = photo.match(/^data:image\/(jpeg|png|webp);base64,([a-z0-9+/]+=*)$/i);
+  if (!match) {
+    return false;
+  }
+  try {
+    const decoded = Buffer.from(match[2], "base64");
+    return hasValidImageMagicBytes(match[1], decoded);
+  } catch {
+    return false;
+  }
 }
 
 function normalizeClassCode(value) {
@@ -365,6 +729,12 @@ async function enforceActiveClassMutationGuard(req, res, next) {
     if (target.kind === "join") {
       if (req.session.role !== "STUDENT") {
         return res.status(403).json({ message: "You do not have permission to do that." });
+      }
+      await new Promise((resolve, reject) =>
+        classJoinLimiter(req, res, (err) => (err ? reject(err) : resolve())),
+      );
+      if (res.headersSent) {
+        return;
       }
       if (!(await requireRecaptcha(req, res))) {
         return;
@@ -701,7 +1071,7 @@ app.get("/api/status", (_req, res) => {
   res.json({ message: "ClassDex Backend is running successfully!" });
 });
 
-app.post("/api/auth/register", async (req, res) => {
+app.post("/api/auth/register", registerIpLimiter, async (req, res) => {
   try {
     if (!(await requireRecaptcha(req, res))) {
       return;
@@ -745,6 +1115,7 @@ app.post("/api/auth/register", async (req, res) => {
       },
     });
 
+    await regenerateSession(req);
     req.session.userId = user.id;
     req.session.role = user.role;
     req.session.issuedAt = Date.now();
@@ -760,7 +1131,7 @@ app.post("/api/auth/register", async (req, res) => {
   }
 });
 
-app.post("/api/auth/login", async (req, res) => {
+app.post("/api/auth/login", loginIpLimiter, loginEmailLimiter, async (req, res) => {
   const timeout = setTimeout(() => {
     if (!res.headersSent) {
       res.status(503).json({
@@ -780,28 +1151,35 @@ app.post("/api/auth/login", async (req, res) => {
         .json({ message: "Email and password are required." });
     }
 
-    const user = await prisma.user.findUnique({
+    const authUser = await prisma.user.findUnique({
       where: { email },
+      select: { id: true, password: true },
+    });
+    const matches = await bcrypt.compare(
+      password,
+      authUser ? authUser.password : DUMMY_PASSWORD_HASH,
+    );
+    if (!authUser || !matches) {
+      clearTimeout(timeout);
+      if (res.headersSent) return;
+      return res.status(401).json({ message: "Invalid email or password." });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: authUser.id },
       include: {
         facultyProfile: { select: { photo: true, name: true, department: true, email: true } },
         studentProfile: { select: { photo: true, name: true, studentId: true } },
       },
     });
-    if (!user) {
-      clearTimeout(timeout);
-      if (res.headersSent) return;
-      return res.status(401).json({ message: "Invalid email or password." });
-    }
-
-    const matches = await bcrypt.compare(password, user.password);
-    if (!matches) {
-      clearTimeout(timeout);
-      if (res.headersSent) return;
-      return res.status(401).json({ message: "Invalid email or password." });
-    }
-
     clearTimeout(timeout);
-    if (res.headersSent) return;
+    if (res.headersSent || !user) {
+      if (!res.headersSent) {
+        return res.status(401).json({ message: "Invalid email or password." });
+      }
+      return;
+    }
+    await regenerateSession(req);
     req.session.userId = user.id;
     req.session.role = user.role;
     req.session.issuedAt = Math.max(Date.now(), (user.passwordChangedAt?.getTime() ?? 0) + 1);
@@ -919,7 +1297,7 @@ async function inspectResetToken(rawToken, now = new Date()) {
   return { valid: true, record };
 }
 
-app.get("/api/auth/reset-password/validate", async (req, res) => {
+app.get("/api/auth/reset-password/validate", resetPasswordValidateIpLimiter, async (req, res) => {
   try {
     const check = await inspectResetToken(req.query?.token);
     if (!check.valid) {
@@ -932,7 +1310,7 @@ app.get("/api/auth/reset-password/validate", async (req, res) => {
   }
 });
 
-app.post("/api/auth/reset-password", async (req, res) => {
+app.post("/api/auth/reset-password", resetPasswordIpLimiter, async (req, res) => {
   try {
     const rawToken = String(req.body?.token || "").trim();
     const password = String(req.body?.password || "");
@@ -1098,7 +1476,7 @@ async function inspectVerifyToken(rawToken, now = new Date()) {
   return { valid: true, record };
 }
 
-app.post("/api/auth/verify-email", async (req, res) => {
+app.post("/api/auth/verify-email", verifyEmailIpLimiter, async (req, res) => {
   try {
     const rawToken = String(req.body?.token || "").trim();
     const initialCheck = await inspectVerifyToken(rawToken);
@@ -1195,6 +1573,7 @@ app.post("/api/auth/resend-verification", requireAuth, async (req, res) => {
     const cooldownSeconds = getVerifyResendCooldownSeconds();
     const cooldownMs = cooldownSeconds * 1000;
     const nowMs = Date.now();
+    pruneVerifyResendCooldowns(nowMs, cooldownMs);
     const lastSentMs = verifyResendCooldownByUser.get(user.id) || 0;
     const elapsedMs = nowMs - lastSentMs;
 
@@ -1400,23 +1779,40 @@ app.put(
   requireAuth,
   requireRole("FACULTY"),
   async (req, res) => {
+    const rawPhoto = req.body?.photo;
+    const hasPhotoValue =
+      rawPhoto !== undefined &&
+      rawPhoto !== null &&
+      !(typeof rawPhoto === "string" && rawPhoto.trim() === "");
+    if (hasPhotoValue && !isValidPhoto(typeof rawPhoto === "string" ? rawPhoto.trim() : rawPhoto)) {
+      return res.status(400).json({
+        message: "Upload a JPG, PNG, or WebP photo up to 5 MB.",
+      });
+    }
+    const facName = parseOptionalString(req.body?.name, { maxLength: 120 });
+    const facDepartment = parseOptionalString(req.body?.department, { maxLength: 120 });
+    const facEmail = parseOptionalString(req.body?.email, { maxLength: 254 });
+    const facContact = parseOptionalString(req.body?.contact, { maxLength: 120 });
+    if (!facName.ok || !facDepartment.ok || !facEmail.ok || !facContact.ok) {
+      return res.status(400).json({ message: "Profile text fields must be valid strings within length limits." });
+    }
     try {
       const profile = await prisma.facultyProfile.upsert({
         where: { userId: req.session.userId },
         create: {
           userId: req.session.userId,
-          name: optionalText(req.body?.name),
-          department: optionalText(req.body?.department),
-          photo: optionalText(req.body?.photo),
-          email: optionalText(req.body?.email),
-          contact: optionalText(req.body?.contact),
+          name: facName.value,
+          department: facDepartment.value,
+          photo: optionalText(rawPhoto),
+          email: facEmail.value,
+          contact: facContact.value,
         },
         update: {
-          name: optionalText(req.body?.name),
-          department: optionalText(req.body?.department),
-          photo: optionalText(req.body?.photo),
-          email: optionalText(req.body?.email),
-          contact: optionalText(req.body?.contact),
+          name: facName.value,
+          department: facDepartment.value,
+          photo: optionalText(rawPhoto),
+          email: facEmail.value,
+          contact: facContact.value,
         },
       });
       return res.json({ profile });
@@ -1448,12 +1844,27 @@ app.put(
   "/api/student/profile",
   requireAuth,
   requireRole("STUDENT"),
+  studentProfileUpdateLimiter,
   async (req, res) => {
-    const name = String(req.body?.name || "").trim();
-    const studentId = String(req.body?.studentId || "").trim();
-    const email = String(req.body?.email || "").trim().toLowerCase();
+    if (
+      typeof req.body?.name !== "string" ||
+      typeof req.body?.studentId !== "string" ||
+      typeof req.body?.email !== "string" ||
+      (req.body?.birthdate !== undefined && req.body?.birthdate !== null && typeof req.body.birthdate !== "string")
+    ) {
+      return res.status(400).json({ message: "Student profile fields must be valid text." });
+    }
+    const name = req.body.name.trim();
+    const studentId = req.body.studentId.trim();
+    const email = req.body.email.trim().toLowerCase();
     const photo = req.body?.photo;
-    const birthdateValue = String(req.body?.birthdate || "").trim();
+    const birthdateValue = typeof req.body?.birthdate === "string" ? req.body.birthdate.trim() : "";
+    const stuAddress = parseOptionalString(req.body?.address, { maxLength: 500 });
+    const stuProgram = parseOptionalString(req.body?.program, { maxLength: 120 });
+    const stuSection = parseOptionalString(req.body?.section, { maxLength: 120 });
+    if (name.length > 120 || email.length > 254 || !stuAddress.ok || !stuProgram.ok || !stuSection.ok) {
+      return res.status(400).json({ message: "Student profile text fields exceed allowed format or length." });
+    }
 
     if (!name) {
       return res.status(400).json({ message: "Full name is required." });
@@ -1488,9 +1899,9 @@ app.put(
       const parsedName = parseFullName(name);
       const profileData = {
         name,
-        address: optionalText(req.body?.address),
-        program: optionalText(req.body?.program),
-        section: optionalText(req.body?.section),
+        address: stuAddress.value,
+        program: stuProgram.value,
+        section: stuSection.value,
         studentId,
         photo,
         email,
@@ -1806,6 +2217,7 @@ app.get(
   "/api/classes/check-code",
   requireAuth,
   requireRole("FACULTY"),
+  checkCodeLimiter,
   async (req, res) => {
     const classCode = normalizeClassCode(req.query.code);
     const excludeId = String(req.query.excludeId || "").trim();
@@ -1816,7 +2228,7 @@ app.get(
       const existing = await prisma.class.findFirst({
         where: {
           classCode,
-          ...(excludeId ? { id: { not: excludeId } } : {}),
+          ...(excludeId ? { NOT: { id: excludeId, facultyId: req.session.userId } } : {}),
         },
         select: { id: true },
       });
@@ -1937,10 +2349,23 @@ app.post(
     }
     const courseCode = normalizeCourseCode(req.body?.courseCode);
     const courseTitle = normalizeCourseTitle(req.body?.courseTitle);
-    const sectionName = String(req.body?.sectionName || "").trim();
-    let classCode = normalizeClassCode(req.body?.classCode);
-    if (!sectionName) {
+    const sectionName = typeof req.body?.sectionName === "string" ? req.body.sectionName.trim() : "";
+    if (typeof req.body?.sectionName !== "string" || !sectionName) {
       return res.status(400).json({ field: "sectionName", message: "Section name is required." });
+    }
+    if (sectionName.length > 120) {
+      return res.status(400).json({ field: "sectionName", message: "Section name must be 120 characters or fewer." });
+    }
+    if (req.body?.classCode !== undefined && req.body?.classCode !== null && typeof req.body.classCode !== "string") {
+      return res.status(400).json({ field: "classCode", message: "Use 3–20 letters, numbers, or hyphens for the class code." });
+    }
+    let classCode = normalizeClassCode(req.body?.classCode);
+    const parsedDescription = parseOptionalString(req.body?.description, { maxLength: 2000 });
+    if (!parsedDescription.ok) {
+      return res.status(400).json({
+        field: "description",
+        message: parsedDescription.reason === "length" ? "Description must be 2000 characters or fewer." : "Description must be valid text.",
+      });
     }
     if (classCode && !/^[A-Z0-9-]{3,20}$/.test(classCode)) {
       return res.status(400).json({
@@ -1978,7 +2403,7 @@ app.post(
           courseTitle,
           sectionName,
           classCode,
-          description: optionalText(req.body?.description),
+          description: parsedDescription.value,
           schedule: parsedSchedule.schedule,
           scheduleDays: parsedSchedule.scheduleDays,
           scheduleStartTime: parsedSchedule.scheduleStartTime,
@@ -2344,21 +2769,17 @@ app.get(
         ]);
       }
 
-      const ws = XLSX.utils.aoa_to_sheet(aoa);
-      const range = XLSX.utils.decode_range(ws["!ref"] || "A1:B8");
-      for (let R = 7; R <= range.e.r; ++R) {
-        const cellRef = XLSX.utils.encode_cell({ r: R, c: 1 });
-        if (ws[cellRef]) {
-          ws[cellRef].t = "s";
-          ws[cellRef].z = "@";
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet("Student List");
+      ws.columns = [{ width: 35 }, { width: 25 }];
+      for (let rIdx = 0; rIdx < aoa.length; rIdx += 1) {
+        const row = ws.addRow(aoa[rIdx]);
+        if (rIdx >= 7) {
+          row.getCell(2).numFmt = "@";
         }
       }
 
-      ws["!cols"] = [{ wch: 35 }, { wch: 25 }];
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Student List");
-
-      const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+      const buf = Buffer.from(await wb.xlsx.writeBuffer());
       const sectionSegment = String(classRecord.sectionName || "").trim().replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "");
       const courseSegment = String(classRecord.courseCode || "").trim().replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "");
       const templatePrefix = [
@@ -2389,13 +2810,13 @@ app.post(
       }
 
       const { fileName, fileBase64 } = req.body || {};
-      if (!fileName || !fileBase64) {
+      if (typeof fileName !== "string" || !fileName.trim() || typeof fileBase64 !== "string" || !fileBase64) {
         return res.status(400).json({ message: "File name and file content are required." });
       }
 
-      const ext = path.extname(String(fileName)).toLowerCase();
-      if (![".xlsx", ".xls", ".csv"].includes(ext)) {
-        return res.status(400).json({ message: "Unsupported file type. Use .xlsx, .xls, or .csv." });
+      const ext = path.extname(fileName.trim()).toLowerCase();
+      if (![".xlsx", ".csv"].includes(ext)) {
+        return res.status(400).json({ message: "Unsupported file type. Use .xlsx or .csv." });
       }
 
       const buffer = Buffer.from(fileBase64, "base64");
@@ -2403,19 +2824,37 @@ app.post(
         return res.status(400).json({ message: "File exceeds 2 MB limit." });
       }
 
-      let workbook;
-      try {
-        workbook = XLSX.read(buffer, { type: "buffer", cellFormula: false, cellHTML: false, raw: true });
-      } catch (parseErr) {
-        return res.status(400).json({ message: "Unable to parse file. Ensure it is a valid spreadsheet." });
+      let rawMatrix = [];
+      if (ext === ".csv") {
+        rawMatrix = parseCsvMatrix(buffer.toString("utf8"));
+        if (!rawMatrix.length) {
+          return res.status(400).json({ message: "Spreadsheet contains no sheets." });
+        }
+      } else {
+        if (buffer.length < 4 || !buffer.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))) {
+          return res.status(400).json({ message: "Unable to parse file. Ensure it is a valid .xlsx spreadsheet." });
+        }
+        const workbook = new ExcelJS.Workbook();
+        try {
+          await workbook.xlsx.load(buffer);
+        } catch (parseErr) {
+          return res.status(400).json({ message: "Unable to parse file. Ensure it is a valid spreadsheet." });
+        }
+        if (!workbook.worksheets || !workbook.worksheets.length) {
+          return res.status(400).json({ message: "Spreadsheet contains no sheets." });
+        }
+        const sheet = workbook.worksheets[0];
+        sheet.eachRow({ includeEmpty: false }, (excelRow) => {
+          const colCount = Math.max(excelRow.cellCount, (excelRow.values?.length || 1) - 1);
+          const cells = [];
+          for (let c = 1; c <= colCount; c += 1) {
+            cells.push(unwrapExcelCellValue(excelRow.getCell(c).value));
+          }
+          if (cells.some((cell) => String(cell ?? "").trim() !== "")) {
+            rawMatrix.push(cells);
+          }
+        });
       }
-
-      if (!workbook.SheetNames || !workbook.SheetNames.length) {
-        return res.status(400).json({ message: "Spreadsheet contains no sheets." });
-      }
-
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rawMatrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", blankrows: false, raw: true });
 
       const match = STUDENT_ID_PATTERN.source.match(/\\d\{(\d+)\}/);
       const digitCount = match ? Number(match[1]) : 7;
@@ -2904,8 +3343,8 @@ app.get("/api/classes/:id/quizzes", requireAuth, requireRole("FACULTY"), async (
 
 app.post("/api/classes/:id/quizzes", requireAuth, requireRole("FACULTY"), async (req, res) => {
   const title = String(req.body?.title || "").trim();
-  const totalItems = Number(req.body?.totalItems);
-  if (!title || !Number.isInteger(totalItems) || totalItems < 1) return res.status(400).json({ message: "Quiz title and a positive whole-number total are required." });
+  const totalItems = req.body?.totalItems;
+  if (!title || !Number.isInteger(totalItems) || totalItems < 1 || totalItems > MAX_GRADEBOOK_INT) return res.status(400).json({ message: "Quiz title and a positive whole-number total are required." });
   try {
     if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
     const session = await prisma.quizSession.create({ data: { classId: req.params.id, title, totalItems, date: manilaDate() }, include: { scores: true } });
@@ -2915,8 +3354,8 @@ app.post("/api/classes/:id/quizzes", requireAuth, requireRole("FACULTY"), async 
 
 app.patch("/api/quizzes/:sessionId", requireAuth, requireRole("FACULTY"), async (req, res) => {
   const title = String(req.body?.title || "").trim();
-  const totalItems = Number(req.body?.totalItems);
-  if (!title || !Number.isInteger(totalItems) || totalItems < 1) return res.status(400).json({ message: "Quiz title and a positive whole-number total are required." });
+  const totalItems = req.body?.totalItems;
+  if (!title || !Number.isInteger(totalItems) || totalItems < 1 || totalItems > MAX_GRADEBOOK_INT) return res.status(400).json({ message: "Quiz title and a positive whole-number total are required." });
   try {
     const session = await prisma.quizSession.findFirst({ where: { id: req.params.sessionId, class: { is: { facultyId: req.session.userId } } }, include: { scores: { where: { score: { not: null } }, select: { studentId: true, score: true, studentProfile: { select: { name: true } } } } } });
     if (!session) return res.status(404).json({ message: "Quiz session not found." });
@@ -2951,8 +3390,8 @@ app.put("/api/quizzes/:sessionId/scores", requireAuth, requireRole("FACULTY"), a
       if (!item || typeof item.studentId !== "string" || !item.studentId.trim()) {
         return res.status(400).json({ message: "Every item must have a valid studentId." });
       }
-      const score = Number(item.score);
-      if (!Number.isInteger(score) || score < 0) {
+      const score = item.score;
+      if (!Number.isInteger(score) || score < 0 || score > MAX_GRADEBOOK_INT) {
         return res.status(400).json({ message: "Score must be a non-negative whole number." });
       }
       if (score > session.totalItems) {
@@ -2960,7 +3399,22 @@ app.put("/api/quizzes/:sessionId/scores", requireAuth, requireRole("FACULTY"), a
       }
     }
 
-    const studentIds = rawItems.map((item) => item.studentId.trim());
+    const studentIds = [...new Set(rawItems.map((item) => item.studentId.trim()))];
+
+    if (studentIds.length > 0) {
+      const approvedEnrollments = await prisma.classEnrollment.findMany({
+        where: {
+          classId: session.classId,
+          studentProfileId: { in: studentIds },
+          status: "APPROVED",
+        },
+        select: { studentProfileId: true },
+      });
+      const approvedSet = new Set(approvedEnrollments.map((e) => e.studentProfileId));
+      if (studentIds.some((id) => !approvedSet.has(id))) {
+        return res.status(400).json({ message: "All students must have an approved enrollment in this class." });
+      }
+    }
 
     const attendanceSession = await prisma.classSession.findUnique({
       where: {
@@ -2987,7 +3441,7 @@ app.put("/api/quizzes/:sessionId/scores", requireAuth, requireRole("FACULTY"), a
       rawItems.map((item) => {
         const studentId = item.studentId.trim();
         const isAbsent = absentSet.has(studentId);
-        const score = isAbsent ? null : Number(item.score);
+        const score = isAbsent ? null : item.score;
         return prisma.quizScore.upsert({
           where: {
             sessionId_studentId: {
@@ -3016,8 +3470,8 @@ app.put("/api/quizzes/:sessionId/scores", requireAuth, requireRole("FACULTY"), a
 });
 
 app.put("/api/quizzes/:sessionId/scores/:studentId", requireAuth, requireRole("FACULTY"), async (req, res) => {
-  const score = Number(req.body?.score);
-  if (!Number.isInteger(score) || score < 0) return res.status(400).json({ message: "Score must be a non-negative whole number." });
+  const score = req.body?.score;
+  if (!Number.isInteger(score) || score < 0 || score > MAX_GRADEBOOK_INT) return res.status(400).json({ message: "Score must be a non-negative whole number." });
   try {
     const session = await prisma.quizSession.findFirst({ where: { id: req.params.sessionId, class: { is: { facultyId: req.session.userId } } } });
     if (!session) return res.status(404).json({ message: "Quiz session not found." });
@@ -3082,18 +3536,20 @@ app.get("/api/students/:profileId/photo", requireAuth, async (req, res) => {
         const allowed = await prisma.class.findFirst({
           where: {
             facultyId: req.session.userId,
-            OR: [
-              { enrollments: { some: { studentProfileId: profile.id } } },
-              { roster: { some: { studentId: profile.studentId } } },
-            ],
+            enrollments: {
+              some: {
+                studentProfileId: profile.id,
+                status: { in: ["APPROVED", "PENDING", "DROPPED"] },
+              },
+            },
           },
           select: { id: true },
         });
         if (!allowed) {
-          return res.status(403).json({ message: "You do not have permission to view this photo." });
+          return res.status(404).json({ message: "Photo not found." });
         }
       } else {
-        return res.status(403).json({ message: "You do not have permission to view this photo." });
+        return res.status(404).json({ message: "Photo not found." });
       }
     }
 
@@ -3724,14 +4180,22 @@ app.patch(
       }
 
       if (req.body?.sectionName !== undefined) {
-        const sectionName = String(req.body.sectionName || "").trim();
-        if (!sectionName) {
+        if (typeof req.body.sectionName !== "string" || !req.body.sectionName.trim()) {
           return res.status(400).json({ field: "sectionName", message: "Section name is required." });
+        }
+        const sectionName = req.body.sectionName.trim();
+        if (sectionName.length > 120) {
+          return res.status(400).json({ field: "sectionName", message: "Section name must be 120 characters or fewer." });
         }
         updateData.sectionName = sectionName;
       }
 
       if (req.body?.classCode !== undefined) {
+        if (typeof req.body.classCode !== "string") {
+          return res.status(400).json({
+            message: "Use 3–20 letters, numbers, or hyphens for the class code.",
+          });
+        }
         const classCode = normalizeClassCode(req.body.classCode);
         if (!/^[A-Z0-9-]{3,20}$/.test(classCode)) {
           return res.status(400).json({
@@ -3742,7 +4206,14 @@ app.patch(
       }
 
       if (req.body?.description !== undefined) {
-        updateData.description = optionalText(req.body.description);
+        const parsedDescription = parseOptionalString(req.body.description, { maxLength: 2000 });
+        if (!parsedDescription.ok) {
+          return res.status(400).json({
+            field: "description",
+            message: parsedDescription.reason === "length" ? "Description must be 2000 characters or fewer." : "Description must be valid text.",
+          });
+        }
+        updateData.description = parsedDescription.value;
       }
 
       const hasScheduleField = [
@@ -3944,7 +4415,7 @@ app.post(
     if (!title) {
       return res.status(400).json({ message: "Activity title is required." });
     }
-    if (maxScore !== null && (!Number.isInteger(maxScore) || maxScore < 1)) {
+    if (maxScore !== null && (!Number.isInteger(maxScore) || maxScore < 1 || maxScore > MAX_GRADEBOOK_INT)) {
       return res.status(400).json({ message: "Maximum score must be null or a positive whole number." });
     }
 
@@ -4002,7 +4473,7 @@ app.patch(
       data.title = body.title.trim();
     }
     if (Object.prototype.hasOwnProperty.call(body, "maxScore")) {
-      if (body.maxScore !== null && (!Number.isInteger(body.maxScore) || body.maxScore < 1)) {
+      if (body.maxScore !== null && (!Number.isInteger(body.maxScore) || body.maxScore < 1 || body.maxScore > MAX_GRADEBOOK_INT)) {
         return res.status(400).json({ message: "Maximum score must be null or a positive whole number." });
       }
       data.maxScore = body.maxScore;
@@ -4152,6 +4623,7 @@ app.put(
       const enrollment = await prisma.classEnrollment.findFirst({
         where: {
           classId: activity.classId,
+          status: "APPROVED",
           studentProfileId: req.params.studentId,
         },
         select: { studentProfileId: true },
@@ -4300,7 +4772,8 @@ app.patch(
     if (
       Object.keys(req.body || {}).some((key) => key !== "maxScore") ||
       !Number.isInteger(maxScore) ||
-      maxScore < 1
+      maxScore < 1 ||
+      maxScore > MAX_GRADEBOOK_INT
     ) {
       return res.status(400).json({
         message: "Provide only a positive whole-number maxScore.",
@@ -4434,6 +4907,7 @@ app.put(
       const enrollment = await prisma.classEnrollment.findFirst({
         where: {
           classId: project.classId,
+          status: "APPROVED",
           studentProfileId: req.params.studentId,
         },
         select: { studentProfileId: true },
@@ -5203,7 +5677,7 @@ app.get(
         return res.status(404).json({ message: "Class not found." });
       }
 
-      const workbookBuffer = buildExcelWorkbook(classRecord, req.query.types);
+      const workbookBuffer = await buildExcelWorkbook(classRecord, req.query.types);
       const safeSectionName = classRecord.sectionName.replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "") || "class";
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename="${safeSectionName}-export.xlsx"`);
@@ -5361,6 +5835,35 @@ app.get(
         return res.status(404).json({ message: "Class not found." });
       }
 
+      const { enrollments: studentEnrollments, ...classData } = classRecord;
+      const studentEnrollment = studentEnrollments?.[0] || null;
+      if (studentEnrollment?.status === "PENDING") {
+        return res.json({
+          student: null,
+          class: {
+            id: classData.id,
+            courseCode: classData.courseCode,
+            courseTitle: classData.courseTitle,
+            sectionName: classData.sectionName,
+            archivedAt: classData.archivedAt,
+            enrollmentStatus: "PENDING",
+            droppedAt: null,
+            joinedAt: studentEnrollment.joinedAt || null,
+            recordSummary: {
+              attendance: "—",
+              recitation: "—",
+              activities: "—",
+              quiz: "—",
+            },
+          },
+          attendance: [],
+          recitations: [],
+          activities: [],
+          projects: [],
+          quizzes: [],
+        });
+      }
+
       const [attendance, recitations, rawActivities, projects, quizzes] = await Promise.all([
         prisma.attendanceRecord.findMany({
           where: { studentId: profile.id, session: { is: { classId: classRecord.id } } },
@@ -5413,8 +5916,6 @@ app.get(
         ...item,
         session: item.activity?.session || null,
       }));
-      const { enrollments: studentEnrollments, ...classData } = classRecord;
-      const studentEnrollment = studentEnrollments?.[0] || null;
 
       return res.json({
         student: profile,
@@ -5482,6 +5983,16 @@ app.post(
         if (existingEnrollment?.status === "APPROVED") {
           return { kind: "existing", enrollment: existingEnrollment, status: "APPROVED", message: "You have already joined this class." };
         }
+        if (existingEnrollment?.status === "DECLINED" || existingEnrollment?.status === "DROPPED") {
+          return {
+            kind: "blocked",
+            status: existingEnrollment.status,
+            message:
+              existingEnrollment.status === "DECLINED"
+                ? "Your request to join this class was declined by the instructor."
+                : "You have been dropped from this class and cannot rejoin with an invite code.",
+          };
+        }
 
         const studentId = String(profile.studentId ?? "").trim();
         const roster = await tx.classRoster.findMany({ where: { classId: classRecord.id, droppedAt: null }, select: { studentId: true } });
@@ -5524,6 +6035,12 @@ app.post(
               : "Waiting for instructor approval.",
         };
       });
+      if (joinResult.kind === "blocked") {
+        return res.status(403).json({
+          message: joinResult.message,
+          status: joinResult.status,
+        });
+      }
       if (joinResult.kind === "created") {
         queueEmail(buildJoinEmail({
           studentName: profile.name,
@@ -5575,6 +6092,26 @@ app.post(
   },
 );
 
+app.use((err, _req, res, _next) => {
+  if (res.headersSent) {
+    return;
+  }
+  if (
+    err?.type === "entity.parse.failed" ||
+    (err instanceof SyntaxError && err.status === 400 && "body" in err)
+  ) {
+    return res.status(400).json({ message: "Invalid JSON request body." });
+  }
+  if (err?.type === "entity.too.large" || err?.status === 413) {
+    return res.status(413).json({ message: "Request payload exceeds the 8 MB limit." });
+  }
+  if (err?.status && Number.isInteger(err.status) && err.status >= 400 && err.status < 500) {
+    return res.status(err.status).json({ message: "Invalid request." });
+  }
+  console.error("Unhandled request error:", err?.message || err);
+  return res.status(500).json({ message: "Unable to complete your request right now." });
+});
+
 if (require.main === module) {
   validateMailerConfig();
   app.listen(PORT, () => {
@@ -5585,6 +6122,8 @@ if (require.main === module) {
 module.exports = {
   app,
   resetRateLimitersForTests,
+  verifyResendCooldownByUser,
+  pruneVerifyResendCooldowns,
   matchClassScopedMutationTarget,
   ARCHIVED_READ_ONLY_MESSAGE,
   ARCHIVED_JOIN_MESSAGE,

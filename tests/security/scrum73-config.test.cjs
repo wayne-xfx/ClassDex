@@ -1,0 +1,535 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const net = require("node:net");
+const { spawn, execFileSync, execSync } = require("node:child_process");
+
+const {
+  QA_PASSWORD,
+  initSecurityBackend,
+  apiRequest,
+  loginAs,
+  createSecurityFixtures,
+} = require("./helpers/security-harness.cjs");
+const { startBrowserStack } = require("./helpers/browser-harness.cjs");
+const { initSecurityTestEnv, assertSafeTestDatabaseUrl } = require("./setup.cjs");
+
+const { testHost, env: safeEnv } = initSecurityTestEnv();
+const sec = initSecurityBackend();
+const repoRoot = path.resolve(__dirname, "../..");
+const { prisma, mailer, backendIndex } = sec;
+
+function findFreePort() {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.unref();
+    srv.on("error", reject);
+    srv.listen(0, "127.0.0.1", () => {
+      const { port } = srv.address();
+      srv.close((err) => (err ? reject(err) : resolve(port)));
+    });
+  });
+}
+
+async function waitForHttp(url, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastErr;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(url);
+      return res;
+    } catch (err) {
+      lastErr = err;
+    }
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  throw new Error(`Timed out waiting for ${url}: ${lastErr?.message || "unreachable"}`);
+}
+
+test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Dependency Audit", async (t) => {
+  const srv = await sec.startServer();
+  const stack = await startBrowserStack();
+  const fx = await createSecurityFixtures(prisma, "s73");
+  const extraCleanupEmails = new Set();
+
+  t.after(async () => {
+    backendIndex.resetRateLimitersForTests();
+    if (extraCleanupEmails.size) {
+      await prisma.user.deleteMany({
+        where: { email: { in: [...extraCleanupEmails].filter((e) => e.startsWith("qa_")) } },
+      });
+    }
+    await fx.cleanup();
+    await stack.close();
+    await srv.close();
+    await prisma.$disconnect();
+  });
+
+  await t.test("CONF-01a: passwords use bcrypt cost 12, passwordValidator matches shared rules, and zero hashes leak via API", async () => {
+    const indexSrc = fs.readFileSync(path.join(repoRoot, "classdex-backend", "index.js"), "utf8");
+    const hashCalls = [...indexSrc.matchAll(/bcrypt\.hash\([^,]+,\s*(\d+)\s*\)/g)].map((m) => Number(m[1]));
+    assert.ok(hashCalls.length >= 3);
+    for (const rounds of hashCalls) assert.equal(rounds, 12);
+    assert.ok(indexSrc.includes("bcrypt.compare("));
+
+    const rules = JSON.parse(fs.readFileSync(path.join(repoRoot, "shared", "passwordRules.json"), "utf8"));
+    assert.equal(rules.minLength, 8);
+
+    const me = await apiRequest(srv.baseUrl, "POST", "/api/auth/login", {
+      body: { email: fx.stuA1.email, password: QA_PASSWORD },
+    });
+    assert.equal(me.status, 200);
+    assert.equal("password" in me.json.user, false);
+  });
+
+  await t.test("CONF-01b: password policy must prevent silent >72-byte bcrypt truncation", async () => {
+    const email = `qa_c01_72b_${fx.runId}@test.local`.toLowerCase();
+    extraCleanupEmails.add(email);
+    const pwPrefix = "A".repeat(72);
+    const pw1 = `${pwPrefix}_first_secret_suffix`;
+    const pw2 = `${pwPrefix}_completely_different_suffix`;
+
+    try {
+      const regOver = await apiRequest(srv.baseUrl, "POST", "/api/auth/register", {
+        body: {
+          name: "qa_Bcrypt72",
+          email,
+          password: pw1,
+          confirmPassword: pw1,
+          role: "STUDENT",
+          recaptchaToken: "ok",
+        },
+      });
+      assert.equal(regOver.status, 400, `Expected 400 for >72-byte password on register, got ${regOver.status}`);
+      assert.match(regOver.json?.message || "", /72 bytes/i);
+
+      // Multi-byte UTF-8 (25x 3-byte chars = 75 bytes < 72 chars) must also be rejected
+      const utf8Over = "€".repeat(25);
+      const regUtf8 = await apiRequest(srv.baseUrl, "POST", "/api/auth/register", {
+        body: {
+          name: "qa_Bcrypt72",
+          email,
+          password: utf8Over,
+          confirmPassword: utf8Over,
+          role: "STUDENT",
+          recaptchaToken: "ok",
+        },
+      });
+      assert.equal(regUtf8.status, 400);
+
+      const regExact72 = await apiRequest(srv.baseUrl, "POST", "/api/auth/register", {
+        body: {
+          name: "qa_Bcrypt72",
+          email,
+          password: pwPrefix,
+          confirmPassword: pwPrefix,
+          role: "STUDENT",
+          recaptchaToken: "ok",
+        },
+      });
+      assert.equal(regExact72.status, 201);
+
+      const wrongLogin = await apiRequest(srv.baseUrl, "POST", "/api/auth/login", {
+        body: { email, password: `${pwPrefix.slice(0, 71)}B` },
+      });
+      assert.equal(wrongLogin.status, 401);
+
+      const overChange = await apiRequest(srv.baseUrl, "POST", "/api/auth/change-password", {
+        cookie: regExact72.sidCookie,
+        body: {
+          currentPassword: pwPrefix,
+          newPassword: pw2,
+          confirmPassword: pw2,
+        },
+      });
+      assert.equal(overChange.status, 400);
+    } finally {
+      await prisma.user.deleteMany({ where: { email } });
+      extraCleanupEmails.delete(email);
+    }
+  });
+
+  await t.test("CONF-02a: HttpOnly SameSite=Lax cookie flags, SHA-256 32-byte single-use tokens, and non-mutating CSRF design verified", async () => {
+    const login = await loginAs(srv.baseUrl, fx.facA.email);
+    assert.equal(login.status, 200);
+    const sidHeader = login.setCookies.find((c) => c.startsWith("classdex.sid="));
+    assert.ok(sidHeader);
+    assert.match(sidHeader, /HttpOnly/i);
+    assert.match(sidHeader, /SameSite=Lax/i);
+
+    const tokenSrc = fs.readFileSync(path.join(repoRoot, "classdex-backend", "src", "utils", "tokens.js"), "utf8");
+    assert.match(tokenSrc, /randomBytes\(32\)/);
+    assert.match(tokenSrc, /createHash\("sha256"\)/);
+    assert.match(tokenSrc, /DEFAULT_RESET_TTL_MINUTES\s*=\s*30/);
+    assert.match(tokenSrc, /DEFAULT_VERIFY_TTL_HOURS\s*=\s*24/);
+  });
+
+  await t.test("CONF-02b: production session configuration enables Secure cookies and regenerates session ID on login (external store deferred to 6.3)", async () => {
+    const indexSrc = fs.readFileSync(path.join(repoRoot, "classdex-backend", "index.js"), "utf8");
+    assert.ok(
+      !/cookie:\s*\{[^}]*secure:\s*false\b/s.test(indexSrc),
+      "Session cookie hardcodes secure: false regardless of NODE_ENV/HTTPS",
+    );
+    assert.ok(indexSrc.includes("req.session.regenerate"), "Session regeneration missing");
+
+    const login1 = await loginAs(srv.baseUrl, fx.facA.email);
+    assert.equal(login1.status, 200);
+    const login2 = await apiRequest(srv.baseUrl, "POST", "/api/auth/login", {
+      cookie: login1.sidCookie,
+      body: { email: fx.facA.email, password: QA_PASSWORD },
+    });
+    assert.equal(login2.status, 200);
+    assert.ok(login2.sidCookie && login2.sidCookie !== login1.sidCookie, "Expected rotated classdex.sid on re-login");
+    const oldSessionMe = await apiRequest(srv.baseUrl, "GET", "/api/auth/me", { cookie: login1.sidCookie });
+    assert.equal(oldSessionMe.status, 401, "Prior session ID must be invalidated upon session regeneration");
+  });
+
+  await t.test("CONF-03: API & browser responses must include Helmet security headers, remove X-Powered-By, and set Cache-Control: no-store on sensitive endpoints", async () => {
+    const login = await loginAs(srv.baseUrl, fx.facA.email);
+    const me = await apiRequest(srv.baseUrl, "GET", "/api/auth/me", { cookie: login.sidCookie });
+    assert.equal(me.status, 200);
+
+    const ctx = await stack.newGuardedContext();
+    const page = await ctx.newPage();
+    const apiResPromise = page.waitForResponse((r) => r.url().includes("/api/status"));
+    await page.goto(`${stack.frontendUrl}/login`, { waitUntil: "networkidle" });
+    await page.evaluate(() => fetch("/api/status"));
+    const apiRes = await apiResPromise.catch(() => null);
+    const docRes = await page.goto(`${stack.frontendUrl}/`, { waitUntil: "networkidle" });
+    const docHeaders = docRes.headers();
+    await ctx.close();
+
+    assert.equal(me.headers.get("x-powered-by"), null, `X-Powered-By header leaked: ${me.headers.get("x-powered-by")}`);
+    assert.equal(me.headers.get("x-content-type-options"), "nosniff", "Missing X-Content-Type-Options: nosniff");
+    assert.ok(me.headers.get("content-security-policy"), "Missing Content-Security-Policy header");
+    assert.ok(me.headers.get("x-frame-options") || (me.headers.get("content-security-policy") || "").includes("frame-ancestors"), "Missing clickjacking header");
+    assert.ok(me.headers.get("referrer-policy"), "Missing Referrer-Policy header");
+    assert.match(me.headers.get("cache-control") || "", /no-store/i, "Missing Cache-Control: no-store on /api/auth/me");
+    assert.ok(apiRes || docHeaders);
+  });
+
+  await t.test("CONF-04: CORS rejects untrusted evil origins in API & Playwright and allows configured FRONTEND_ORIGIN with credentials", async () => {
+    const evilPreflight = await fetch(`${srv.baseUrl}/api/auth/me`, {
+      method: "OPTIONS",
+      headers: {
+        Origin: "https://evil.example",
+        "Access-Control-Request-Method": "GET",
+      },
+    });
+    const evilPreflightAcao = evilPreflight.headers.get("access-control-allow-origin");
+    assert.notEqual(evilPreflightAcao, "https://evil.example");
+    assert.notEqual(evilPreflightAcao, "*");
+
+    const evilGet = await apiRequest(srv.baseUrl, "GET", "/api/status", {
+      headers: { Origin: "https://evil.example" },
+    });
+    const evilGetAcao = evilGet.headers.get("access-control-allow-origin");
+    assert.notEqual(evilGetAcao, "https://evil.example");
+    assert.notEqual(evilGetAcao, "*");
+
+    const configuredOrigin = process.env.FRONTEND_ORIGIN || "http://localhost:5173";
+    const allowedGet = await apiRequest(srv.baseUrl, "GET", "/api/status", {
+      headers: { Origin: configuredOrigin },
+    });
+    assert.equal(allowedGet.headers.get("access-control-allow-origin"), configuredOrigin);
+    assert.equal(allowedGet.headers.get("access-control-allow-credentials"), "true");
+
+    // Verify browser cross-origin fetch from simulated https://evil.example page cannot read /api/auth/me
+    const ctx = await stack.newGuardedContext();
+    const page = await ctx.newPage();
+    await page.route("https://evil.example/**", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!doctype html><h1>Untrusted Site</h1>",
+      }),
+    );
+    await page.goto("https://evil.example/attack.html");
+    const corsBlocked = await page.evaluate(async (target) => {
+      try {
+        await fetch(`${target}/api/auth/me`, { credentials: "include" });
+        return false;
+      } catch {
+        return true;
+      }
+    }, stack.backendUrl);
+    assert.equal(corsBlocked, true);
+    await ctx.close();
+  });
+
+  await t.test("CONF-05a: zero secrets committed in git history and .env.test / backend .env untracked", async () => {
+    const trackedEnv = execFileSync("git", ["ls-files", "*env*"], { cwd: repoRoot, encoding: "utf8" })
+      .split(/\r?\n/)
+      .filter(Boolean);
+    assert.ok(!trackedEnv.includes("classdex-backend/.env"));
+    assert.ok(!trackedEnv.includes("classdex-backend/.env.test"));
+
+    // Verify our workspace history contains zero real Resend/Postgres credentials (placeholders only)
+    const rawExample = fs.readFileSync(path.join(repoRoot, "classdex-backend", ".env.example"), "utf8");
+    assert.ok(!/ep-polished-night|ep-orange-dream/.test(rawExample));
+  });
+
+  await t.test("CONF-05b: root .env file must not be tracked in git index", async () => {
+    const tracked = execFileSync("git", ["ls-files", ".env"], { cwd: repoRoot, encoding: "utf8" }).trim();
+    assert.equal(tracked, "", "Root .env is currently tracked in git index (contains PORT only, zero secrets)");
+  });
+
+  await t.test("CONF-06: frontend dist/ build contains zero source maps and zero server-side secrets", async () => {
+    const distDir = path.join(repoRoot, "classdex-frontend", "dist");
+    assert.ok(fs.existsSync(distDir), "Expected classdex-frontend/dist to exist from vite build");
+    const files = [];
+    function walk(d) {
+      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        const full = path.join(d, e.name);
+        if (e.isDirectory()) walk(full);
+        else files.push(full);
+      }
+    }
+    walk(distDir);
+    assert.equal(files.some((f) => f.endsWith(".map")), false, "Unexpected .map source maps in dist/");
+
+    const forbidden = [
+      "RECAPTCHA_SECRET_KEY",
+      "RESEND_API_KEY",
+      "SESSION_SECRET",
+      "CLOUDINARY_API_SECRET",
+      "DATABASE_URL",
+      "ep-polished-night",
+      "ep-orange-dream",
+    ];
+    for (const file of files) {
+      if (/\.(png|svg|ico)$/i.test(file)) continue;
+      const content = fs.readFileSync(file, "utf8");
+      for (const kw of forbidden) {
+        assert.equal(content.includes(kw), false, `Found ${kw} in built frontend asset ${path.basename(file)}`);
+      }
+    }
+  });
+
+  await t.test("CONF-07: real classdex-backend/index.js under NODE_ENV=production disables /__e2e/* routes (404)", async () => {
+    const guardedHost = assertSafeTestDatabaseUrl(safeEnv.DATABASE_URL, { label: "CONF-07 prod probe" });
+    console.log(`[CONF-07] Spawning real classdex-backend/index.js in NODE_ENV=production against Neon test host: ${guardedHost}`);
+
+    const indexSrc = fs.readFileSync(path.join(repoRoot, "classdex-backend", "index.js"), "utf8");
+    const backendPkg = JSON.parse(fs.readFileSync(path.join(repoRoot, "classdex-backend", "package.json"), "utf8"));
+    assert.equal(indexSrc.includes("__e2e"), false, "Production index.js must not reference __e2e endpoints");
+    assert.ok(!String(backendPkg.scripts?.start || "").includes("e2e-backend"), "Production start script must not invoke e2e-backend.cjs");
+
+    const baseChildEnv = { ...process.env };
+    delete baseChildEnv.NODE_TEST_CONTEXT;
+
+    const prodPort = await findFreePort();
+    const child = spawn(process.execPath, [path.join(repoRoot, "classdex-backend", "index.js")], {
+      cwd: path.join(repoRoot, "classdex-backend"),
+      env: {
+        ...baseChildEnv,
+        NODE_ENV: "production",
+        PORT: String(prodPort),
+        DATABASE_URL: safeEnv.DATABASE_URL,
+        SESSION_SECRET: "qa-test-production-session-secret-0123456789",
+        FRONTEND_ORIGIN: "https://app.example.test",
+        APP_BASE_URL: "https://app.example.test",
+        RECAPTCHA_SECRET_KEY: "qa-dummy",
+        EMAIL_MODE: "resend",
+        RESEND_API_KEY: "re_qa_unused_test_key",
+        EMAIL_FROM: "ClassDex <no-reply@example.test>",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    try {
+      const baseUrl = `http://127.0.0.1:${prodPort}`;
+      const st = await waitForHttp(`${baseUrl}/api/status`);
+      assert.equal(st.status, 200);
+
+      const e2eEmailsGet = await fetch(`${baseUrl}/__e2e/emails`);
+      const e2eEmailsDel = await fetch(`${baseUrl}/__e2e/emails`, { method: "DELETE" });
+      const e2eReset = await fetch(`${baseUrl}/__e2e/reset-rate-limiters`, { method: "POST" });
+      assert.equal(e2eEmailsGet.status, 404);
+      assert.equal(e2eEmailsDel.status, 404);
+      assert.equal(e2eReset.status, 404);
+    } finally {
+      child.kill();
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  });
+
+  await t.test("CONF-08: NODE_ENV=production startup must fail fast when SESSION_SECRET, FRONTEND_ORIGIN, or production mailer config are missing", async () => {
+    const guardedHost = assertSafeTestDatabaseUrl(safeEnv.DATABASE_URL, { label: "CONF-08 prod startup probe" });
+    console.log(`[CONF-08] Testing NODE_ENV=production fail-fast behavior against Neon test host: ${guardedHost}`);
+
+    const baseChildEnv = { ...process.env };
+    delete baseChildEnv.NODE_TEST_CONTEXT;
+
+    const prodPort = await findFreePort();
+    const child = spawn(process.execPath, [path.join(repoRoot, "classdex-backend", "index.js")], {
+      cwd: path.join(repoRoot, "classdex-backend"),
+      env: {
+        ...baseChildEnv,
+        NODE_ENV: "production",
+        PORT: String(prodPort),
+        DATABASE_URL: safeEnv.DATABASE_URL,
+        // Intentionally blank so dotenv does NOT backfill from disk .env
+        SESSION_SECRET: "",
+        FRONTEND_ORIGIN: "",
+        APP_BASE_URL: "",
+        RECAPTCHA_SECRET_KEY: "",
+        RESEND_API_KEY: "",
+        EMAIL_FROM: "",
+        EMAIL_MODE: "",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let exitedEarly = false;
+    const outputChunks = [];
+    child.stdout.on("data", (d) => outputChunks.push(d.toString()));
+    child.stderr.on("data", (d) => outputChunks.push(d.toString()));
+    child.on("exit", () => {
+      exitedEarly = true;
+    });
+
+    try {
+      const deadline = Date.now() + 12_000;
+      let reachable = false;
+      let badJsonBody = "";
+      while (Date.now() < deadline && !exitedEarly) {
+        try {
+          const r = await fetch(`http://127.0.0.1:${prodPort}/api/status`);
+          if (r.ok) {
+            reachable = true;
+            const malformed = await fetch(`http://127.0.0.1:${prodPort}/api/auth/login`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: "{bad-json",
+            });
+            badJsonBody = await malformed.text();
+            break;
+          }
+        } catch {
+          // still starting
+        }
+        await new Promise((r) => setTimeout(r, 200));
+      }
+
+      const logs = outputChunks.join("");
+      assert.equal(reachable, false, "Backend must not boot in NODE_ENV=production when required secrets/origins/mailer are missing");
+      assert.equal(exitedEarly, true, "Expected NODE_ENV=production with missing config to exit immediately");
+      assert.ok(child.exitCode !== 0, `Expected non-zero exit code, got ${child.exitCode}`);
+      assert.equal(/defaulting to EMAIL_MODE=log/i.test(logs), false, "Production startup must never fall back to EMAIL_MODE=log");
+      assert.match(logs, /SESSION_SECRET|Refusing to start in NODE_ENV=production/i);
+
+      // Also verify failing fast when only EMAIL_MODE=log or missing RESEND credentials remain
+      const mailerPort = await findFreePort();
+      const mailerChild = spawn(process.execPath, [path.join(repoRoot, "classdex-backend", "index.js")], {
+        cwd: path.join(repoRoot, "classdex-backend"),
+        env: {
+          ...baseChildEnv,
+          NODE_ENV: "production",
+          PORT: String(mailerPort),
+          DATABASE_URL: safeEnv.DATABASE_URL,
+          SESSION_SECRET: "qa-test-production-session-secret-0123456789",
+          FRONTEND_ORIGIN: "https://app.example.test",
+          APP_BASE_URL: "https://app.example.test",
+          RECAPTCHA_SECRET_KEY: "qa-dummy",
+          EMAIL_MODE: "log",
+          RESEND_API_KEY: "",
+          EMAIL_FROM: "",
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      const mailerLogs = [];
+      mailerChild.stdout.on("data", (d) => mailerLogs.push(d.toString()));
+      mailerChild.stderr.on("data", (d) => mailerLogs.push(d.toString()));
+      const mailerExitCode = await new Promise((resolve) => {
+        const timer = setTimeout(() => {
+          mailerChild.kill();
+          resolve(null);
+        }, 8000);
+        mailerChild.on("exit", (code) => {
+          clearTimeout(timer);
+          resolve(code);
+        });
+      });
+      assert.ok(mailerExitCode !== null && mailerExitCode !== 0, `Expected non-zero exit when EMAIL_MODE=log in prod, got ${mailerExitCode}`);
+      assert.match(mailerLogs.join(""), /EMAIL_MODE="log"|RESEND_API_KEY/i);
+    } finally {
+      if (!exitedEarly) child.kill();
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  });
+
+  await t.test("CONF-09: backend dependencies replace xlsx with exceljs and have zero reachable High/Moderate npm audit vulnerabilities", async () => {
+    const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, "classdex-backend", "package.json"), "utf8"));
+    const lock = JSON.parse(fs.readFileSync(path.join(repoRoot, "classdex-backend", "package-lock.json"), "utf8"));
+    assert.equal(pkg.dependencies.xlsx, undefined, "xlsx dependency must be removed");
+    assert.equal(lock.packages?.["node_modules/xlsx"], undefined, "xlsx must be removed from lockfile");
+    assert.ok(pkg.dependencies.exceljs, "exceljs dependency must be installed");
+    assert.ok(lock.packages?.["node_modules/exceljs"], "exceljs must be in lockfile");
+
+    let auditOut = "";
+    try {
+      auditOut = execSync("npm audit --json", {
+        cwd: path.join(repoRoot, "classdex-backend"),
+        encoding: "utf8",
+      });
+    } catch (err) {
+      auditOut = String(err.stdout || "");
+    }
+    const audit = JSON.parse(auditOut);
+    const vulns = audit.metadata?.vulnerabilities || {};
+    assert.equal(vulns.critical || 0, 0, "Expected 0 critical vulnerabilities in backend");
+    assert.equal(vulns.high || 0, 0, "Expected 0 high vulnerabilities in backend");
+    // exceljs depends transitively on uuid (<11.1.1 moderate v3/v5/v6 buf check, unreachable since exceljs only uses v4):
+    const leafAdvisories = Object.entries(audit.vulnerabilities || {})
+      .filter(([, meta]) => Array.isArray(meta?.via) && meta.via.some((v) => v && typeof v === "object" && v.source))
+      .map(([name]) => name);
+    const unexpected = leafAdvisories.filter((name) => name !== "uuid");
+    assert.deepEqual(unexpected, [], `Unexpected remaining backend leaf audit advisories: ${unexpected.join(", ")}`);
+  });
+
+  await t.test("CONF-10: frontend dev dependencies must keep Vite/build toolchains free of High audit advisories", async () => {
+    let auditOut = "";
+    try {
+      auditOut = execSync("npm audit --json", {
+        cwd: path.join(repoRoot, "classdex-frontend"),
+        encoding: "utf8",
+      });
+    } catch (err) {
+      auditOut = String(err.stdout || "");
+    }
+    const audit = JSON.parse(auditOut);
+    const vulns = audit.metadata?.vulnerabilities || {};
+    assert.equal(vulns.critical || 0, 0, "Expected 0 critical vulnerabilities in frontend");
+    assert.equal(vulns.high || 0, 0, "Expected 0 high vulnerabilities in frontend");
+    assert.equal(vulns.moderate || 0, 0, "Expected 0 moderate vulnerabilities in frontend");
+    assert.equal(vulns.low || 0, 0, "Expected 0 low vulnerabilities in frontend");
+  });
+
+  await t.test("CONF-11: Cloudinary upload config avoids browser secrets and rejects production base64 fallback when Cloudinary env vars are unset", async () => {
+    const photoSrc = fs
+      .readFileSync(path.join(repoRoot, "classdex-frontend", "src", "utils", "photoUpload.js"), "utf8")
+      .replace(/\r\n/g, "\n");
+    assert.equal(/CLOUDINARY_API_SECRET|api_secret/i.test(photoSrc), false);
+    assert.match(photoSrc, /MAX_PHOTO_SIZE = 5 \* 1024 \* 1024/);
+    // Fallback outside DEV when VITE_CLOUDINARY_CLOUD_NAME is unset silently writes raw data URL into DB:
+    assert.ok(
+      !/if \(isDev\) \{[^}]*\}\s*\n\s*return readDataUrl\(file\);\s*\n\}\s*$/.test(photoSrc),
+      "photoUpload.js falls back to base64 data URLs in production builds when Cloudinary env vars are unset",
+    );
+  });
+
+  await t.test("CONF-12: logTransport & error/logging hygiene must never write raw reset/verify token links or email bodies to stdout logs", async () => {
+    const mailerSrc = fs.readFileSync(path.join(repoRoot, "classdex-backend", "src", "services", "mailer.js"), "utf8");
+    const indexSrc = fs.readFileSync(path.join(repoRoot, "classdex-backend", "index.js"), "utf8");
+    // Confirm PII not in REST URLs
+    assert.equal(/\/api\/[^"']*(birthdate|address)/i.test(indexSrc), false);
+    // Log transport prints plaintext `Link: ${link}` (raw reset/verify tokens) + email body to stdout via console.log
+    assert.equal(
+      /logTransport[\s\S]*Link:\s*\$\{link\}/.test(mailerSrc),
+      false,
+      "mailer.js logTransport outputs plaintext token links & full email text via console.log",
+    );
+  });
+});

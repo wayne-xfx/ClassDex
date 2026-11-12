@@ -173,9 +173,11 @@ export default function StudentClassRecord() {
               </div>
 
               <div className="student-record-meta" aria-label="Class details">
-                <span className="code-chip student-record-code-chip">
-                  Class code <b>{classRecord.classCode}</b>
-                </span>
+                {classRecord.classCode ? (
+                  <span className="code-chip student-record-code-chip">
+                    Class code <b>{classRecord.classCode}</b>
+                  </span>
+                ) : null}
                 {classRecord.faculty?.name ? (
                   <span className="student-record-meta-chip">
                     <Icon name="user" size={13} />
