@@ -26,6 +26,12 @@
 | SEC-14 | Null bytes (`\u0000`) trigger database HTTP 500 and text fields lack server-side length limits | Low | A03:2021 - Injection | SCRUM-71 / INJ-11 | Open | — |
 | SEC-15 | Non-string JSON objects and arrays coerce to `"[object Object]"` in class and profile text fields | Low | A03:2021 - Injection | SCRUM-71 / INJ-03 | Open | — |
 | SEC-16 | Missing Express error middleware leaks HTML stack traces on malformed JSON in non-production mode | Low | A05:2021 - Security Misconfiguration | SCRUM-71 / INJ-13 | Open | — |
+| SEC-17 | `POST /api/auth/login` lacks per-IP and per-account brute-force rate limiting | Medium | A07:2021 - Identification and Authentication Failures | SCRUM-72 / RATE-01 | Open | — |
+| SEC-18 | Login skips `bcrypt.compare` on unknown emails, creating a ~478 ms user-enumeration timing oracle | Medium | A07:2021 - Identification and Authentication Failures | SCRUM-72 / RATE-02 | Open | — |
+| SEC-19 | `register`, `verify-email`, and `reset-password*` endpoints lack IP rate limiting | Medium | A07:2021 - Identification and Authentication Failures | SCRUM-72 / RATE-03, RATE-04 | Open | — |
+| SEC-20 | `classes/join` and `classes/check-code` lack rate limiting on 24-bit invite code guesses | Medium | A04:2021 - Insecure Design | SCRUM-72 / RATE-05 | Open | — |
+| SEC-21 | Default `trust proxy = 1` permits `X-Forwarded-For` rate-limit bypass on direct connections | Low | A05:2021 - Security Misconfiguration | SCRUM-72 / RATE-08 | Open | — |
+| SEC-22 | In-memory `MemoryStore` limiters & un-pruned resend cooldown `Map` reset on restart and do not scale across instances | Low | A05:2021 - Security Misconfiguration | SCRUM-72 / RATE-09 | Open | — |
 
 ---
 
@@ -333,5 +339,118 @@
   - *Expected:* Custom Express error middleware returns consistent JSON (`{ message: "Invalid JSON request body." }` for `entity.parse.failed`, `{ message: "Payload too large." }` for `413`, generic `500` JSON otherwise) with zero stack traces or server paths in any environment.
   - *Actual:* Under `NODE_ENV=production` (`INJ-13a`), Express's built-in finalhandler hides stack traces cleanly (returning `"Bad Request"` HTML), whereas under dev/test `NODE_ENV` (`INJ-13b`), Express returns an HTML page containing the full `SyntaxError` stack trace and local server filesystem paths.
 - **Impact:** Exposes local server filesystem paths and library stack frames when running outside `NODE_ENV=production`, and returns HTML instead of JSON API error bodies on parser failures.
+- **Status:** `Open`
+- **Fix commit:** `—`
+
+---
+
+### SEC-17 — `POST /api/auth/login` lacks per-IP and per-account brute-force rate limiting
+- **ID:** `SEC-17`
+- **Title:** `POST /api/auth/login` lacks per-IP and per-account brute-force rate limiting
+- **Severity:** Medium
+- **OWASP category:** `A07:2021 - Identification and Authentication Failures`
+- **Found in:** `SCRUM-72` / `RATE-01` ([`scrum72-rate.test.cjs`](../../../tests/security/scrum72-rate.test.cjs))
+- **Affected route or file:** [`classdex-backend/index.js`](../../../classdex-backend/index.js#L763-L822) (`POST /api/auth/login`)
+- **Steps to reproduce:**
+  1. Send `30` consecutive wrong-password login requests against a single account (`fx.stuA1.email`).
+  2. Send `30` additional login requests across `30` distinct email addresses from the same IP.
+- **Expected vs Actual:**
+  - *Expected:* Login enforces per-IP and IP+email composite rate limiting returning HTTP `429` (without letting a remote attacker permanently lock out a legitimate user from other IPs).
+  - *Actual:* All `60` login requests returned HTTP `401` with zero `429` rate-limit enforcement.
+- **Impact:** Enables automated credential stuffing and password brute-force attacks bounded only by database/bcrypt latency.
+- **Status:** `Open`
+- **Fix commit:** `—`
+
+---
+
+### SEC-18 — Login skips `bcrypt.compare` on unknown emails, creating a ~478 ms user-enumeration timing oracle
+- **ID:** `SEC-18`
+- **Title:** Login skips `bcrypt.compare` on unknown emails, creating a ~478 ms user-enumeration timing oracle
+- **Severity:** Medium
+- **OWASP category:** `A07:2021 - Identification and Authentication Failures`
+- **Found in:** `SCRUM-72` / `RATE-02` ([`scrum72-rate.test.cjs`](../../../tests/security/scrum72-rate.test.cjs))
+- **Affected route or file:** [`classdex-backend/index.js`](../../../classdex-backend/index.js#L790-L796) (`POST /api/auth/login`)
+- **Steps to reproduce:**
+  1. Send `20` interleaved wrong-password `POST /api/auth/login` requests to an existing cost-12 registered user vs `20` non-existing email addresses after DB warmup.
+  2. Measure median round-trip latencies.
+- **Expected vs Actual:**
+  - *Expected:* Both paths return identical `401` responses AND execute a constant-work dummy `bcrypt.compare` (cost 12) on nonexistent users so median latency stays indistinguishable (<40 ms variance).
+  - *Actual:* Although both return identical `401 { "message": "Invalid email or password." }`, unknown accounts return immediately after the Prisma query (median `88.9 ms`), while existing accounts execute cost-12 `bcrypt.compare` (median `566.7 ms`, **`477.8 ms` delta**).
+- **Impact:** Allows attackers to reliably distinguish registered vs unregistered faculty and student email addresses via response timing.
+- **Status:** `Open`
+- **Fix commit:** `—`
+
+---
+
+### SEC-19 — `register`, `verify-email`, and `reset-password*` endpoints lack IP rate limiting
+- **ID:** `SEC-19`
+- **Title:** `register`, `verify-email`, and `reset-password*` endpoints lack IP rate limiting
+- **Severity:** Medium
+- **OWASP category:** `A07:2021 - Identification and Authentication Failures`
+- **Found in:** `SCRUM-72` / `RATE-03`, `RATE-04` ([`scrum72-rate.test.cjs`](../../../tests/security/scrum72-rate.test.cjs))
+- **Affected route or file:** [`classdex-backend/index.js`](../../../classdex-backend/index.js#L704-L761) (`/register`), [`L922-L1040`](../../../classdex-backend/index.js#L922-L1040) (`/reset-password/validate`, `/reset-password`), [`L1101-L1175`](../../../classdex-backend/index.js#L1101-L1175) (`/verify-email`)
+- **Steps to reproduce:**
+  1. Send `15` rapid `POST /api/auth/register` requests (valid reCAPTCHA), `30` `POST /api/auth/verify-email` guesses, and `40` `/reset-password/validate` + `/reset-password` requests from one IP.
+- **Expected vs Actual:**
+  - *Expected:* All authentication/token/registration routes enforce IP rate limits returning HTTP `429` at abuse thresholds (complementing `forgotPasswordIpLimiter` / `changePasswordWrongCurrentLimiter` / `resend-verification` 60s cooldown which already pass).
+  - *Actual:* All requests processed (`201`/`400`/`200`) with zero HTTP `429` throttling on `/register`, `/verify-email`, `/reset-password`, and `/reset-password/validate`.
+- **Impact:** Permits unthrottled account registration bursts (and automated email verification traffic per new account) plus unthrottled token-lookup pressure on password-reset and email-verification endpoints.
+- **Status:** `Open`
+- **Fix commit:** `—`
+
+---
+
+### SEC-20 — `classes/join` and `classes/check-code` lack rate limiting on 24-bit invite code guesses
+- **ID:** `SEC-20`
+- **Title:** `classes/join` and `classes/check-code` lack rate limiting on 24-bit invite code guesses
+- **Severity:** Medium
+- **OWASP category:** `A04:2021 - Insecure Design`
+- **Found in:** `SCRUM-72` / `RATE-05` ([`scrum72-rate.test.cjs`](../../../tests/security/scrum72-rate.test.cjs))
+- **Affected route or file:** [`classdex-backend/index.js`](../../../classdex-backend/index.js#L5446-L5576) (`POST /api/classes/join`), [`L1805-L1829`](../../../classdex-backend/index.js#L1805-L1829) (`GET /api/classes/check-code`), [`L1451`](../../../classdex-backend/index.js#L1451) (`PUT /api/student/profile`)
+- **Steps to reproduce:**
+  1. Send `40` wrong 6-hex `classCode` guesses to `POST /api/classes/join` as an authenticated student.
+  2. Send `40` probes to `GET /api/classes/check-code?code=...` as an authenticated faculty account (note: `check-code` requires no reCAPTCHA).
+- **Expected vs Actual:**
+  - *Expected:* Join and code-check endpoints rate-limit repeated invalid `classCode` probes per user/IP (HTTP `429`) and avoid oracle enumeration across the 24-bit (`16^6`) code space.
+  - *Actual:* All `40` join guesses (`404`) and `40` code checks (`200`) succeeded with zero HTTP `429` throttling. Combined with unrestricted self-registration of `FACULTY` accounts (`SEC-07`), `/check-code` enables un-captchad enumeration of active join codes.
+- **Impact:** Increases feasibility of discovering active 6-character hex join codes or spamming repeated invalid join/profile submissions.
+- **Status:** `Open`
+- **Fix commit:** `—`
+
+---
+
+### SEC-21 — Default `trust proxy = 1` permits `X-Forwarded-For` rate-limit bypass on direct connections
+- **ID:** `SEC-21`
+- **Title:** Default `trust proxy = 1` permits `X-Forwarded-For` rate-limit bypass on direct connections
+- **Severity:** Low
+- **OWASP category:** `A05:2021 - Security Misconfiguration`
+- **Found in:** `SCRUM-72` / `RATE-08` ([`scrum72-rate.test.cjs`](../../../tests/security/scrum72-rate.test.cjs))
+- **Affected route or file:** [`classdex-backend/index.js`](../../../classdex-backend/index.js#L101-L105) (`app.set("trust proxy", ...)`)
+- **Steps to reproduce:**
+  1. Exhaust `forgotPasswordIpLimiter` (`5` requests -> `6th` returns HTTP `429`) against localhost without `TRUST_PROXY` set.
+  2. Send a `7th` request with header `X-Forwarded-For: 203.0.113.77`.
+- **Expected vs Actual:**
+  - *Expected:* When `TRUST_PROXY` is unset (local/direct deployments), Express uses `trust proxy = false` / `0` so client-supplied `X-Forwarded-For` cannot spoof `req.ip`. In production behind a reverse proxy (Render/Railway/Vercel), `TRUST_PROXY` must be set explicitly to the exact trusted hop count.
+  - *Actual:* `trustProxyHops` falls back to `1`, trusting arbitrary `X-Forwarded-For` headers on direct connections and resetting `forgotPasswordIpLimiter` to `200 OK`.
+- **Impact:** Enables IP rate-limit bypass whenever the server is accessed directly without an edge proxy overwriting `X-Forwarded-For`, and requires explicit Sprint 6.3 proxy hop configuration (note also shared NAT/campus IPs when keying strictly by IP).
+- **Status:** `Open`
+- **Fix commit:** `—`
+
+---
+
+### SEC-22 — In-memory `MemoryStore` limiters & un-pruned resend cooldown `Map` reset on restart and do not scale across instances
+- **ID:** `SEC-22`
+- **Title:** In-memory `MemoryStore` limiters & un-pruned resend cooldown `Map` reset on restart and do not scale across instances
+- **Severity:** Low
+- **OWASP category:** `A05:2021 - Security Misconfiguration`
+- **Found in:** `SCRUM-72` / `RATE-09` ([`scrum72-rate.test.cjs`](../../../tests/security/scrum72-rate.test.cjs))
+- **Affected route or file:** [`classdex-backend/index.js`](../../../classdex-backend/index.js#L115-L168) (`forgotPasswordIpStore`, `forgotPasswordEmailStore`, `changePasswordWrongCurrentStore`, `verifyResendCooldownByUser`)
+- **Steps to reproduce:**
+  1. Exhaust `forgotPasswordIpLimiter` (`429`) and inspect in-memory limiter stores across app restart / fresh process instance.
+  2. Inspect `verifyResendCooldownByUser` (`Map`) growth in `L118, L1210`: timestamps are inserted per user and never pruned after expiry.
+- **Expected vs Actual:**
+  - *Expected:* Document shared store (e.g., Redis) for multi-instance production scaling and prune expired `verifyResendCooldownByUser` entries cleanly in-memory.
+  - *Actual:* All rate-limit counters and cooldowns live in process memory (cleared on restart/redeploy, isolated per worker/dyno) and `verifyResendCooldownByUser` never sweeps expired keys.
+- **Impact:** Rate limits reset on container restart and divide across multiple replicas in production (partially deferred to Sprint 6.3 infrastructure; in-memory Map pruning can be fixed in `SCRUM-74`).
 - **Status:** `Open`
 - **Fix commit:** `—`
