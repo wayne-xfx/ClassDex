@@ -7,6 +7,7 @@
     "seed:clean": "node classdex-backend/scripts/seed-test-data.js --clean",
     "test:api": "node tests/scripts/run-api.mjs",
     "test:e2e": "node tests/scripts/run-e2e.mjs",
+    "test:security": "node tests/scripts/run-security.mjs",
     "test": "npm run test:api && npm run test:e2e"
   },
   "devDependencies": {
