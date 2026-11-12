@@ -3,6 +3,7 @@ dns.setDefaultResultOrder("ipv4first");
 
 const { mock } = require("node:test");
 const {
+  ALLOWED_TEST_DB_HOST_MARKER,
   assertSafeTestDatabaseUrl,
   loadBackendTestEnv,
 } = require("./load-test-env.cjs");
@@ -34,6 +35,11 @@ if (prodModeFlag) {
 const confirmedHost = assertSafeTestDatabaseUrl(process.env.DATABASE_URL, {
   label: "active process.env.DATABASE_URL",
 });
+if (!confirmedHost.toLowerCase().includes(ALLOWED_TEST_DB_HOST_MARKER)) {
+  throw new Error(
+    `Refusing to start test backend: host (${confirmedHost}) is not allowlisted (${ALLOWED_TEST_DB_HOST_MARKER}).`,
+  );
+}
 
 const parsedPort = portArg ? Number(portArg.split("=")[1]) : Number(process.env.PORT || 5052);
 const LISTEN_PORT = Number.isInteger(parsedPort) && parsedPort >= 0 ? parsedPort : 5052;

@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
+const ALLOWED_TEST_DB_HOST_MARKER = "ep-orange-dream-b3a6qov0";
 const PROD_NEON_HOST_MARKER = "ep-polished-night-b3hs4no6";
 
 function resolveRepoRoot() {
@@ -48,14 +49,21 @@ function assertSafeTestDatabaseUrl(
     );
   }
 
-  if (host.toLowerCase().includes(PROD_NEON_HOST_MARKER)) {
+  const normalizedHost = host.toLowerCase();
+  if (!normalizedHost.includes(ALLOWED_TEST_DB_HOST_MARKER)) {
+    throw new Error(
+      `Refusing to run tests: ${label} host (${host}) is not on the allowlisted test DB host (${ALLOWED_TEST_DB_HOST_MARKER}).`,
+    );
+  }
+
+  if (normalizedHost.includes(PROD_NEON_HOST_MARKER)) {
     throw new Error(
       `Refusing to run tests against production database host (${host}).`,
     );
   }
 
   const prodHost = getProdEnvHost(resolvedProdEnvPath, dotenv);
-  if (prodHost && host.toLowerCase() === prodHost.toLowerCase()) {
+  if (prodHost && normalizedHost === prodHost.toLowerCase()) {
     throw new Error(
       `Refusing to run tests against production database host (${host}).`,
     );
@@ -115,6 +123,7 @@ function loadBackendTestEnv(options = {}) {
 }
 
 module.exports = {
+  ALLOWED_TEST_DB_HOST_MARKER,
   PROD_NEON_HOST_MARKER,
   parseDbHost,
   assertSafeTestDatabaseUrl,
