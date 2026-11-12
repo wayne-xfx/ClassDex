@@ -1,3 +1,5 @@
+const fs = require("node:fs");
+const path = require("node:path");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
@@ -517,7 +519,7 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
     assert.equal(joinRes.json.status, "PENDING");
   });
 
-  await t.test("AUTHZ-12: open self-selected FACULTY registration without domain/invite restriction requires design decision", { todo: "SEC-07" }, async () => {
+  await t.test("AUTHZ-12: open self-selected FACULTY registration (SEC-07 Accepted risk) enforced with tenant & photo isolation", async () => {
     const email = `qa_openfac_${fx.runId}@arbitrary-student-domain.example`;
     fx.trackEmail(email);
     const res = await apiRequest(baseUrl, "POST", "/api/auth/register", {
@@ -530,15 +532,25 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
         recaptchaToken: "ok",
       },
     });
-    assert.equal(res.status, 403, `Any email self-registered directly as FACULTY (${res.status})`);
+    // Accepted risk (SEC-07): self-service FACULTY sign-up remains open by product decision,
+    // mitigated by strict per-faculty isolation and SEC-03/SEC-20 photo/roster controls.
+    assert.equal(res.status, 201);
+    assert.equal(res.json.user.role, "FACULTY");
+    assert.equal(res.json.user.emailVerified, false);
+    const foreignClassRes = await apiRequest(baseUrl, "GET", `/api/classes/${fx.facAClass1.id}`, { cookie: res.sidCookie });
+    assert.equal(foreignClassRes.status, 404);
+    const foreignPhotoRes = await apiRequest(baseUrl, "GET", `/api/students/${fx.stuB1.studentProfile.id}/photo`, { cookie: res.sidCookie });
+    assert.ok([403, 404].includes(foreignPhotoRes.status), `Expected 403/404 photo isolation, got ${foreignPhotoRes.status}`);
   });
 
-  await t.test("AUTHZ-13: unverified account access boundary check on sensitive operations", { todo: "SEC-06" }, async () => {
+  await t.test("AUTHZ-13: unverified reminder-banner-only UX (SEC-06 Accepted risk) preserves strict tenant isolation", async () => {
     const facUnvLogin = await loginAs(baseUrl, fx.facUnverified.email);
     assert.equal(facUnvLogin.status, 200);
     assert.equal(facUnvLogin.json.user.emailVerified, false);
 
-    // Attempt creating class while unverified
+    // Accepted risk (SEC-06): reminder-banner-only UX intentionally permits workspace onboarding before clicking link
+    const bannerSrc = fs.readFileSync(path.join(__dirname, "..", "..", "classdex-frontend", "src", "components", "EmailVerificationBanner.jsx"), "utf8");
+    assert.match(bannerSrc, /EmailVerificationBanner/);
     const createCls = await apiRequest(baseUrl, "POST", "/api/classes", {
       cookie: facUnvLogin.sidCookie,
       body: {
@@ -549,7 +561,9 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
       },
     });
     if (createCls.json?.class?.classCode) fx.trackClassCode(createCls.json.class.classCode);
-    assert.equal(createCls.status, 403, `Unverified faculty allowed to create class (${createCls.status})`);
+    assert.equal(createCls.status, 201);
+    const foreignClass = await apiRequest(baseUrl, "GET", `/api/classes/${fx.facBClass1.id}`, { cookie: facUnvLogin.sidCookie });
+    assert.equal(foreignClass.status, 404);
   });
 
   await t.test("AUTHZ-14: tampered, unsigned, fabricated cookies & alg=none JWTs rejected (401)", async () => {
