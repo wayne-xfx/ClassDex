@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: classdex-api
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    rootDir: classdex-backend
+    numInstances: 1
+    autoDeployTrigger: commit
+    buildCommand: npm ci && npx prisma generate
+    startCommand: node index.js
+    healthCheckPath: /api/status
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "1"
+      - key: FRONTEND_ORIGIN
+        value: https://classdex.me
+      - key: APP_BASE_URL
+        value: https://classdex.me
+      - key: EMAIL_MODE
+        value: resend
+      - key: EMAIL_FROM
+        value: "ClassDex <no-reply@classdex.me>"
+      - key: DATABASE_URL
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RECAPTCHA_SECRET_KEY
+        sync: false
