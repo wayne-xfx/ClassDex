@@ -465,14 +465,39 @@ test.describe("SCRUM-67 Password Recovery & Email Flows E2E (PWD-04..PWD-10)", (
       // Faculty approves Student 1 and declines Student 2 -> decision emails
       await facPage.request.delete(`${BACKEND_E2E_URL}/__e2e/emails`);
       await loginAs(facPage, joinFacEmail, TEST_PASSWORD, /\/faculty$/);
+      const deckLoaded = facPage.waitForResponse(
+        (res) => res.url().includes(`/api/classes/${joinClass.id}/deck`) && res.request().method() === "GET" && res.status() === 200,
+        { timeout: 25_000 },
+      );
+      const pendingLoaded = facPage.waitForResponse(
+        (res) => res.url().includes(`/api/classes/${joinClass.id}/pending`) && res.request().method() === "GET" && res.status() === 200,
+        { timeout: 25_000 },
+      );
       await facPage.goto(`/faculty/classes/${joinClass.id}`);
-      await facPage.locator("button.header-bell-trigger").click();
+      await Promise.all([deckLoaded, pendingLoaded]);
+      const bellBtn = facPage.locator("button.header-bell-trigger");
+      await expect(bellBtn.locator(".header-bell-badge")).toHaveText("2", { timeout: 15_000 });
+      await bellBtn.click();
       const drawer = facPage.getByRole("dialog", { name: "Notifications" });
       await expect(drawer).toBeVisible();
 
-      await drawer.locator("article.pending-row", { hasText: "Join One" }).getByRole("button", { name: "Approve" }).click();
+      const approveRow = drawer.locator("article.pending-row", { hasText: "Join One" });
+      const declineRow = drawer.locator("article.pending-row", { hasText: "Join Two" });
+      await expect(approveRow).toBeVisible();
+      await expect(declineRow).toBeVisible();
+
+      const approvePatch = facPage.waitForResponse(
+        (res) => res.url().includes(`/api/classes/${joinClass.id}/pending/`) && res.request().method() === "PATCH" && res.status() === 200,
+      );
+      await approveRow.getByRole("button", { name: "Approve" }).click();
+      await approvePatch;
+
+      const declinePatch = facPage.waitForResponse(
+        (res) => res.url().includes(`/api/classes/${joinClass.id}/pending/`) && res.request().method() === "PATCH" && res.status() === 200,
+      );
       facPage.once("dialog", (d) => d.accept());
-      await drawer.locator("article.pending-row", { hasText: "Join Two" }).getByRole("button", { name: "Decline" }).click();
+      await declineRow.getByRole("button", { name: "Decline" }).click();
+      await declinePatch;
 
       await expect
         .poll(async () => {
