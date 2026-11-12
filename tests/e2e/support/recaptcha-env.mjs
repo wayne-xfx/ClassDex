@@ -1,8 +1,14 @@
+import { createHash } from "node:crypto";
 import dns from "node:dns";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 dns.setDefaultResultOrder("ipv4first");
 
 const staticCache = new Map();
+const DISK_CACHE_DIR = path.join(os.tmpdir(), "classdex-e2e-recaptcha-cache");
+const DISK_CACHE_TTL_MS = 15 * 60 * 1000;
 
 const FORWARD_REQUEST_HEADERS = new Set([
   "accept",
@@ -31,6 +37,52 @@ function isCacheableStatic(method, url) {
   );
 }
 
+function getDiskCachePath(cacheKey) {
+  const hash = createHash("sha256").update(cacheKey).digest("hex");
+  return path.join(DISK_CACHE_DIR, `${hash}.json`);
+}
+
+function readCachedAsset(cacheKey) {
+  if (!cacheKey) return null;
+  if (staticCache.has(cacheKey)) return staticCache.get(cacheKey);
+  try {
+    const raw = fs.readFileSync(getDiskCachePath(cacheKey), "utf8");
+    const parsed = JSON.parse(raw);
+    if (!parsed || Date.now() - Number(parsed.savedAt || 0) > DISK_CACHE_TTL_MS) {
+      return null;
+    }
+    const entry = {
+      status: parsed.status,
+      headers: parsed.headers,
+      body: Buffer.from(parsed.bodyBase64, "base64"),
+    };
+    staticCache.set(cacheKey, entry);
+    return entry;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedAsset(cacheKey, result) {
+  if (!cacheKey || result.status !== 200) return;
+  staticCache.set(cacheKey, result);
+  try {
+    fs.mkdirSync(DISK_CACHE_DIR, { recursive: true });
+    fs.writeFileSync(
+      getDiskCachePath(cacheKey),
+      JSON.stringify({
+        savedAt: Date.now(),
+        status: result.status,
+        headers: result.headers,
+        bodyBase64: result.body.toString("base64"),
+      }),
+      "utf8",
+    );
+  } catch {
+    // Best-effort cross-worker static asset cache only.
+  }
+}
+
 function buildUpstreamHeaders(reqHeaders) {
   const out = {};
   for (const [k, v] of Object.entries(reqHeaders || {})) {
@@ -55,17 +107,20 @@ function sanitizeResponseHeaders(resHeaders) {
 
 async function fetchWithIpv4Retry(url, init) {
   let lastError;
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
       const response = await fetch(url, {
         ...init,
-        signal: AbortSignal.timeout(8_000),
+        signal: AbortSignal.timeout(15_000),
       });
       const body = Buffer.from(await response.arrayBuffer());
       const headers = sanitizeResponseHeaders(response.headers);
       return { status: response.status, headers, body };
     } catch (error) {
       lastError = error;
+      if (attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+      }
     }
   }
   throw lastError;
@@ -73,8 +128,8 @@ async function fetchWithIpv4Retry(url, init) {
 
 /**
  * Forces Google reCAPTCHA browser requests through Node's IPv4-first HTTPS stack
- * with bounded timeout + retry and caches immutable gstatic/api.js assets, avoiding
- * headless Chromium/WebKit IPv6 ENETUNREACH and QUIC/HTTP3 stalls in test runs.
+ * with bounded timeout + retry and caches immutable gstatic/api.js assets across
+ * Playwright project workers, avoiding IPv6 ENETUNREACH and CDN stalls mid-run.
  */
 export async function installRecaptchaIpv4Relay(page) {
   const handler = async (route) => {
@@ -87,8 +142,8 @@ export async function installRecaptchaIpv4Relay(page) {
       : null;
 
     try {
-      if (cacheKey && staticCache.has(cacheKey)) {
-        const cached = staticCache.get(cacheKey);
+      const cached = readCachedAsset(cacheKey);
+      if (cached) {
         await route.fulfill({
           status: cached.status,
           headers: cached.headers,
@@ -106,9 +161,7 @@ export async function installRecaptchaIpv4Relay(page) {
         body: postBody && postBody.length > 0 ? postBody : undefined,
       });
 
-      if (cacheKey && result.status === 200) {
-        staticCache.set(cacheKey, result);
-      }
+      writeCachedAsset(cacheKey, result);
 
       await route.fulfill({
         status: result.status,
