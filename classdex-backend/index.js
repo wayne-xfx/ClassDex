@@ -3,7 +3,7 @@ const express = require("express");
 const XLSX = require("xlsx");
 const cors = require("cors");
 const session = require("express-session");
-const { rateLimit, MemoryStore } = require("express-rate-limit");
+const { rateLimit, MemoryStore, ipKeyGenerator } = require("express-rate-limit");
 const bcrypt = require("bcryptjs");
 const { randomBytes } = require("node:crypto");
 const { prisma } = require("./db");
@@ -179,6 +179,8 @@ const FORGOT_CAPTCHA_ERROR_MESSAGE = "We couldn't verify you're human. Please tr
 const forgotPasswordIpStore = new MemoryStore();
 const forgotPasswordEmailStore = new MemoryStore();
 const changePasswordWrongCurrentStore = new MemoryStore();
+const loginIpStore = new MemoryStore();
+const loginEmailStore = new MemoryStore();
 const verifyResendCooldownByUser = new Map();
 
 function getVerifyResendCooldownSeconds() {
@@ -224,10 +226,34 @@ const changePasswordWrongCurrentLimiter = rateLimit({
     }),
 });
 
+const loginIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 25,
+  skipSuccessfulRequests: true,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  store: loginIpStore,
+  handler: (_req, res) => res.status(429).json({ message: RATE_LIMIT_MESSAGE }),
+});
+
+const loginEmailLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  skipSuccessfulRequests: true,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  store: loginEmailStore,
+  skip: (req) => !normalizeEmail(req.body?.email),
+  keyGenerator: (req) => `login:${ipKeyGenerator(req.ip)}:${normalizeEmail(req.body?.email)}`,
+  handler: (_req, res) => res.status(429).json({ message: RATE_LIMIT_MESSAGE }),
+});
+
 function resetRateLimitersForTests() {
   forgotPasswordIpStore.resetAll();
   forgotPasswordEmailStore.resetAll();
   changePasswordWrongCurrentStore.resetAll();
+  loginIpStore.resetAll();
+  loginEmailStore.resetAll();
   verifyResendCooldownByUser.clear();
 }
 
@@ -827,7 +853,7 @@ app.post("/api/auth/register", async (req, res) => {
   }
 });
 
-app.post("/api/auth/login", async (req, res) => {
+app.post("/api/auth/login", loginIpLimiter, loginEmailLimiter, async (req, res) => {
   const timeout = setTimeout(() => {
     if (!res.headersSent) {
       res.status(503).json({

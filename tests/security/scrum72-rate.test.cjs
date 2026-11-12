@@ -39,7 +39,7 @@ test("SCRUM-72: Rate Limiting, Enumeration Timing, reCAPTCHA Enforcement & Resou
     await prisma.$disconnect();
   });
 
-  await t.test("RATE-01: POST /api/auth/login must rate-limit repeated wrong-password attempts across single & multiple accounts (429)", { todo: "SEC-17" }, async () => {
+  await t.test("RATE-01: POST /api/auth/login must rate-limit repeated wrong-password attempts across single & multiple accounts (429)", async () => {
     backendIndex.resetRateLimitersForTests();
     const statuses = [];
     for (let i = 0; i < 30; i += 1) {
