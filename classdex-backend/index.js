@@ -460,13 +460,57 @@ function optionalText(value) {
   return text || null;
 }
 
+const CLOUDINARY_PHOTO_URL_RE =
+  /^https:\/\/res\.cloudinary\.com\/[a-z0-9_-]+\/image\/(?:upload|authenticated|private)\/\S+$/i;
+
+function hasValidImageMagicBytes(mimeSubtype, buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0 || buffer.length > 5 * 1024 * 1024) {
+    return false;
+  }
+  const subtype = mimeSubtype.toLowerCase();
+  if (subtype === "jpeg") {
+    return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  }
+  if (subtype === "png") {
+    return (
+      buffer.length >= 8 &&
+      buffer[0] === 0x89 &&
+      buffer[1] === 0x50 &&
+      buffer[2] === 0x4e &&
+      buffer[3] === 0x47 &&
+      buffer[4] === 0x0d &&
+      buffer[5] === 0x0a &&
+      buffer[6] === 0x1a &&
+      buffer[7] === 0x0a
+    );
+  }
+  if (subtype === "webp") {
+    return (
+      buffer.length >= 12 &&
+      buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
+      buffer.subarray(8, 12).toString("ascii") === "WEBP"
+    );
+  }
+  return false;
+}
+
 function isValidPhoto(photo) {
-  return (
-    typeof photo === "string" &&
-    photo.length <= 7_000_000 &&
-    (/^https:\/\/\S+$/i.test(photo) ||
-      /^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/]+=*$/i.test(photo))
-  );
+  if (typeof photo !== "string" || photo.length > 7_000_000) {
+    return false;
+  }
+  if (CLOUDINARY_PHOTO_URL_RE.test(photo)) {
+    return true;
+  }
+  const match = photo.match(/^data:image\/(jpeg|png|webp);base64,([a-z0-9+/]+=*)$/i);
+  if (!match) {
+    return false;
+  }
+  try {
+    const decoded = Buffer.from(match[2], "base64");
+    return hasValidImageMagicBytes(match[1], decoded);
+  } catch {
+    return false;
+  }
 }
 
 function normalizeClassCode(value) {
@@ -1599,6 +1643,16 @@ app.put(
   requireAuth,
   requireRole("FACULTY"),
   async (req, res) => {
+    const rawPhoto = req.body?.photo;
+    const hasPhotoValue =
+      rawPhoto !== undefined &&
+      rawPhoto !== null &&
+      !(typeof rawPhoto === "string" && rawPhoto.trim() === "");
+    if (hasPhotoValue && !isValidPhoto(typeof rawPhoto === "string" ? rawPhoto.trim() : rawPhoto)) {
+      return res.status(400).json({
+        message: "Upload a JPG, PNG, or WebP photo up to 5 MB.",
+      });
+    }
     try {
       const profile = await prisma.facultyProfile.upsert({
         where: { userId: req.session.userId },
@@ -1606,14 +1660,14 @@ app.put(
           userId: req.session.userId,
           name: optionalText(req.body?.name),
           department: optionalText(req.body?.department),
-          photo: optionalText(req.body?.photo),
+          photo: optionalText(rawPhoto),
           email: optionalText(req.body?.email),
           contact: optionalText(req.body?.contact),
         },
         update: {
           name: optionalText(req.body?.name),
           department: optionalText(req.body?.department),
-          photo: optionalText(req.body?.photo),
+          photo: optionalText(rawPhoto),
           email: optionalText(req.body?.email),
           contact: optionalText(req.body?.contact),
         },

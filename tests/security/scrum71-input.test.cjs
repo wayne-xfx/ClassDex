@@ -456,7 +456,7 @@ test("SCRUM-71: Input Validation, SQLi, Email Escaping, Uploads, Exports & Error
     assert.equal(htmlInXlsx.status, 400, `Expected 400 for HTML bytes inside .xlsx, got ${htmlInXlsx.status}`);
   });
 
-  await t.test("INJ-10a: faculty profile photo endpoint must enforce isValidPhoto and reject SVG/javascript/http payloads", { todo: "SEC-10" }, async () => {
+  await t.test("INJ-10a: faculty profile photo endpoint must enforce isValidPhoto and reject SVG/javascript/http payloads", async () => {
     for (const badPhoto of [
       "javascript:alert(1)",
       "data:image/svg+xml;base64," + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="window.__xss=9"></svg>').toString("base64"),
@@ -470,7 +470,7 @@ test("SCRUM-71: Input Validation, SQLi, Email Escaping, Uploads, Exports & Error
     }
   });
 
-  await t.test("INJ-10b: student profile photo must validate image magic bytes and disallow arbitrary external 302 redirect URLs", { todo: "SEC-10" }, async () => {
+  await t.test("INJ-10b: student profile photo must validate image magic bytes and disallow arbitrary external 302 redirect URLs", async () => {
     try {
       const fakeJpg = `data:image/jpeg;base64,${Buffer.from("<html><script>window.__xss=8</script></html>").toString("base64")}`;
       const rFake = await apiRequest(srv.baseUrl, "PUT", "/api/student/profile", {
