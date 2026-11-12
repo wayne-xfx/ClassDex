@@ -716,7 +716,7 @@ test("SCRUM-71: Input Validation, SQLi, Email Escaping, Uploads, Exports & Error
     }
   });
 
-  await t.test("INJ-13b: malformed JSON & middleware errors must use custom JSON error handler without leaking stack traces in dev/test", { todo: "SEC-16" }, async () => {
+  await t.test("INJ-13b: malformed JSON & middleware errors must use custom JSON error handler without leaking stack traces in dev/test", async () => {
     const testMalformed = await rawHttpRequest(srv.baseUrl, "POST", "/api/auth/login", {
       rawBody: "{bad-json",
       headers: { "Content-Type": "application/json" },

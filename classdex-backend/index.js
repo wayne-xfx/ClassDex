@@ -6056,6 +6056,26 @@ app.post(
   },
 );
 
+app.use((err, _req, res, _next) => {
+  if (res.headersSent) {
+    return;
+  }
+  if (
+    err?.type === "entity.parse.failed" ||
+    (err instanceof SyntaxError && err.status === 400 && "body" in err)
+  ) {
+    return res.status(400).json({ message: "Invalid JSON request body." });
+  }
+  if (err?.type === "entity.too.large" || err?.status === 413) {
+    return res.status(413).json({ message: "Request payload exceeds the 8 MB limit." });
+  }
+  if (err?.status && Number.isInteger(err.status) && err.status >= 400 && err.status < 500) {
+    return res.status(err.status).json({ message: "Invalid request." });
+  }
+  console.error("Unhandled request error:", err?.message || err);
+  return res.status(500).json({ message: "Unable to complete your request right now." });
+});
+
 if (require.main === module) {
   validateMailerConfig();
   app.listen(PORT, () => {
