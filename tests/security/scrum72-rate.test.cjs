@@ -297,7 +297,7 @@ test("SCRUM-72: Rate Limiting, Enumeration Timing, reCAPTCHA Enforcement & Resou
     );
   });
 
-  await t.test("RATE-05: POST /api/classes/join, GET /api/classes/check-code & studentId changes must rate-limit repeated guesses (429)", { todo: "SEC-20" }, async () => {
+  await t.test("RATE-05: POST /api/classes/join, GET /api/classes/check-code & studentId changes must rate-limit repeated guesses (429)", async () => {
     backendIndex.resetRateLimitersForTests();
     const stuLogin = await loginAs(srv.baseUrl, fx.stuUnrelated.email);
     assert.equal(stuLogin.status, 200);

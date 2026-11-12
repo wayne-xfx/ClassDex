@@ -186,6 +186,9 @@ const registerIpStore = new MemoryStore();
 const verifyEmailIpStore = new MemoryStore();
 const resetPasswordValidateIpStore = new MemoryStore();
 const resetPasswordIpStore = new MemoryStore();
+const classJoinUserStore = new MemoryStore();
+const checkCodeUserStore = new MemoryStore();
+const studentProfileUpdateStore = new MemoryStore();
 const verifyResendCooldownByUser = new Map();
 
 function getVerifyResendCooldownSeconds() {
@@ -289,6 +292,40 @@ const resetPasswordIpLimiter = rateLimit({
   handler: (_req, res) => res.status(429).json({ message: RATE_LIMIT_MESSAGE }),
 });
 
+const classJoinLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  store: classJoinUserStore,
+  keyGenerator: (req) =>
+    req.session?.userId ? `class-join:${req.session.userId}` : `class-join-ip:${ipKeyGenerator(req.ip)}`,
+  handler: (_req, res) => res.status(429).json({ message: RATE_LIMIT_MESSAGE }),
+});
+
+const checkCodeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  store: checkCodeUserStore,
+  keyGenerator: (req) =>
+    req.session?.userId ? `check-code:${req.session.userId}` : `check-code-ip:${ipKeyGenerator(req.ip)}`,
+  handler: (_req, res) => res.status(429).json({ message: RATE_LIMIT_MESSAGE }),
+});
+
+const studentProfileUpdateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 12,
+  skipSuccessfulRequests: true,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  store: studentProfileUpdateStore,
+  keyGenerator: (req) =>
+    req.session?.userId ? `student-profile:${req.session.userId}` : `student-profile-ip:${ipKeyGenerator(req.ip)}`,
+  handler: (_req, res) => res.status(429).json({ message: RATE_LIMIT_MESSAGE }),
+});
+
 function resetRateLimitersForTests() {
   forgotPasswordIpStore.resetAll();
   forgotPasswordEmailStore.resetAll();
@@ -299,6 +336,9 @@ function resetRateLimitersForTests() {
   verifyEmailIpStore.resetAll();
   resetPasswordValidateIpStore.resetAll();
   resetPasswordIpStore.resetAll();
+  classJoinUserStore.resetAll();
+  checkCodeUserStore.resetAll();
+  studentProfileUpdateStore.resetAll();
   verifyResendCooldownByUser.clear();
 }
 
@@ -503,6 +543,12 @@ async function enforceActiveClassMutationGuard(req, res, next) {
     if (target.kind === "join") {
       if (req.session.role !== "STUDENT") {
         return res.status(403).json({ message: "You do not have permission to do that." });
+      }
+      await new Promise((resolve, reject) =>
+        classJoinLimiter(req, res, (err) => (err ? reject(err) : resolve())),
+      );
+      if (res.headersSent) {
+        return;
       }
       if (!(await requireRecaptcha(req, res))) {
         return;
@@ -1592,6 +1638,7 @@ app.put(
   "/api/student/profile",
   requireAuth,
   requireRole("STUDENT"),
+  studentProfileUpdateLimiter,
   async (req, res) => {
     const name = String(req.body?.name || "").trim();
     const studentId = String(req.body?.studentId || "").trim();
@@ -1950,6 +1997,7 @@ app.get(
   "/api/classes/check-code",
   requireAuth,
   requireRole("FACULTY"),
+  checkCodeLimiter,
   async (req, res) => {
     const classCode = normalizeClassCode(req.query.code);
     const excludeId = String(req.query.excludeId || "").trim();
