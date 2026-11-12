@@ -1,6 +1,9 @@
 import rulesConfig from "../../../shared/passwordRules.json";
 
 export const PASSWORD_MIN_LENGTH = rulesConfig.minLength;
+export const PASSWORD_MAX_BYTES = rulesConfig.maxBytes || 72;
+export const PASSWORD_MAX_BYTES_MESSAGE =
+  rulesConfig.maxBytesErrorMessage || `Password must be ${PASSWORD_MAX_BYTES} bytes or fewer.`;
 export const PASSWORD_MISMATCH_MESSAGE = rulesConfig.mismatchMessage;
 
 function checkRule(rule, password) {
@@ -27,10 +30,14 @@ export function evaluatePasswordRules(password) {
 }
 
 export function validatePassword(password) {
-  const results = evaluatePasswordRules(password);
+  const value = String(password || "");
+  const results = evaluatePasswordRules(value);
   const failed = results.find((item) => !item.passed);
   if (failed) {
     return { valid: false, message: failed.errorMessage, results };
+  }
+  if (new TextEncoder().encode(value).length > PASSWORD_MAX_BYTES) {
+    return { valid: false, message: PASSWORD_MAX_BYTES_MESSAGE, results };
   }
   return { valid: true, message: "", results };
 }

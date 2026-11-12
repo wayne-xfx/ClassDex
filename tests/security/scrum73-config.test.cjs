@@ -83,7 +83,7 @@ test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Depende
     assert.equal("password" in me.json.user, false);
   });
 
-  await t.test("CONF-01b: password policy must prevent silent >72-byte bcrypt truncation", { todo: "SEC-23" }, async () => {
+  await t.test("CONF-01b: password policy must prevent silent >72-byte bcrypt truncation", async () => {
     const email = `qa_c01_72b_${fx.runId}@test.local`.toLowerCase();
     extraCleanupEmails.add(email);
     const pwPrefix = "A".repeat(72);
@@ -91,7 +91,7 @@ test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Depende
     const pw2 = `${pwPrefix}_completely_different_suffix`;
 
     try {
-      const reg = await apiRequest(srv.baseUrl, "POST", "/api/auth/register", {
+      const regOver = await apiRequest(srv.baseUrl, "POST", "/api/auth/register", {
         body: {
           name: "qa_Bcrypt72",
           email,
@@ -101,17 +101,49 @@ test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Depende
           recaptchaToken: "ok",
         },
       });
-      assert.equal(reg.status, 201);
+      assert.equal(regOver.status, 400, `Expected 400 for >72-byte password on register, got ${regOver.status}`);
+      assert.match(regOver.json?.message || "", /72 bytes/i);
 
-      // Should either have been rejected at registration or reject mismatched pw2
-      const wrongLogin = await apiRequest(srv.baseUrl, "POST", "/api/auth/login", {
-        body: { email, password: pw2 },
+      // Multi-byte UTF-8 (25x 3-byte chars = 75 bytes < 72 chars) must also be rejected
+      const utf8Over = "€".repeat(25);
+      const regUtf8 = await apiRequest(srv.baseUrl, "POST", "/api/auth/register", {
+        body: {
+          name: "qa_Bcrypt72",
+          email,
+          password: utf8Over,
+          confirmPassword: utf8Over,
+          role: "STUDENT",
+          recaptchaToken: "ok",
+        },
       });
-      assert.equal(
-        wrongLogin.status,
-        401,
-        `Different >72-byte password accepted due to bcrypt 72-byte truncation (status ${wrongLogin.status})`,
-      );
+      assert.equal(regUtf8.status, 400);
+
+      const regExact72 = await apiRequest(srv.baseUrl, "POST", "/api/auth/register", {
+        body: {
+          name: "qa_Bcrypt72",
+          email,
+          password: pwPrefix,
+          confirmPassword: pwPrefix,
+          role: "STUDENT",
+          recaptchaToken: "ok",
+        },
+      });
+      assert.equal(regExact72.status, 201);
+
+      const wrongLogin = await apiRequest(srv.baseUrl, "POST", "/api/auth/login", {
+        body: { email, password: `${pwPrefix.slice(0, 71)}B` },
+      });
+      assert.equal(wrongLogin.status, 401);
+
+      const overChange = await apiRequest(srv.baseUrl, "POST", "/api/auth/change-password", {
+        cookie: regExact72.sidCookie,
+        body: {
+          currentPassword: pwPrefix,
+          newPassword: pw2,
+          confirmPassword: pw2,
+        },
+      });
+      assert.equal(overChange.status, 400);
     } finally {
       await prisma.user.deleteMany({ where: { email } });
       extraCleanupEmails.delete(email);

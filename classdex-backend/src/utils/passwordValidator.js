@@ -1,6 +1,9 @@
 const rulesConfig = require("../../../shared/passwordRules.json");
 
 const PASSWORD_MIN_LENGTH = rulesConfig.minLength;
+const PASSWORD_MAX_BYTES = rulesConfig.maxBytes || 72;
+const PASSWORD_MAX_BYTES_MESSAGE =
+  rulesConfig.maxBytesErrorMessage || `Password must be ${PASSWORD_MAX_BYTES} bytes or fewer.`;
 const PASSWORD_MISMATCH_MESSAGE = rulesConfig.mismatchMessage;
 
 function checkRule(rule, password) {
@@ -27,10 +30,14 @@ function evaluatePasswordRules(password) {
 }
 
 function validatePassword(password) {
-  const results = evaluatePasswordRules(password);
+  const value = String(password || "");
+  const results = evaluatePasswordRules(value);
   const failed = results.find((item) => !item.passed);
   if (failed) {
     return { valid: false, message: failed.errorMessage, results };
+  }
+  if (Buffer.byteLength(value, "utf8") > PASSWORD_MAX_BYTES) {
+    return { valid: false, message: PASSWORD_MAX_BYTES_MESSAGE, results };
   }
   return { valid: true, message: "", results };
 }
@@ -52,6 +59,7 @@ function validatePasswordWithConfirm(password, confirmPassword) {
 
 module.exports = {
   PASSWORD_MIN_LENGTH,
+  PASSWORD_MAX_BYTES,
   PASSWORD_MISMATCH_MESSAGE,
   PASSWORD_RULES,
   evaluatePasswordRules,
