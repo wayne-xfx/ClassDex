@@ -61,7 +61,7 @@ test("SCRUM-72: Rate Limiting, Enumeration Timing, reCAPTCHA Enforcement & Resou
     );
   });
 
-  await t.test("RATE-02: POST /api/auth/login status, message, and response timing must not reveal account existence", { todo: "SEC-18" }, async () => {
+  await t.test("RATE-02: POST /api/auth/login status, message, and response timing must not reveal account existence", async () => {
     backendIndex.resetRateLimitersForTests();
     // Register a real cost-12 user via API (test fixtures use cost 10 for seed speed)
     const cost12Email = `qa_r02_cost12_${fx.runId}@test.local`.toLowerCase();
@@ -93,6 +93,7 @@ test("SCRUM-72: Rate Limiting, Enumeration Timing, reCAPTCHA Enforcement & Resou
       const unknownBodies = new Set();
 
       for (let i = 0; i < 20; i += 1) {
+        backendIndex.resetRateLimitersForTests();
         const t0 = performance.now();
         const rExist = await apiRequest(srv.baseUrl, "POST", "/api/auth/login", {
           body: { email: cost12Email, password: `WrongPass_${i}!` },

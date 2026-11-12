@@ -170,6 +170,7 @@ function assertProductionStartupConfig({ requireMailer = require.main === module
 }
 
 assertProductionStartupConfig();
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync(randomBytes(16).toString("hex"), 12);
 const ROLES = new Set(["FACULTY", "STUDENT"]);
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -873,28 +874,34 @@ app.post("/api/auth/login", loginIpLimiter, loginEmailLimiter, async (req, res) 
         .json({ message: "Email and password are required." });
     }
 
-    const user = await prisma.user.findUnique({
+    const authUser = await prisma.user.findUnique({
       where: { email },
+      select: { id: true, password: true },
+    });
+    const matches = await bcrypt.compare(
+      password,
+      authUser ? authUser.password : DUMMY_PASSWORD_HASH,
+    );
+    if (!authUser || !matches) {
+      clearTimeout(timeout);
+      if (res.headersSent) return;
+      return res.status(401).json({ message: "Invalid email or password." });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: authUser.id },
       include: {
         facultyProfile: { select: { photo: true, name: true, department: true, email: true } },
         studentProfile: { select: { photo: true, name: true, studentId: true } },
       },
     });
-    if (!user) {
-      clearTimeout(timeout);
-      if (res.headersSent) return;
-      return res.status(401).json({ message: "Invalid email or password." });
-    }
-
-    const matches = await bcrypt.compare(password, user.password);
-    if (!matches) {
-      clearTimeout(timeout);
-      if (res.headersSent) return;
-      return res.status(401).json({ message: "Invalid email or password." });
-    }
-
     clearTimeout(timeout);
-    if (res.headersSent) return;
+    if (res.headersSent || !user) {
+      if (!res.headersSent) {
+        return res.status(401).json({ message: "Invalid email or password." });
+      }
+      return;
+    }
     req.session.userId = user.id;
     req.session.role = user.role;
     req.session.issuedAt = Math.max(Date.now(), (user.passwordChangedAt?.getTime() ?? 0) + 1);
