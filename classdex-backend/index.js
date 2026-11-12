@@ -2698,11 +2698,11 @@ app.post(
       }
 
       const { fileName, fileBase64 } = req.body || {};
-      if (!fileName || !fileBase64) {
+      if (typeof fileName !== "string" || !fileName.trim() || typeof fileBase64 !== "string" || !fileBase64) {
         return res.status(400).json({ message: "File name and file content are required." });
       }
 
-      const ext = path.extname(String(fileName)).toLowerCase();
+      const ext = path.extname(fileName.trim()).toLowerCase();
       if (![".xlsx", ".csv"].includes(ext)) {
         return res.status(400).json({ message: "Unsupported file type. Use .xlsx or .csv." });
       }
@@ -2719,6 +2719,9 @@ app.post(
           return res.status(400).json({ message: "Spreadsheet contains no sheets." });
         }
       } else {
+        if (buffer.length < 4 || !buffer.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))) {
+          return res.status(400).json({ message: "Unable to parse file. Ensure it is a valid .xlsx spreadsheet." });
+        }
         const workbook = new ExcelJS.Workbook();
         try {
           await workbook.xlsx.load(buffer);

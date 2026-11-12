@@ -439,7 +439,7 @@ test("SCRUM-71: Input Validation, SQLi, Email Escaping, Uploads, Exports & Error
     assert.equal(impF.json.rows[1].studentId, "8123457");
   });
 
-  await t.test("INJ-09b: roster import must reject non-string fileBase64 (400) and disguised HTML content inside .xlsx extension", { todo: "SEC-13" }, async () => {
+  await t.test("INJ-09b: roster import must reject non-string fileBase64 (400) and disguised HTML content inside .xlsx extension", async () => {
     const badTypeB64 = await apiRequest(srv.baseUrl, "POST", `/api/classes/${fx.facAClass1.id}/roster/import`, {
       cookie: facCookie,
       body: { fileName: "test.csv", fileBase64: { $gt: "" } },
