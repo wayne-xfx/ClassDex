@@ -361,7 +361,7 @@ app.use(
     cookie: {
       httpOnly: true,
       sameSite: "lax",
-      secure: false,
+      secure: IS_PRODUCTION,
       maxAge: 7 * 24 * 60 * 60 * 1000,
     },
   }),
@@ -430,6 +430,13 @@ async function verifyAuthenticatedSession(req, res) {
     res.status(500).json({ message: "Unable to verify session." });
     return false;
   }
+}
+
+function regenerateSession(req) {
+  return new Promise((resolve, reject) => {
+    if (!req.session?.regenerate) return resolve();
+    req.session.regenerate((err) => (err ? reject(err) : resolve()));
+  });
 }
 
 async function requireAuth(req, res, next) {
@@ -929,6 +936,7 @@ app.post("/api/auth/register", registerIpLimiter, async (req, res) => {
       },
     });
 
+    await regenerateSession(req);
     req.session.userId = user.id;
     req.session.role = user.role;
     req.session.issuedAt = Date.now();
@@ -992,6 +1000,7 @@ app.post("/api/auth/login", loginIpLimiter, loginEmailLimiter, async (req, res) 
       }
       return;
     }
+    await regenerateSession(req);
     req.session.userId = user.id;
     req.session.role = user.role;
     req.session.issuedAt = Math.max(Date.now(), (user.passwordChangedAt?.getTime() ?? 0) + 1);

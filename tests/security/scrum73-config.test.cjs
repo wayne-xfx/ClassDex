@@ -133,14 +133,24 @@ test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Depende
     assert.match(tokenSrc, /DEFAULT_VERIFY_TTL_HOURS\s*=\s*24/);
   });
 
-  await t.test("CONF-02b: production session configuration must enable Secure cookies, regenerate session ID on login, and avoid in-memory store/weak fallback", { todo: "SEC-24" }, async () => {
+  await t.test("CONF-02b: production session configuration enables Secure cookies and regenerates session ID on login (external store deferred to 6.3)", async () => {
     const indexSrc = fs.readFileSync(path.join(repoRoot, "classdex-backend", "index.js"), "utf8");
-    // Hardcoded `secure: false` found on session cookie config
     assert.ok(
       !/cookie:\s*\{[^}]*secure:\s*false\b/s.test(indexSrc),
       "Session cookie hardcodes secure: false regardless of NODE_ENV/HTTPS",
     );
-    assert.ok(indexSrc.includes("req.session.regenerate"), "Login does not regenerate session ID");
+    assert.ok(indexSrc.includes("req.session.regenerate"), "Session regeneration missing");
+
+    const login1 = await loginAs(srv.baseUrl, fx.facA.email);
+    assert.equal(login1.status, 200);
+    const login2 = await apiRequest(srv.baseUrl, "POST", "/api/auth/login", {
+      cookie: login1.sidCookie,
+      body: { email: fx.facA.email, password: QA_PASSWORD },
+    });
+    assert.equal(login2.status, 200);
+    assert.ok(login2.sidCookie && login2.sidCookie !== login1.sidCookie, "Expected rotated classdex.sid on re-login");
+    const oldSessionMe = await apiRequest(srv.baseUrl, "GET", "/api/auth/me", { cookie: login1.sidCookie });
+    assert.equal(oldSessionMe.status, 401, "Prior session ID must be invalidated upon session regeneration");
   });
 
   await t.test("CONF-03: API & browser responses must include Helmet security headers, remove X-Powered-By, and set Cache-Control: no-store on sensitive endpoints", { todo: "SEC-26" }, async () => {
