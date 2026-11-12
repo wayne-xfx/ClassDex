@@ -139,8 +139,14 @@ test("SCRUM-71: Input Validation, SQLi, Email Escaping, Uploads, Exports & Error
     }
 
     assert.deepEqual(unsafeHits, []);
-    assert.ok(parameterizedHits.some((h) => h.includes("index.js:1745")));
-    assert.ok(parameterizedHits.some((h) => h.includes("index.js:5022")));
+    const indexRawHits = parameterizedHits.filter((h) =>
+      /^classdex-backend[\\/]index\.js:\d+$/.test(h),
+    );
+    assert.equal(
+      indexRawHits.length,
+      2,
+      `Expected 2 parameterized $queryRaw/$executeRaw calls in classdex-backend/index.js, found ${indexRawHits.join(", ")}`,
+    );
 
     const pCounts = await apiRequest(srv.baseUrl, "GET", "/api/faculty/classes/pending-counts", { cookie: facCookie });
     assert.equal(pCounts.status, 200);

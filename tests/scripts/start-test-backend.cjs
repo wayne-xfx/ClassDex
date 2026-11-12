@@ -17,6 +17,20 @@ if (prodModeFlag) {
 }
 
 const { testHost } = loadBackendTestEnv({ preserveNodeEnv: true });
+if (prodModeFlag) {
+  if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.trim().length < 32 || process.env.SESSION_SECRET.trim() === "classdex-dev-session-secret") {
+    process.env.SESSION_SECRET = "classdex-test-harness-prod-secret-0123456789abcdef";
+  }
+  if (!process.env.FRONTEND_ORIGIN) {
+    process.env.FRONTEND_ORIGIN = "http://localhost:5173";
+  }
+  if (!process.env.APP_BASE_URL) {
+    process.env.APP_BASE_URL = process.env.FRONTEND_ORIGIN;
+  }
+  if (!process.env.RECAPTCHA_SECRET_KEY) {
+    process.env.RECAPTCHA_SECRET_KEY = "qa-test-harness-recaptcha";
+  }
+}
 const confirmedHost = assertSafeTestDatabaseUrl(process.env.DATABASE_URL, {
   label: "active process.env.DATABASE_URL",
 });
@@ -54,9 +68,9 @@ prisma
   .finally(() => {
     const server = app.listen(LISTEN_PORT, "127.0.0.1", () => {
       const actualPort = server.address()?.port ?? LISTEN_PORT;
-      const mailerStatus = validateMailerConfig();
+      const mailerMode = prodModeFlag ? (process.env.EMAIL_MODE || "stub") : validateMailerConfig().mode;
       console.log(
-        `[ClassDex Test Backend] Listening on http://127.0.0.1:${actualPort} (NODE_ENV=${process.env.NODE_ENV}, DB host: ${testHost}, EMAIL_MODE=${mailerStatus.mode})`,
+        `[ClassDex Test Backend] Listening on http://127.0.0.1:${actualPort} (NODE_ENV=${process.env.NODE_ENV}, DB host: ${testHost}, EMAIL_MODE=${mailerMode})`,
       );
     });
     process.on("SIGTERM", () => server.close(() => process.exit(0)));

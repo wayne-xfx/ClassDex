@@ -287,8 +287,11 @@ test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Depende
         DATABASE_URL: safeEnv.DATABASE_URL,
         SESSION_SECRET: "qa-test-production-session-secret-0123456789",
         FRONTEND_ORIGIN: "https://app.example.test",
+        APP_BASE_URL: "https://app.example.test",
         RECAPTCHA_SECRET_KEY: "qa-dummy",
-        EMAIL_MODE: "stub",
+        EMAIL_MODE: "resend",
+        RESEND_API_KEY: "re_qa_unused_test_key",
+        EMAIL_FROM: "ClassDex <no-reply@example.test>",
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -310,7 +313,7 @@ test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Depende
     }
   });
 
-  await t.test("CONF-08: NODE_ENV=production startup must fail fast when SESSION_SECRET, FRONTEND_ORIGIN, or production mailer config are missing", { todo: "SEC-25" }, async () => {
+  await t.test("CONF-08: NODE_ENV=production startup must fail fast when SESSION_SECRET, FRONTEND_ORIGIN, or production mailer config are missing", async () => {
     const guardedHost = assertSafeTestDatabaseUrl(safeEnv.DATABASE_URL, { label: "CONF-08 prod startup probe" });
     console.log(`[CONF-08] Testing NODE_ENV=production fail-fast behavior against Neon test host: ${guardedHost}`);
 
@@ -368,18 +371,47 @@ test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Depende
         await new Promise((r) => setTimeout(r, 200));
       }
 
-      if (reachable) {
-        assert.equal(badJsonBody.includes("SyntaxError"), false, "Prod stack trace leaked");
-        assert.equal(badJsonBody.includes("classdex-backend"), false, "Prod path leaked");
-        const logs = outputChunks.join("");
-        assert.match(logs, /defaulting to EMAIL_MODE=log/i);
-      }
+      const logs = outputChunks.join("");
+      assert.equal(reachable, false, "Backend must not boot in NODE_ENV=production when required secrets/origins/mailer are missing");
+      assert.equal(exitedEarly, true, "Expected NODE_ENV=production with missing config to exit immediately");
+      assert.ok(child.exitCode !== 0, `Expected non-zero exit code, got ${child.exitCode}`);
+      assert.equal(/defaulting to EMAIL_MODE=log/i.test(logs), false, "Production startup must never fall back to EMAIL_MODE=log");
+      assert.match(logs, /SESSION_SECRET|Refusing to start in NODE_ENV=production/i);
 
-      assert.equal(
-        reachable,
-        false,
-        "Backend booted in NODE_ENV=production with empty SESSION_SECRET/FRONTEND_ORIGIN/RESEND_API_KEY instead of failing fast",
-      );
+      // Also verify failing fast when only EMAIL_MODE=log or missing RESEND credentials remain
+      const mailerPort = await findFreePort();
+      const mailerChild = spawn(process.execPath, [path.join(repoRoot, "classdex-backend", "index.js")], {
+        cwd: path.join(repoRoot, "classdex-backend"),
+        env: {
+          ...baseChildEnv,
+          NODE_ENV: "production",
+          PORT: String(mailerPort),
+          DATABASE_URL: safeEnv.DATABASE_URL,
+          SESSION_SECRET: "qa-test-production-session-secret-0123456789",
+          FRONTEND_ORIGIN: "https://app.example.test",
+          APP_BASE_URL: "https://app.example.test",
+          RECAPTCHA_SECRET_KEY: "qa-dummy",
+          EMAIL_MODE: "log",
+          RESEND_API_KEY: "",
+          EMAIL_FROM: "",
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      const mailerLogs = [];
+      mailerChild.stdout.on("data", (d) => mailerLogs.push(d.toString()));
+      mailerChild.stderr.on("data", (d) => mailerLogs.push(d.toString()));
+      const mailerExitCode = await new Promise((resolve) => {
+        const timer = setTimeout(() => {
+          mailerChild.kill();
+          resolve(null);
+        }, 8000);
+        mailerChild.on("exit", (code) => {
+          clearTimeout(timer);
+          resolve(code);
+        });
+      });
+      assert.ok(mailerExitCode !== null && mailerExitCode !== 0, `Expected non-zero exit when EMAIL_MODE=log in prod, got ${mailerExitCode}`);
+      assert.match(mailerLogs.join(""), /EMAIL_MODE="log"|RESEND_API_KEY/i);
     } finally {
       if (!exitedEarly) child.kill();
       await new Promise((r) => setTimeout(r, 250));

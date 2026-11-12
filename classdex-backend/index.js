@@ -105,7 +105,71 @@ const trustProxyHops =
 app.set("trust proxy", Number.isNaN(trustProxyHops) ? process.env.TRUST_PROXY : trustProxyHops);
 
 const PORT = process.env.PORT || 5000;
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "http://localhost:5173";
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+const DEV_SESSION_SECRET = "classdex-dev-session-secret";
+const ALLOWED_CORS_ORIGINS = (() => {
+  const parsed = String(process.env.FRONTEND_ORIGIN || "")
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/+$/, ""))
+    .filter(Boolean);
+  if (parsed.length > 0) return parsed;
+  return IS_PRODUCTION ? [] : ["http://localhost:5173"];
+})();
+const SESSION_SECRET = (() => {
+  const configured = String(process.env.SESSION_SECRET || "").trim();
+  if (configured) return configured;
+  return IS_PRODUCTION ? "" : DEV_SESSION_SECRET;
+})();
+
+function assertProductionStartupConfig({ requireMailer = require.main === module } = {}) {
+  if (process.env.NODE_ENV !== "production") {
+    return;
+  }
+  const errors = [];
+  const secret = String(process.env.SESSION_SECRET || "").trim();
+  if (
+    !secret ||
+    secret.length < 32 ||
+    secret === DEV_SESSION_SECRET ||
+    secret === "replace-with-a-long-random-string"
+  ) {
+    errors.push("SESSION_SECRET must be at least 32 non-default characters.");
+  }
+  const origins = String(process.env.FRONTEND_ORIGIN || "")
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/+$/, ""))
+    .filter(Boolean);
+  if (origins.length === 0) {
+    errors.push("FRONTEND_ORIGIN must be explicitly configured.");
+  }
+  const appBase = String(
+    process.env.APP_BASE_URL ||
+      process.env.FRONTEND_URL ||
+      process.env.CLIENT_URL ||
+      process.env.FRONTEND_ORIGIN ||
+      "",
+  ).trim();
+  if (!appBase) {
+    errors.push("APP_BASE_URL or FRONTEND_ORIGIN must be configured.");
+  }
+  if (!String(process.env.RECAPTCHA_SECRET_KEY || "").trim()) {
+    errors.push("RECAPTCHA_SECRET_KEY must be configured.");
+  }
+  if (requireMailer) {
+    try {
+      validateMailerConfig();
+    } catch (err) {
+      errors.push(err.message);
+    }
+  }
+  if (errors.length > 0) {
+    throw new Error(
+      `[ClassDex Startup] Refusing to start in NODE_ENV=production:\n - ${errors.join("\n - ")}`,
+    );
+  }
+}
+
+assertProductionStartupConfig();
 const ROLES = new Set(["FACULTY", "STUDENT"]);
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -169,7 +233,10 @@ function resetRateLimitersForTests() {
 
 app.use(
   cors({
-    origin: FRONTEND_ORIGIN,
+    origin(requestOrigin, callback) {
+      if (!requestOrigin) return callback(null, true);
+      return callback(null, ALLOWED_CORS_ORIGINS.includes(requestOrigin));
+    },
     credentials: true,
   }),
 );
@@ -177,7 +244,7 @@ app.use(express.json({ limit: "8mb" }));
 app.use(
   session({
     name: "classdex.sid",
-    secret: process.env.SESSION_SECRET || "classdex-dev-session-secret",
+    secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: {
