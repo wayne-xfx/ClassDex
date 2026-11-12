@@ -1753,23 +1753,30 @@ app.put(
         message: "Upload a JPG, PNG, or WebP photo up to 5 MB.",
       });
     }
+    const facName = parseOptionalString(req.body?.name, { maxLength: 120 });
+    const facDepartment = parseOptionalString(req.body?.department, { maxLength: 120 });
+    const facEmail = parseOptionalString(req.body?.email, { maxLength: 254 });
+    const facContact = parseOptionalString(req.body?.contact, { maxLength: 120 });
+    if (!facName.ok || !facDepartment.ok || !facEmail.ok || !facContact.ok) {
+      return res.status(400).json({ message: "Profile text fields must be valid strings within length limits." });
+    }
     try {
       const profile = await prisma.facultyProfile.upsert({
         where: { userId: req.session.userId },
         create: {
           userId: req.session.userId,
-          name: optionalText(req.body?.name),
-          department: optionalText(req.body?.department),
+          name: facName.value,
+          department: facDepartment.value,
           photo: optionalText(rawPhoto),
-          email: optionalText(req.body?.email),
-          contact: optionalText(req.body?.contact),
+          email: facEmail.value,
+          contact: facContact.value,
         },
         update: {
-          name: optionalText(req.body?.name),
-          department: optionalText(req.body?.department),
+          name: facName.value,
+          department: facDepartment.value,
           photo: optionalText(rawPhoto),
-          email: optionalText(req.body?.email),
-          contact: optionalText(req.body?.contact),
+          email: facEmail.value,
+          contact: facContact.value,
         },
       });
       return res.json({ profile });
@@ -1803,11 +1810,25 @@ app.put(
   requireRole("STUDENT"),
   studentProfileUpdateLimiter,
   async (req, res) => {
-    const name = String(req.body?.name || "").trim();
-    const studentId = String(req.body?.studentId || "").trim();
-    const email = String(req.body?.email || "").trim().toLowerCase();
+    if (
+      typeof req.body?.name !== "string" ||
+      typeof req.body?.studentId !== "string" ||
+      typeof req.body?.email !== "string" ||
+      (req.body?.birthdate !== undefined && req.body?.birthdate !== null && typeof req.body.birthdate !== "string")
+    ) {
+      return res.status(400).json({ message: "Student profile fields must be valid text." });
+    }
+    const name = req.body.name.trim();
+    const studentId = req.body.studentId.trim();
+    const email = req.body.email.trim().toLowerCase();
     const photo = req.body?.photo;
-    const birthdateValue = String(req.body?.birthdate || "").trim();
+    const birthdateValue = typeof req.body?.birthdate === "string" ? req.body.birthdate.trim() : "";
+    const stuAddress = parseOptionalString(req.body?.address, { maxLength: 500 });
+    const stuProgram = parseOptionalString(req.body?.program, { maxLength: 120 });
+    const stuSection = parseOptionalString(req.body?.section, { maxLength: 120 });
+    if (name.length > 120 || email.length > 254 || !stuAddress.ok || !stuProgram.ok || !stuSection.ok) {
+      return res.status(400).json({ message: "Student profile text fields exceed allowed format or length." });
+    }
 
     if (!name) {
       return res.status(400).json({ message: "Full name is required." });
@@ -1842,9 +1863,9 @@ app.put(
       const parsedName = parseFullName(name);
       const profileData = {
         name,
-        address: optionalText(req.body?.address),
-        program: optionalText(req.body?.program),
-        section: optionalText(req.body?.section),
+        address: stuAddress.value,
+        program: stuProgram.value,
+        section: stuSection.value,
         studentId,
         photo,
         email,

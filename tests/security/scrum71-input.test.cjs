@@ -211,7 +211,7 @@ test("SCRUM-71: Input Validation, SQLi, Email Escaping, Uploads, Exports & Error
     assert.equal(afterUsers, beforeUsers);
   });
 
-  await t.test("INJ-03: Prisma/NoSQL operator objects and arrays in string fields must return 400 instead of coercing to '[object Object]'", { todo: "SEC-15" }, async () => {
+  await t.test("INJ-03: Prisma/NoSQL operator objects and arrays in string fields must return 400 instead of coercing to '[object Object]'", async () => {
     const resCls = await apiRequest(srv.baseUrl, "POST", "/api/classes", {
       cookie: facCookie,
       body: {
