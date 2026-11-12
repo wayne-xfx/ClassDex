@@ -1,5 +1,6 @@
 require("dotenv").config();
 const express = require("express");
+const helmet = require("helmet");
 const ExcelJS = require("exceljs");
 
 function parseCsvMatrix(csvText) {
@@ -400,6 +401,26 @@ function resetRateLimitersForTests() {
   verifyResendCooldownByUser.clear();
 }
 
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'none'"],
+        formAction: ["'none'"],
+      },
+    },
+    frameguard: { action: "deny" },
+    referrerPolicy: { policy: "no-referrer" },
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    hsts: IS_PRODUCTION ? { maxAge: 31536000, includeSubDomains: true } : false,
+  }),
+);
+app.use("/api", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
 app.use(
   cors({
     origin(requestOrigin, callback) {

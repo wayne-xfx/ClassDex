@@ -153,7 +153,7 @@ test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Depende
     assert.equal(oldSessionMe.status, 401, "Prior session ID must be invalidated upon session regeneration");
   });
 
-  await t.test("CONF-03: API & browser responses must include Helmet security headers, remove X-Powered-By, and set Cache-Control: no-store on sensitive endpoints", { todo: "SEC-26" }, async () => {
+  await t.test("CONF-03: API & browser responses must include Helmet security headers, remove X-Powered-By, and set Cache-Control: no-store on sensitive endpoints", async () => {
     const login = await loginAs(srv.baseUrl, fx.facA.email);
     const me = await apiRequest(srv.baseUrl, "GET", "/api/auth/me", { cookie: login.sidCookie });
     assert.equal(me.status, 200);
