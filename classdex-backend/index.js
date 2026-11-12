@@ -61,10 +61,11 @@ function unwrapExcelCellValue(value) {
 }
 const cors = require("cors");
 const session = require("express-session");
+const PgSessionStore = require("connect-pg-simple")(session);
 const { rateLimit, MemoryStore, ipKeyGenerator } = require("express-rate-limit");
 const bcrypt = require("bcryptjs");
 const { randomBytes } = require("node:crypto");
-const { prisma } = require("./db");
+const { prisma, pool } = require("./db");
 const { applyGracePeriod } = require("./attendance");
 const { eligibleCandidates, selectRecitationCandidate } = require("./recitation");
 const { verifyRecaptchaToken } = require("./recaptcha");
@@ -211,8 +212,14 @@ function assertProductionStartupConfig({ requireMailer = require.main === module
   if (!appBase) {
     errors.push("APP_BASE_URL or FRONTEND_ORIGIN must be configured.");
   }
-  if (!String(process.env.RECAPTCHA_SECRET_KEY || "").trim()) {
+  const recaptchaSecret = String(process.env.RECAPTCHA_SECRET_KEY || "").trim();
+  if (!recaptchaSecret) {
     errors.push("RECAPTCHA_SECRET_KEY must be configured.");
+  } else if (
+    recaptchaSecret === "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe" ||
+    recaptchaSecret === "6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI"
+  ) {
+    errors.push("RECAPTCHA_SECRET_KEY must not use Google's public test key in production.");
   }
   if (requireMailer) {
     try {
@@ -431,6 +438,44 @@ app.use(
     hsts: IS_PRODUCTION ? { maxAge: 31536000, includeSubDomains: true } : false,
   }),
 );
+function sanitizeLogPath(rawPath) {
+  const pathOnly = String(rawPath || "/").split("?")[0];
+  const segments = pathOnly.split("/");
+  const masked = [];
+  for (let i = 0; i < segments.length; i += 1) {
+    const seg = segments[i];
+    const prev = i > 0 ? segments[i - 1].toLowerCase() : "";
+    if (
+      seg &&
+      ((prev === "reset-password" && seg.toLowerCase() !== "validate") ||
+        prev === "verify-email" ||
+        prev === "token" ||
+        prev === "tokens" ||
+        /^[a-f0-9]{32,}$/i.test(seg) ||
+        /^[A-Za-z0-9_-]{40,}$/.test(seg))
+    ) {
+      masked.push("[REDACTED]");
+    } else {
+      masked.push(seg);
+    }
+  }
+  return masked.join("/") || "/";
+}
+
+if (process.env.NODE_ENV !== "test") {
+  app.use((req, res, next) => {
+    const startedAt = process.hrtime.bigint();
+    res.on("finish", () => {
+      const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+      const safePath = sanitizeLogPath(req.path);
+      console.log(
+        `[ClassDex HTTP] ${req.method} ${safePath} -> ${res.statusCode} (${durationMs.toFixed(1)} ms)`,
+      );
+    });
+    next();
+  });
+}
+
 app.use("/api", (_req, res, next) => {
   res.setHeader("Cache-Control", "no-store");
   next();
@@ -473,8 +518,16 @@ app.use((req, res, next) => {
   }
   return next();
 });
+const sessionStore = new PgSessionStore({
+  pool,
+  tableName: "session",
+  createTableIfMissing: false,
+  pruneSessionInterval: process.env.NODE_ENV === "test" ? false : 900,
+  errorLog: (err) => console.error("[ClassDex SessionStore]", err?.message || err),
+});
 app.use(
   session({
+    store: sessionStore,
     name: "classdex.sid",
     secret: SESSION_SECRET,
     resave: false,
@@ -6114,8 +6167,17 @@ app.use((err, _req, res, _next) => {
 
 if (require.main === module) {
   validateMailerConfig();
-  app.listen(PORT, () => {
-    console.log(`ClassDex API running on http://localhost:${PORT}`);
+  const startupDbHost = (() => {
+    try {
+      return new URL(String(process.env.DATABASE_URL || "")).hostname || "unknown";
+    } catch {
+      return "unknown";
+    }
+  })();
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(
+      `[ClassDex API] Listening on 0.0.0.0:${PORT} (NODE_ENV=${process.env.NODE_ENV || "development"}, DB host=${startupDbHost})`,
+    );
   });
 }
 
@@ -6127,4 +6189,6 @@ module.exports = {
   matchClassScopedMutationTarget,
   ARCHIVED_READ_ONLY_MESSAGE,
   ARCHIVED_JOIN_MESSAGE,
+  sanitizeLogPath,
+  assertProductionStartupConfig,
 };

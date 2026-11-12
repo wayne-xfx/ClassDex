@@ -1,4 +1,17 @@
-const API_BASE = "/api";
+const API_ORIGIN = String(import.meta.env.VITE_API_BASE_URL || "")
+  .trim()
+  .replace(/\/+$/, "");
+const API_BASE = API_ORIGIN ? `${API_ORIGIN}/api` : "/api";
+
+export function resolveApiUrl(url) {
+  if (typeof url !== "string") return "";
+  const trimmed = url.trim();
+  if (!trimmed) return "";
+  if (API_ORIGIN && trimmed.startsWith("/api/")) {
+    return `${API_ORIGIN}${trimmed}`;
+  }
+  return trimmed;
+}
 const SESSION_EXPIRED_KEY = "classdex:session-expired";
 let memorySessionExpired = false;
 
