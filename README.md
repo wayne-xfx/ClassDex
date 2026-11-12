@@ -1,338 +1,277 @@
 # ClassDex
 
-ClassDex is an interactive web-based digital index card and classroom record-keeping application for faculty at Leyte Normal University, developed for IT 122/122L (System Analysis and Design). The system streamlines classroom management by providing faculty with role-based class decks, flexible attendance and recitation tracking, activity and quiz scoring, and matrix export capabilities, while allowing students to maintain a reusable index card profile and track their academic records across enrolled classes.
+A web-based digital index card and classroom record-keeping system for instructors, featuring real-time attendance, activity and quiz scoring, weighted recitation card shuffling, spreadsheet export, and student record transparency.
 
-**Project Team:**
-- John Paul O. Talbo (Leader)
-- Paul Kristoffer Bautista
-- John Wayne M. Abejar
+Developed for the College of Computer Studies at Leyte Normal University (Tacloban City, Philippines) as a capstone web system for modern classroom record management.
 
----
+## Live Deployments
 
-## Features
+| Service | Role | Live URL |
+|---|---|---|
+| **Web Application** | React SPA on Vercel | [https://classdex.me](https://classdex.me) |
+| **API Service** | Node/Express backend on Render (Singapore) | [https://api.classdex.me](https://api.classdex.me) |
+| **API Health Check** | System status endpoint | [https://api.classdex.me/api/status](https://api.classdex.me/api/status) |
 
-- **Role-Based Accounts & Dashboards**: Dedicated interfaces for Faculty and Students with secure session-based authentication and role enforcement.
-- **Class Management**: Create classes with unique alphanumeric class codes, sharable invite links, and downloadable QR codes with enlarged display modal.
-- **Student List Management & Safe Import**: Build and maintain official class Student Lists by manual input, bulk copy-paste, formatted `.xlsx` template download, or safe spreadsheet import (`.xlsx`, `.xls`, `.csv`) with formula injection neutralization, numeric ID left-padding, and name parsing.
-- **Drop List & Safe Student Removal**: Remove unrecorded students permanently or automatically transition recorded students to a dedicated Drop List (`DROPPED` status with `droppedAt` timestamp), safely retaining all academic history and supporting one-click restoration.
-- **Surname-First Sorting**: Official Philippine class list name decomposition into `firstName`, `middleName`, `lastName`, `suffix`, and derived `sortKey`, ordering all modules and exports consistently by surname.
-- **Smart Enrollment & Auto-Add**: Roster-based auto-admission when student ID numbers match the Student List; approving a pending enrollment automatically adds the student to the active Student List and links records.
-- **Classroom Modules**:
-  - **Class Deck**: Optimized student card interface organized like physical index cards with photo caching (ETag/304) and unified deck loading.
-  - **Take Attendance**: Daily Manila-calendar-day attendance sessions (Present, Late, Absent) with configurable class grace periods for Late status and continuous editability.
-  - **Recitation**: Card shuffler supporting configurable shuffle duration (1–7 seconds), random or weighted selection (favoring students with fewer calls), deceleration animation curves, synchronized audio, and `prefers-reduced-motion` compliance.
-  - **Activities**: Per-session classroom activity score entry with automated absence synchronization.
-  - **Projects**: Fixed Midterm and Finals project score tracking.
-  - **Quiz**: Quiz sessions tracking total items, scores, and absence handling.
-- **Absence Auto-Flagging**: Synchronizes student attendance with academic modules so absent students are automatically flagged across activities and quizzes.
-- **Student Dashboard (View-Only)**: Students can view their enrolled classes, attendance tallies, recitation points, activity scores, project submissions, and quiz analytics.
-- **Matrix Data Export**: Comprehensive reporting for Attendance, Recitation, Activities, Projects, and Quiz exported as student-by-session matrices in both Excel (`.xlsx`) and CSV (`.csv`) formats.
-- **Security & Validation**: Client-validated reCAPTCHA v2 checkbox modal before class join and account registration requests, with server-side token verification before roster lookup.
-- **Email Notifications**: Asynchronous transactional email notifications via Resend for registration verification and class enrollment updates.
-- **Dark Mode**: System-aware theme support with persistent manual light/dark toggle.
+> [!NOTE]
+> The production API runs on Render's free tier, which spins down after 15 minutes of inactivity. The first request after an idle period may experience a 30–60 second cold-start delay while the backend wakes up.
 
 ---
 
-## Tech Stack & Versions
+## Feature Matrix
 
-- **Backend (`classdex-backend`)**:
-  - Node.js (CommonJS, v20+ recommended)
-  - Express `^5.2.1`
-  - Prisma ORM `^7.10.0`
-  - PostgreSQL client `@prisma/adapter-pg` `^7.10.0` & `pg` `^8.23.0`
-  - bcryptjs `^3.0.3` (password hashing)
-  - express-session `^1.19.0` (cookie-based session management)
-  - Resend `^6.32.1` (email delivery)
-  - SheetJS / xlsx `^0.18.5` (Excel workbook generation)
-  - dotenv `^18.0.2` & cors `^2.8.6`
-- **Frontend (`classdex-frontend`)**:
-  - React `^19.2.8` & React DOM `^19.2.8`
-  - React Router `^7.18.4`
-  - Vite `^8.3.0`
-  - Tailwind CSS `^4.3.3` with `@tailwindcss/vite` `^4.3.3`
-  - qrcode `^1.5.4` (dynamic client-side QR generation)
-  - oxlint `^1.81.0` (code linting)
-- **Database**:
-  - PostgreSQL (tested with Neon serverless PostgreSQL and local PostgreSQL)
-- **Version Control**:
-  - Git
+### Instructor (Faculty)
+
+- **Account & Security:** Faculty registration with email verification via Resend, PostgreSQL-backed session authentication, and single-use password reset links.
+- **Class Management:** Create classes with custom section names, course codes, course titles, structured meeting schedules (days/times), custom or auto-generated invite codes, and descriptions; archive and restore completed classes.
+- **Student List Ingestion:** Add official roster entries manually, paste lists in bulk, download formatted `.xlsx` templates, or import `.xlsx` and `.csv` spreadsheets (up to 2 MB / 500 rows) with formula-injection neutralization and Philippine surname parsing (`shared/nameParser.js`).
+- **Roster, Drop List & Join Flow:** Auto-generated 6-character join codes (or custom 3–20 character codes), direct shareable links (`/join/<code>`), and scannable/downloadable QR codes. Joins matching the 7-digit student ID on the Student List are auto-approved; non-roster joins enter **Pending Validation** with Approve/Decline actions and automated email notices. Removing previously scored students transitions them to a restorable **Drop List** without losing academic history.
+- **Automated Absence Warnings:** Bell notification badge flagging students who reach or exceed 7 cumulative absences in a class.
+- **Five Core Academic Modules:**
+  1. *Attendance:* Manila-date daily attendance sessions marking **Present**, **Late** (with configurable grace period), or **Absent**.
+  2. *Recitation:* Digital Card Shuffler filtering Present students, supporting pure random or participation-weighted picking, configurable 1–7 second shuffle durations, optional sound effects, and `prefers-reduced-motion` support.
+  3. *Activities:* Per-session classroom activity creation, scoring, and editing with attendance-absence synchronization.
+  4. *Projects:* Dedicated **Midterm** and **Finals** project score tracking.
+  5. *Quizzes:* Quiz session management with configurable total items and draft-then-save score entry.
+- **Digital Index Card:** Inspect individual student profiles, contact and emergency fields, profile photos, and class records on a flippable student index card.
+- **Gradebook Matrix Exporting:** Download structured student-by-session matrices for Attendance, Recitation, Activities, Projects, Quizzes, and Dropped Students as Excel (`.xlsx`) workbooks or UTF-8 BOM `.csv` files.
+- **UI/UX:** Responsive desktop/mobile layout with persistent light and dark themes.
+
+### Student
+
+- **Single Digital Index Card:** Reusable profile storing name, 7-digit student ID, program, section, contact details, birthdate, and Cloudinary-hosted profile photo.
+- **One-Click Enrollment:** Join classes via invite code, direct invite link, or QR code scan.
+- **View-Only Academic Dashboard:** Real-time, strictly isolated read-only view of personal attendance counts, recitation calls/scores, activity marks, project submissions, and quiz scores across enrolled classes.
 
 ---
 
-## Project Structure
+## System Architecture
 
+```mermaid
+flowchart TD
+  subgraph Clients
+    Browser["Student & Faculty Browsers / Mobile"]
+  end
+
+  subgraph Cloud Infrastructure
+    Vercel["Frontend Host (Vercel)<br/>React 19 + Vite SPA<br/>classdex.me"]
+    Render["Backend Host (Render - Singapore)<br/>Express 5 REST API (Single Instance)<br/>api.classdex.me"]
+    Neon[("Database (Neon Serverless PostgreSQL)<br/>Prisma Client + pg Pool")]
+  end
+
+  subgraph Third-Party Services
+    Cloudinary["Cloudinary<br/>(Student Profile Photos)"]
+    Resend["Resend<br/>(Transactional Emails)"]
+    reCAPTCHA["Google reCAPTCHA v2<br/>(Abuse Prevention)"]
+  end
+
+  Browser -->|HTTPS| Vercel
+  Browser -->|HTTPS API Requests / Cookies| Render
+  Browser -->|Direct Image Upload| Cloudinary
+  Vercel -->|Widget Challenge| reCAPTCHA
+  Render -->|PostgreSQL Wire Protocol| Neon
+  Render -->|REST API| Resend
+  Render -->|Verify siteverify| reCAPTCHA
 ```
+
+---
+
+## Technology Stack
+
+| Layer | Technology | Version / Tooling | Purpose |
+|---|---|---|---|
+| **Frontend** | React, Vite | React `19.2`, Vite `8.3`, React Router `7.18`, Tailwind CSS `4.3`, custom SVG sprite (`Icon.jsx`), `qrcode`, `oxlint` | Single Page Application, responsive UI, client-side routing, QR generation |
+| **Backend** | Node.js, Express | Node.js (`>=20`, pinned `24.21.0`), Express `5.2`, Helmet `8.3`, `express-rate-limit` `8.7`, ExcelJS `4.4` | REST API, authorization & role enforcement, IP/email rate limiting, `.xlsx`/`.csv` exports |
+| **Database** | PostgreSQL | Neon Serverless PostgreSQL, `@prisma/client` `7.10`, `@prisma/adapter-pg`, `pg` `8.23` | Relational persistence, pooled connections, transactional SQL migrations |
+| **Authentication** | `express-session`, `connect-pg-simple` | PostgreSQL-backed session store, `bcryptjs` `3.0` | `HttpOnly`, `Secure`, `SameSite=Lax` session cookies; bcrypt password hashing |
+| **External APIs** | Resend, Cloudinary, reCAPTCHA v2 | `resend` `6.32`, unsigned client image upload preset, Google reCAPTCHA Checkbox | Verified transactional mail, profile photo CDN, bot mitigation |
+| **Testing** | Node Test Runner, Playwright | `node --test`, `@playwright/test` `1.65` | API contract & unit tests, browser E2E suites, automated security regression |
+
+---
+
+## Repository Structure
+
+```text
 ClassDex/
-├── classdex-backend/
-│   ├── index.js                # Express application and API routes
-│   ├── db.js                   # PrismaClient initialization
-│   ├── email.js                # Transactional email building and queueing
-│   ├── export.js               # Excel (.xlsx) and CSV matrix generation
-│   ├── recaptcha.js            # Server-side reCAPTCHA verification
+├── classdex-backend/                 # Express REST API & PostgreSQL layer
 │   ├── prisma/
-│   │   ├── schema.prisma       # Prisma schema definition
-│   │   └── migrations/         # Additive SQL migrations
-│   ├── prisma.config.ts        # Prisma 7 configuration file
+│   │   ├── migrations/               # 20 versioned, additive SQL migrations
+│   │   └── schema.prisma             # Relational schema & Prisma models
 │   ├── scripts/
-│   │   └── apply-schema.js     # Idempotent migration runner
-│   ├── test/
-│   │   └── access-control.test.js # Backend unit tests (node --test)
-│   ├── .env.example
-│   └── package.json
-├── classdex-frontend/
+│   │   ├── apply-schema.js           # Transactional SQL migration runner (_ClassDexMigration)
+│   │   ├── backfill-name-parts.js    # Name decomposition backfill utility
+│   │   ├── seed-test-data.js         # Isolated QA/demo dataset seeder (qa_ prefix)
+│   │   └── send-test-email.js        # CLI smoke check for Resend delivery
 │   ├── src/
-│   │   ├── components/         # Shared UI, icons, and classroom modules
-│   │   ├── context/            # Authentication context
-│   │   ├── pages/              # Faculty and Student pages
-│   │   ├── api.js              # Fetch client wrapper
-│   │   └── index.css           # Design tokens, themes, and layouts
-│   ├── vite.config.js
-│   ├── .env.example
+│   │   ├── services/                 # Mailer transport (resend/log/stub) & HTML/text templates
+│   │   └── utils/                    # Date, password policy, photo URL, & token utilities
+│   ├── test/                         # Backend unit/integration tests (node --test)
+│   ├── db.js                         # Shared pg.Pool, PrismaPg adapter, & read-only cold-start retry
+│   ├── export.js                     # .xlsx and .csv gradebook matrix builders
+│   ├── index.js                      # Express entrypoint, middleware, & API routes
+│   ├── prisma.config.ts              # Prisma 7 CLI configuration
 │   └── package.json
-└── README.md
+├── classdex-frontend/                # React + Vite frontend client
+│   ├── public/                       # Static logos, favicon, and SVG icon sprite (icons.svg)
+│   ├── src/
+│   │   ├── components/               # Design system, AuthLayout, classroom modules, RecaptchaWidget
+│   │   ├── context/                  # AuthContext & ThemeProvider
+│   │   ├── pages/                    # Landing, Auth, Faculty, & Student pages
+│   │   ├── utils/                    # Photo upload, schedule, display/ordering, & sound helpers
+│   │   └── api.js                    # Credentials-included fetch client wrapper
+│   ├── vercel.json                   # Vercel SPA rewrites & strict security headers
+│   ├── vite.config.js                # Vite config & production build reCAPTCHA test-key guard
+│   └── package.json
+├── docs/
+│   ├── deployment/                   # DEPLOYMENT_GUIDE, ENV_VARIABLES, DNS_RECORDS, RUNBOOK, SMOKE_TEST
+│   └── testing/                      # Sprint 6.1 functional & Sprint 6.2 security test archives
+├── shared/
+│   └── nameParser.js                 # Shared Philippine surname/name parser & sort-key builder
+├── tests/
+│   ├── e2e/                          # Playwright cross-browser user journeys
+│   ├── scripts/                      # Test harness runners & strict test-DB allowlist guard
+│   └── security/                     # Automated OWASP Top 10 security test suites
+├── playwright.config.mjs             # Playwright configuration
+├── render.yaml                       # Render Web Service Blueprint (single instance, Singapore)
+└── package.json                      # Workspace test & seed scripts
 ```
 
 ---
 
-## Prerequisites
+## Local Development Setup
 
-- **Node.js**: Node.js v20.x, v22.x, or v24.x
-- **Git**: Installed and available in PATH
-- **PostgreSQL**: A cloud PostgreSQL instance (such as Neon) or local PostgreSQL database
+### 1. Prerequisites
 
----
+- **Node.js** `>= 20.x` (Node `24.21.0` LTS pinned in `classdex-backend/package.json`)
+- **npm** `>= 10.x`
+- **PostgreSQL** instance (local PostgreSQL or a serverless Neon database)
+- **Git**
 
-## Run Locally (Step-by-Step)
-
-### 1. Clone the Repository
+### 2. Clone & Install Dependencies
 
 ```bash
-git clone https://github.com/wayne-xfx/ClassDex.git
+git clone <repository-url>
 cd ClassDex
+npm install
+cd classdex-backend && npm install
+cd ../classdex-frontend && npm install
+cd ..
 ```
 
-### 2. Install Dependencies
+### 3. Environment Configuration
 
-Install required dependencies for both backend and frontend applications:
+Copy the template environment files:
 
 ```bash
-# In classdex-backend:
+cp classdex-backend/.env.example classdex-backend/.env
+cp classdex-frontend/.env.example classdex-frontend/.env
+```
+
+#### Backend Variables (`classdex-backend/.env`)
+
+| Variable | Purpose | Required in Dev? | Default / Placeholder |
+|---|---|---|---|
+| `DATABASE_URL` | PostgreSQL connection string for Prisma & sessions | Yes | `postgresql://user:pass@localhost:5432/classdex` |
+| `PORT` | HTTP port bound by Express | No | `5000` |
+| `SESSION_SECRET` | Cookie signing secret (minimum 32 chars in production) | Yes *(prod)* / Recommended | `<random-hex-secret>` |
+| `FRONTEND_ORIGIN` | Allowed browser origin for CORS with credentials | Yes *(prod)* / Recommended | `http://localhost:5173` |
+| `APP_BASE_URL` | Canonical frontend URL used in email links | Yes *(prod)* / Recommended | `http://localhost:5173` |
+| `EMAIL_MODE` | Mail transport: `log`, `stub`, or `resend` | No | `log` *(forces `stub` under tests)* |
+| `RESEND_API_KEY` | Resend API secret key (required when `EMAIL_MODE=resend`) | Only if `resend` | `re_xxxxxxxx` |
+| `EMAIL_FROM` | Verified sender address on custom domain | Only if `resend` | `ClassDex <no-reply@example.com>` |
+| `RECAPTCHA_SECRET_KEY` | Google reCAPTCHA v2 server secret key | No | *(Optional; Google test secret works locally)* |
+| `TRUST_PROXY` | Reverse proxy hop count (`1` behind Render) | Production only | `1` *(leave `0`/unset locally)* |
+| `RESET_TOKEN_TTL_MINUTES` | Password reset token TTL in minutes | No | `30` |
+| `VERIFY_TOKEN_TTL_HOURS` | Email verification token TTL in hours | No | `24` |
+| `VERIFY_RESEND_COOLDOWN_SECONDS` | Per-user cooldown between verification resends | No | `60` |
+
+#### Frontend Variables (`classdex-frontend/.env`)
+
+| Variable | Purpose | Required in Dev? | Default / Placeholder |
+|---|---|---|---|
+| `VITE_API_BASE_URL` | Backend origin without trailing `/api` (empty uses Vite `/api` proxy) | Production only | *(Leave blank locally; `https://api.classdex.me` in prod)* |
+| `VITE_RECAPTCHA_SITE_KEY` | Public Google reCAPTCHA v2 Checkbox site key | No | *(Google test site key works in dev; blocked in `vite build --mode production`)* |
+| `VITE_CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name for unsigned uploads | No | `your-cloud-name` |
+| `VITE_CLOUDINARY_UPLOAD_PRESET` | Cloudinary unsigned upload preset name | No | `your-unsigned-preset` |
+
+**Development Mode Notes:**
+- **`EMAIL_MODE=log` / `stub`:** Leaving `EMAIL_MODE=log` prints verification and password-reset emails safely to the backend terminal (with `?token=` values redacted in logs unless explicitly tested via `stub`), avoiding network calls to Resend. `EMAIL_MODE=stub` captures emails in memory for automated test assertions.
+- **reCAPTCHA Local vs. Production:** Google's public test reCAPTCHA keys (`6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI`) work during local development (`vite dev`), whereas `classdex-frontend/vite.config.js` and `assertProductionStartupConfig()` in `classdex-backend/index.js` fail fast if test keys are ever used in production.
+- **Cloudinary Fallback:** When `VITE_CLOUDINARY_CLOUD_NAME` and `VITE_CLOUDINARY_UPLOAD_PRESET` are unset in local dev, `uploadPhoto` in `classdex-frontend/src/utils/photoUpload.js` falls back to inline data URLs so registration and profile flows work offline from Cloudinary. Production builds require valid Cloudinary settings.
+
+### 4. Database Initialization
+
+ClassDex does **not** use `prisma migrate dev` or `prisma migrate deploy` in development or production. Instead, initialize the schema with the transactional migration script:
+
+```bash
 cd classdex-backend
-npm ci
-
-# In classdex-frontend:
-cd ../classdex-frontend
-npm ci
-```
-
-*(Note: `npm install` may also be used).*
-
-### 3. Configure Environment Variables
-
-Create `.env` files in both `classdex-backend/` and `classdex-frontend/` based on their respective `.env.example` templates.
-
-#### Backend Configuration (`classdex-backend/.env`)
-
-| Variable | Description | Example / Default |
-| :--- | :--- | :--- |
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://USER:PASSWORD@HOST/neondb?sslmode=require` |
-| `PORT` | Port for the backend Express API | `5000` |
-| `SESSION_SECRET` | Secret key for signing session cookies | `replace-with-a-long-random-string` |
-| `FRONTEND_ORIGIN` | Allowed CORS origin for the frontend | `http://localhost:5173` |
-| `APP_BASE_URL` | Primary base URL for all links in transactional emails (falls back to `FRONTEND_URL` → `CLIENT_URL` → `FRONTEND_ORIGIN` → `http://localhost:5173`) | `http://localhost:5173` |
-| `FRONTEND_URL` | Fallback base URL for email links | `http://localhost:5173` |
-| `CLIENT_URL` | Fallback client URL for email links | `http://localhost:5173` |
-| `RESET_TOKEN_TTL_MINUTES` | Expiry window (minutes) for single-use password reset links | `30` *(Optional)* |
-| `VERIFY_TOKEN_TTL_HOURS` | Expiry window (hours) for single-use email verification links | `24` *(Optional)* |
-| `VERIFY_RESEND_COOLDOWN_SECONDS` | Per-user cooldown (seconds) between resend-verification requests | `60` *(Optional)* |
-| `TRUST_PROXY` | Express `trust proxy` hop count for IP rate limiting behind proxies | `1` *(Optional)* |
-| `RECAPTCHA_SECRET_KEY`| Google reCAPTCHA v2 secret key | *(Optional in development)* |
-| `EMAIL_MODE` | Mail transport mode: `resend` (live Resend API), `log` (console print only), or `stub` (in-memory capture for automated tests) | `log` *(Defaults to `stub` in `npm test`; when unset outside tests, uses `resend` if `RESEND_API_KEY` + verified `EMAIL_FROM` are present, else `log`)* |
-| `RESEND_API_KEY` | Resend API secret key (`re_...`, stored only in `.env`) | `re_xxxxxxxx` *(Required when `EMAIL_MODE=resend`)* |
-| `EMAIL_FROM` | Verified sender email address on `classdex.me` (falls back to `ClassDex <no-reply@classdex.local>` only in `log`/`stub` modes) | `ClassDex <no-reply@classdex.me>` |
-
-#### Frontend Configuration (`classdex-frontend/.env`)
-
-| Variable | Description | Example / Default |
-| :--- | :--- | :--- |
-| `VITE_RECAPTCHA_SITE_KEY` | Google reCAPTCHA v2 site key (Checkbox) | *(Optional in development)* |
-| `VITE_CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name for unsigned profile photo uploads | `your-cloud-name` *(Optional in local dev; falls back to data URL if omitted or upload fails in dev)* |
-| `VITE_CLOUDINARY_UPLOAD_PRESET`| Cloudinary unsigned upload preset name | `your-unsigned-preset` *(Required when `VITE_CLOUDINARY_CLOUD_NAME` is set)* |
-
-### 4. Database Setup
-
-From `classdex-backend/`, run the project's setup script to generate the Prisma Client and apply all additive schema migrations:
-
-```bash
-# In classdex-backend/
 npm run db:setup
 ```
 
-#### What `npm run db:setup` Does
-1. Runs `prisma generate` to compile the Prisma Client code to `node_modules/@prisma/client`.
-2. Executes `node scripts/apply-schema.js`, which:
-   - Connects to your PostgreSQL database using direct TLS (`sslnegotiation=direct`, required by Neon endpoints).
-   - Creates the tracking table `_ClassDexMigration` if it does not already exist.
-   - Applies each SQL migration in `prisma/migrations/` in chronological order within a transaction.
-   - Verifies all required tables and columns (including `Class.gracePeriodMinutes`) are in place.
+This runs `prisma generate` followed by `node scripts/apply-schema.js`, which connects with direct TLS negotiation, creates `_ClassDexMigration` if missing, applies all 20 SQL files in `classdex-backend/prisma/migrations/` inside transactions, and verifies every required table (including the `session` table).
 
-> [!NOTE]
-> **Idempotent / Safe to Run Multiple Times:**
-> `npm run db:setup` checks `_ClassDexMigration` before applying each migration. Already applied migrations are safely skipped.
+### 5. Run the Application
 
-#### Standalone Prisma Client Generation
-If you only need to regenerate the Prisma Client without touching the database schema:
 ```bash
-# In classdex-backend/
-npx prisma generate
-```
-
-> [!NOTE]
-> **Note on `npx prisma migrate status`:**
-> `npx prisma migrate status` checks exclusively for Prisma's internal `_prisma_migrations` table. Because ClassDex applies migrations using its direct-connection runner `scripts/apply-schema.js` (tracking them in `_ClassDexMigration`), `_prisma_migrations` is not populated. It is therefore **expected and normal** for `npx prisma migrate status` to report pending migrations on an initialized database; the database tables and constraints are already fully in place and match `prisma/schema.prisma`.
->
-> *(Do not run `npx prisma migrate deploy` or `npx prisma migrate resolve`, as Prisma Migrate CLI is not verified for this project).*
-
----
-
-## 5. Start the Application
-
-#### Start Backend API
-From `classdex-backend/`:
-```bash
+# Terminal 1 — Backend API (http://localhost:5000)
+cd classdex-backend
 npm run dev
-# Or: npm start
-```
-The API starts on `http://localhost:5000`.
 
-#### Start Frontend Client
-From `classdex-frontend/`:
-```bash
+# Terminal 2 — Frontend Client (http://localhost:5173)
+cd classdex-frontend
 npm run dev
 ```
-The client starts on `http://localhost:5173`. Open `http://localhost:5173` in your browser.
+
+### 6. Troubleshooting Checklist
+
+- **Connection timeout / SSL warning:** Ensure `DATABASE_URL` includes `?sslmode=verify-full` (or `?sslmode=require` locally) and that your database is reachable. For one-time DDL setup on Neon, prefer the direct (non-pooled) endpoint string; use the pooled URL at runtime.
+- **Immediate `401` after login:** Verify `FRONTEND_ORIGIN` in `classdex-backend/.env` matches your exact browser origin (`http://localhost:5173`) and that `VITE_API_BASE_URL` is left blank in local dev so Vite proxies `/api` cleanly.
+- **Relation or `session` table does not exist:** Re-run `npm run db:setup` inside `classdex-backend/`.
+- **Port 5000 already in use:** Stop conflicting local processes or change `PORT` in `classdex-backend/.env` (updating the proxy target in `classdex-frontend/vite.config.js` if changed).
 
 ---
 
-## Configuring Optional Third-Party Services
+## Automated Testing Suite
 
-### Google reCAPTCHA v2
-1. Visit the [Google reCAPTCHA Admin Console](https://www.google.com/recaptcha/admin).
-2. Register a new site with type: **reCAPTCHA v2 ("I'm not a robot" Checkbox)**.
-3. Add `localhost` and `127.0.0.1` to the list of allowed domains.
-4. Add the generated Site Key to `classdex-frontend/.env` as `VITE_RECAPTCHA_SITE_KEY`.
-5. Add the generated Secret Key to `classdex-backend/.env` as `RECAPTCHA_SECRET_KEY`.
+Workspace test scripts run against an isolated test configuration (`classdex-backend/.env.test`) managed by `tests/scripts/load-test-env.cjs`:
 
-### Email Notifications (Resend)
-- All ClassDex emails (account verification, password reset, password-changed notice, student class join confirmation, faculty class join alert, and enrollment approval/decline decisions) are consolidated through `classdex-backend/src/services/mailer.js` and `classdex-backend/src/services/emailTemplates.js`.
-- **Domain Verification Requirement (`classdex.me`):**
-  - Add and verify `classdex.me` in the Resend Dashboard with the required SPF, DKIM, and DMARC DNS records on Namecheap.
-  - Until `classdex.me` is verified in Resend, Resend's sandbox restriction only permits sending from `onboarding@resend.dev` to the Resend account owner's own email address (returning HTTP `403` for any other recipient).
-- **Transport Modes (`EMAIL_MODE`):**
-  - `resend`: Sends live emails through the Resend SDK (`RESEND_API_KEY` and a verified `EMAIL_FROM` such as `ClassDex <no-reply@classdex.me>` are required; server startup fails fast if either is missing or uses `@classdex.local`).
-  - `log`: Prints formatted emails and links to the server console with no network call.
-  - `stub`: Captures emails in memory for automated tests (`npm test` always defaults to `stub` mode so test suites never hit the live Resend API).
-- **Bounce & Sender Reputation Safety (Important):**
-  - When testing with `EMAIL_MODE=resend`, **only** send to your own real email address (or `+tag` aliases like `you+student1@gmail.com`) or Resend's simulator address `delivered@resend.dev`.
-  - **Never** send live Resend emails to fake or non-existent addresses (`@example.com`, `@test.local`, random domains), as hard bounces damage `classdex.me`'s sender reputation.
-- **CLI Smoke Test:**
-  - From `classdex-backend/`, run `node scripts/send-test-email.js <your-real-email>` (requires `EMAIL_MODE=resend` in `classdex-backend/.env`).
+| Command | Scope | Runner |
+|---|---|---|
+| `npm run test:api` | Backend unit/contract tests (`classdex-backend/test/*.test.js`) and frontend unit tests | `node --test` |
+| `npm run test:security` | Automated OWASP Top 10 authorization, injection, rate-limit, and config suites (`tests/security/*.test.cjs`) | `node --test` |
+| `npm run test:e2e` | Cross-browser E2E user journeys (Chromium, Firefox, WebKit) | `@playwright/test` |
 
-### Profile Photos (Cloudinary)
-- Register at [Cloudinary](https://cloudinary.com) and create an **unsigned upload preset**.
-- Set `VITE_CLOUDINARY_CLOUD_NAME=` and `VITE_CLOUDINARY_UPLOAD_PRESET=` in `classdex-frontend/.env` using your cloud name and unsigned upload preset.
-- When both variables are configured, profile photos upload directly to Cloudinary; in production builds, upload errors fail cleanly instead of storing base64 data.
-- When omitted (or if Cloudinary rejects an upload) in local development (`vite dev`), ClassDex logs a development console warning and falls back to storing a data URL in the profile record.
+> [!CAUTION]
+> **Never run test, seed, or cleanup scripts against the production database or live domain.** Automated suites create and delete fixture records (`qa_` accounts and synthetic classes). `tests/scripts/load-test-env.cjs` enforces a strict host allowlist guard (`assertSafeTestDatabaseUrl`) and aborts immediately if `DATABASE_URL` points to any non-allowlisted or production host.
 
 ---
 
-## Scripts & Testing
+## Production Architecture & Operational Docs
 
-### Backend (`classdex-backend`)
-- `npm test`: Runs backend access control and business rule tests (`node --test`).
-- `npm run dev`: Starts backend development server (`node index.js`).
-- `npm run start`: Starts backend production server (`node index.js`).
-- `npm run db:setup`: Generates Prisma client and applies schema migrations (`prisma generate && node scripts/apply-schema.js`).
-- `node scripts/backfill-name-parts.js [--dry-run] [--batch-size=50]`: Parses and populates `firstName`, `middleName`, `lastName`, `suffix`, and `sortKey` across existing `StudentProfile` and `ClassRoster` records. Run with `--dry-run` to verify name parsing without writing to the database.
-- `node scripts/send-test-email.js <recipient>`: Sends a live smoke-test email via Resend when `EMAIL_MODE=resend` is set in `classdex-backend/.env` (refuses `.local` and `@example.com` addresses).
+- **Frontend (Vercel):** Deployed from `classdex-frontend` with SPA rewrites and enforced security headers (`Content-Security-Policy`, `Strict-Transport-Security: max-age=86400`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`) configured in `classdex-frontend/vercel.json`.
+- **Backend (Render):** Deployed from `classdex-backend` in Singapore as a single instance (`numInstances: 1`, `TRUST_PROXY=1`, `/api/status` health check) configured in `render.yaml`.
+- **Database (Neon):** Serverless PostgreSQL in Singapore (`ap-southeast-1`) using pooled connections for app runtime (`pg.Pool` + read-only cold-start retry) and PostgreSQL-backed sessions (`connect-pg-simple`).
+- **Domain & Email:** `classdex.me` and `api.classdex.me` share the registrable root domain via Namecheap DNS so `SameSite=Lax` cookies work cleanly across Vercel and Render; Resend SPF, DKIM, and DMARC records are verified for `no-reply@classdex.me`.
 
-### Frontend (`classdex-frontend`)
-- `npm run dev`: Starts Vite local development server (`vite`).
-- `npm run build`: Bundles production assets into `dist/` (`vite build`).
-- `npm run lint`: Runs `oxlint` static code analysis (`oxlint`).
-- `npm run preview`: Previews built production bundle locally (`vite preview`).
+Detailed operational guides live under `docs/deployment/`:
 
----
-
-## Classroom Enhancements & Data Rules
-
-### 1. Surname Sorting & Name Parser (`shared/nameParser.js`)
-ClassDex decomposes student names into structured components (`firstName`, `middleName`, `lastName`, `suffix`, and `sortKey`) to support official Philippine class list sorting standards:
-- **Formats Handled**: Standard given-first (`Juan Dela Cruz Jr.`), comma-separated registrar lists (`Dela Cruz, Juan Jr.`), and religious abbreviations (`Ma. Cristina Santos`).
-- **Surname Particles**: Preserves Filipino and Spanish compound particles (`de`, `del`, `dela`, `delos`, `delas`, `san`, `santa`, `van`, etc.) as part of the surname.
-- **Sorting Rule**: Sorts ascending by `sortKey` (case-insensitive, diacritics-stripped surname), then `firstName`, `middleName`, and `studentId`.
-
-### 2. Student List Excel Template & Safe Import
-- **Template Download** (`GET /api/classes/:id/roster/template`):
-  - Returns an `.xlsx` workbook named `<ClassCode>_student_list_template.xlsx`.
-  - Includes a reference `CLASS INFORMATION` block and pre-filled current active students.
-  - Forces text formatting (`z: "@"`) for student IDs to preserve leading zeroes.
-  - Applies formula injection neutralization (prefixes cells starting with `=`, `+`, `-`, or `@` with `'`).
-- **Safe Import** (`POST /api/classes/:id/roster/import`):
-  - Accepts `.xlsx`, `.xls`, and `.csv` payloads (max 2 MB, max 500 rows).
-  - Automatically locates the `STUDENTS` marker row or falls back to standard Name/ID headers, ignoring class information rows.
-  - Parses comma-formatted surnames, coerces numeric IDs with zero-padding to institutional length, flags duplicates and existing entries, and returns validation warnings to the frontend preview table before saving.
-
-### 3. Drop List & Safe Student Removal
-- **Safe Removal & Impact Assessment** (`GET /api/classes/:id/roster/:entryId/impact` & `DELETE /api/classes/:id/roster/:entryId`):
-  - When removing a student from the active Student List, ClassDex inspects all associated attendance records, recitation logs, activity scores, project scores, and quiz scores.
-  - **Zero Records**: The roster entry and class enrollment are permanently deleted.
-  - **One or More Records**: The student is transitioned to `DROPPED` status with a `droppedAt` timestamp. Academic history is preserved.
-- **Drop List View & Restoration** (`GET /api/classes/:id/drop-list` & `POST /api/classes/:id/drop-list/:entryId/restore`):
-  - Faculty can view all dropped students with their drop timestamp and historical record counts, and restore them back to the active Student List with one click.
-  - Export matrices include a dedicated "Dropped Students" block.
-
-### 4. Configurable Recitation Shuffle Duration
-- Faculty can adjust the shuffle animation duration between **1 and 7 seconds** (default: 3 seconds) using a duration control in the Recitation interface.
-- Backend validates integer bounds (1–7) on `PATCH /api/classes/:id` and stores `recitationShuffleSeconds` on `Class`.
-- Front-end scales the deceleration preview curve (~55ms fast swaps to ~250ms ease-out) to match the selected duration.
-- Sound effects and animations are automatically silenced and bypassed when animations are disabled or system `prefers-reduced-motion` is enabled.
-
-### 5. Name Parts Backfill Tool
-For existing databases initialized prior to surname sorting:
-```bash
-# Preview changes without modifying data:
-node scripts/backfill-name-parts.js --dry-run
-
-# Execute backfill in batches:
-node scripts/backfill-name-parts.js --batch-size=50
-```
-The script is idempotent and reports processed counts across both `StudentProfile` and `ClassRoster`.
+- [DEPLOYMENT_GUIDE.md](docs/deployment/DEPLOYMENT_GUIDE.md) — Production topology, hosting configuration, Jira summary, and Sprint 6.3 deployment report.
+- [RUNBOOK.md](docs/deployment/RUNBOOK.md) — Log inspection, manual redeploys, Render/Vercel rollbacks, Neon point-in-time recovery, secret rotation (`VITE_` rebuild note), and pre-presentation warm-up.
+- [ENV_VARIABLES.md](docs/deployment/ENV_VARIABLES.md) — Complete backend and frontend environment variable inventory.
+- [DNS_RECORDS.md](docs/deployment/DNS_RECORDS.md) — Final Namecheap web, API, and Resend DNS configuration.
+- [PRODUCTION_SMOKE_TEST.md](docs/deployment/PRODUCTION_SMOKE_TEST.md) — Verified production functional smoke test and bounded security recheck results.
 
 ---
 
-## Troubleshooting
+## Known Limitations
 
-- **Database Connection / Schema Setup Failed**:
-  - *Symptom*: `Database schema setup failed: connect ETIMEDOUT` or `DATABASE_URL is not set`.
-  - *Solution*: Verify `DATABASE_URL` is set in `classdex-backend/.env`. For Neon connections, ensure the endpoint URL includes `?sslmode=require`. The script automatically configures direct TLS negotiation (`sslnegotiation=direct`).
-- **reCAPTCHA Error / Rejected Token**:
-  - *Symptom*: Captcha fails or reports `invalid-input-secret` / `invalid-input-response`.
-  - *Solution*: Verify `localhost` is listed in your Google reCAPTCHA Admin Console domains, and ensure the Site Key is in `classdex-frontend/.env` while the Secret Key is in `classdex-backend/.env`.
-- **CORS / Session Cookie Not Saved**:
-  - *Symptom*: Frontend shows unauthorized errors immediately after logging in.
-  - *Solution*: Ensure `FRONTEND_ORIGIN` in `classdex-backend/.env` exactly matches the browser address (e.g. `http://localhost:5173`).
-- **Mailer Fallback / Resend Warnings**:
-  - *Symptom*: Backend logs `[ClassDex Mailer] RESEND_API_KEY/EMAIL_FROM not fully configured; defaulting to EMAIL_MODE=log.`
-  - *Explanation*: Normal development behavior when `EMAIL_MODE` is unset and `RESEND_API_KEY` or a verified `EMAIL_FROM` is omitted. Emails are printed to the server console instead of sent over the network.
-- **Windows Line Endings (`CRLF`)**:
-  - Ensure Git checkout preserves line endings using `git config core.autocrlf true` on Windows systems.
+- **Internet Connectivity Required:** Cloud database persistence, Cloudinary uploads, reCAPTCHA challenges, and transactional email delivery require active internet connectivity.
+- **Manual Attendance Entry:** Attendance is marked manually by instructors; no RFID, QR attendance punch-in, or biometric hardware integration exists.
+- **No Direct SIS Integration:** ClassDex operates independently of any university Student Information System or registrar database, relying on spreadsheet (`.xlsx`/`.csv`) import and export.
+- **Single-Instance Backend:** Rate-limiters (`express-rate-limit`) and verification resend cooldowns use in-memory state calibrated for one backend instance; scaling beyond one instance requires an external distributed store such as Redis.
+- **Free-Tier Cold Starts:** Render's free tier spins down after 15 minutes without traffic (~30–60 second wake-up delay).
 
 ---
 
-## System Limitations
+## License
 
-1. **Internet Connectivity Required**: Google reCAPTCHA, Google Fonts, and optional CDN/email services require active internet connectivity.
-2. **No Automated Grade Computation**: The application records attendance, recitation, activities, projects, and quizzes, and exports student matrices for faculty analysis; it does not automatically calculate final semester grades.
-3. **Student View-Only Access**: Students can view their attendance logs and academic records, but cannot edit marks or scores.
-4. **No University Portal Integration**: ClassDex operates as an independent classroom record-keeping tool and does not synchronize with Leyte Normal University's central enrollment portal.
+Educational use only. All rights reserved by Leyte Normal University.
