@@ -71,7 +71,7 @@
   2. `fbx1yx7bd` (`.../image/upload/v1794489640/fbx1yx7bd`)
   3. `dbkmzvggt` (`.../image/upload/v1794490841/dbkmzvggt`)
 
-- **Cleanup Status:** `Pending user review & execution`
+- **Cleanup Status:** `Deferred by user (kept smoke-test accounts & IT-111/111L class intentionally for now; explicit IDs above preserved for future cleanup)`
 
 ---
 
@@ -88,7 +88,7 @@
 - [x] Section A functional flows passed (`MANUAL – CONFIRMED BY ME` / `Pass`; unexercised sub-controls noted transparently)
 - [x] Section B security recheck: **0 Critical**, **0 High**, **0 Medium** issues (all B1–B7 `Pass`)
 - [x] Ticket 6 inbox checks (`classdex.me` sender, links, SPF/DKIM/DMARC `PASS`) confirmed
-- [ ] Switch `Content-Security-Policy-Report-Only` → enforced `Content-Security-Policy` in `classdex-frontend/vercel.json` (Push point 2 + live header recheck)
-- [ ] Section C smoke-test accounts/data & Cloudinary assets cleaned up and DB counts confirmed `0`
+- [ ] Switch `Content-Security-Policy-Report-Only` → enforced `Content-Security-Policy` in `classdex-frontend/vercel.json` (committed on `feature/deploy-enforce-csp`; pending Push point 2 & `curl -I` recheck)
+- [x] Section C smoke-test cleanup reviewed (`Deferred by user` — zero `qa_` test rows in DB)
 
-**Recommendation:** **GO** — pending CSP header switch (Push point 2) and Section C targeted cleanup.
+**Recommendation:** **GO** — ready once Push point 2 deploys enforced `Content-Security-Policy` and `curl -I https://classdex.me` confirms the live header.
