@@ -231,12 +231,36 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
     assert.ok([403, 404].includes(res.status), `PENDING student received ${res.status} with classCode=${res.json?.class?.classCode}`);
   });
 
-  await t.test("AUTHZ-05c: DECLINED student must not bypass instructor decline via POST /api/classes/join", { todo: "SEC-05" }, async () => {
-    const res = await apiRequest(baseUrl, "POST", "/api/classes/join", {
+  await t.test("AUTHZ-05c: DECLINED and DROPPED students must not bypass instructor decision via POST /api/classes/join", async () => {
+    const resDeclined = await apiRequest(baseUrl, "POST", "/api/classes/join", {
       cookie: stuDeclinedACookie,
       body: { classCode: fx.facAClass1.classCode, recaptchaToken: "ok" },
     });
-    assert.ok([403, 409].includes(res.status), `Expected 403/409 for DECLINED rejoin, got ${res.status}: ${res.rawText}`);
+    assert.equal(resDeclined.status, 403, `Expected 403 for DECLINED rejoin, got ${resDeclined.status}: ${resDeclined.rawText}`);
+    const declinedEnrollAfter = await prisma.classEnrollment.findUnique({
+      where: {
+        studentProfileId_classId: {
+          studentProfileId: fx.stuDeclinedA.studentProfile.id,
+          classId: fx.facAClass1.id,
+        },
+      },
+    });
+    assert.equal(declinedEnrollAfter.status, "DECLINED");
+
+    const resDropped = await apiRequest(baseUrl, "POST", "/api/classes/join", {
+      cookie: stuDroppedACookie,
+      body: { classCode: fx.facAClass1.classCode, recaptchaToken: "ok" },
+    });
+    assert.equal(resDropped.status, 403, `Expected 403 for DROPPED rejoin, got ${resDropped.status}: ${resDropped.rawText}`);
+    const droppedEnrollAfter = await prisma.classEnrollment.findUnique({
+      where: {
+        studentProfileId_classId: {
+          studentProfileId: fx.stuDroppedA.studentProfile.id,
+          classId: fx.facAClass1.id,
+        },
+      },
+    });
+    assert.equal(droppedEnrollAfter.status, "DROPPED");
   });
 
   await t.test("AUTHZ-06: cross-faculty isolation across all Faculty GET routes against Faculty B real IDs", async () => {

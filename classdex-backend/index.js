@@ -5568,6 +5568,16 @@ app.post(
         if (existingEnrollment?.status === "APPROVED") {
           return { kind: "existing", enrollment: existingEnrollment, status: "APPROVED", message: "You have already joined this class." };
         }
+        if (existingEnrollment?.status === "DECLINED" || existingEnrollment?.status === "DROPPED") {
+          return {
+            kind: "blocked",
+            status: existingEnrollment.status,
+            message:
+              existingEnrollment.status === "DECLINED"
+                ? "Your request to join this class was declined by the instructor."
+                : "You have been dropped from this class and cannot rejoin with an invite code.",
+          };
+        }
 
         const studentId = String(profile.studentId ?? "").trim();
         const roster = await tx.classRoster.findMany({ where: { classId: classRecord.id, droppedAt: null }, select: { studentId: true } });
@@ -5610,6 +5620,12 @@ app.post(
               : "Waiting for instructor approval.",
         };
       });
+      if (joinResult.kind === "blocked") {
+        return res.status(403).json({
+          message: joinResult.message,
+          status: joinResult.status,
+        });
+      }
       if (joinResult.kind === "created") {
         queueEmail(buildJoinEmail({
           studentName: profile.name,
