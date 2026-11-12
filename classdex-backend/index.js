@@ -3430,10 +3430,10 @@ app.get("/api/students/:profileId/photo", requireAuth, async (req, res) => {
           select: { id: true },
         });
         if (!allowed) {
-          return res.status(403).json({ message: "You do not have permission to view this photo." });
+          return res.status(404).json({ message: "Photo not found." });
         }
       } else {
-        return res.status(403).json({ message: "You do not have permission to view this photo." });
+        return res.status(404).json({ message: "Photo not found." });
       }
     }
 

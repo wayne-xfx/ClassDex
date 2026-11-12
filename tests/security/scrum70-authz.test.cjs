@@ -202,7 +202,7 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
     const otherPhoto = await apiRequest(baseUrl, "GET", `/api/students/${fx.stuA2.studentProfile.id}/photo`, {
       cookie: stuA1Cookie,
     });
-    assert.equal(otherPhoto.status, 403);
+    assert.equal(otherPhoto.status, 404);
 
     // Student A2 passes stuA1 profileId in query string on student records - must still return ONLY stuA2
     const forgedQuery = await apiRequest(
@@ -290,7 +290,7 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
     const photoRes = await apiRequest(baseUrl, "GET", `/api/students/${fx.stuB1.studentProfile.id}/photo`, {
       cookie: facACookie,
     });
-    assert.equal(photoRes.status, 403);
+    assert.equal(photoRes.status, 404);
   });
 
   await t.test("AUTHZ-07: cross-faculty isolation across all Faculty mutating routes against Faculty B real IDs", async () => {
@@ -426,7 +426,7 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
     const declinedPhotoRes = await apiRequest(baseUrl, "GET", `/api/students/${fx.stuDeclinedA.studentProfile.id}/photo`, {
       cookie: facACookie,
     });
-    assert.equal(declinedPhotoRes.status, 403, `Faculty fetched DECLINED student photo (${declinedPhotoRes.status})`);
+    assert.equal(declinedPhotoRes.status, 404, `Faculty fetched DECLINED student photo (${declinedPhotoRes.status})`);
     for (const allowedId of [fx.stuA1.studentProfile.id, fx.stuPendingA.studentProfile.id, fx.stuDroppedA.studentProfile.id]) {
       const okPhoto = await apiRequest(baseUrl, "GET", `/api/students/${allowedId}/photo`, { cookie: facACookie });
       assert.equal(okPhoto.status, 200, `Authorized photo for ${allowedId} returned ${okPhoto.status}`);
@@ -444,7 +444,7 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
     const probePhotoRes = await apiRequest(baseUrl, "GET", `/api/students/${fx.stuB1.studentProfile.id}/photo`, {
       cookie: facACookie,
     });
-    assert.equal(probePhotoRes.status, 403, `Adding another student's 7-digit ID to own roster exposed their photo (${probePhotoRes.status})`);
+    assert.equal(probePhotoRes.status, 404, `Adding another student's 7-digit ID to own roster exposed their photo (${probePhotoRes.status})`);
   });
 
   await t.test("AUTHZ-11: mass assignment & post-registration role escalation prevented", async () => {
@@ -762,7 +762,7 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
     assert.equal(foreignCls.status, 404);
   });
 
-  await t.test("AUTHZ-19b: GET /api/students/:profileId/photo must not leak studentProfile existence via 403 vs 404", { todo: "SEC-09" }, async () => {
+  await t.test("AUTHZ-19b: GET /api/students/:profileId/photo must not leak studentProfile existence via 403 vs 404", async () => {
     const nonExistPhoto = await apiRequest(baseUrl, "GET", "/api/students/clnonexistentprofile99/photo", { cookie: facACookie });
     const foreignPhoto = await apiRequest(baseUrl, "GET", `/api/students/${fx.stuUnrelated.studentProfile.id}/photo`, { cookie: facACookie });
     assert.equal(nonExistPhoto.status, 404);
