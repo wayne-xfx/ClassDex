@@ -509,7 +509,7 @@ test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Depende
     );
   });
 
-  await t.test("CONF-12: logTransport & error/logging hygiene must never write raw reset/verify token links or email bodies to stdout logs", { todo: "SEC-31" }, async () => {
+  await t.test("CONF-12: logTransport & error/logging hygiene must never write raw reset/verify token links or email bodies to stdout logs", async () => {
     const mailerSrc = fs.readFileSync(path.join(repoRoot, "classdex-backend", "src", "services", "mailer.js"), "utf8");
     const indexSrc = fs.readFileSync(path.join(repoRoot, "classdex-backend", "index.js"), "utf8");
     // Confirm PII not in REST URLs

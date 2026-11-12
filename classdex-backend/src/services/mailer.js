@@ -143,8 +143,14 @@ function validateMailerConfig(options = {}) {
   return { mode, from: getEmailFrom() };
 }
 
+function redactLinkToken(link) {
+  if (!link) return null;
+  return String(link).replace(/([?&](?:token|code)=)[^&\s]+/gi, "$1[REDACTED]");
+}
+
 async function logTransport({ to, subject, html, text }) {
   const link = extractPrimaryLink(text, html);
+  const safeLink = redactLinkToken(link);
   const lines = [
     "",
     DELIMITER,
@@ -152,9 +158,7 @@ async function logTransport({ to, subject, html, text }) {
     `From:    ${getEmailFrom()}`,
     `To:      ${to}`,
     `Subject: ${subject}`,
-    ...(link ? [`Link:    ${link}`] : []),
-    SUB_DELIMITER,
-    String(text || "").trim(),
+    ...(safeLink ? [`Preview: ${safeLink}`] : []),
     DELIMITER,
     "",
   ];
