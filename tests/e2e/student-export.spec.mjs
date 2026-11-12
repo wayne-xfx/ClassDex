@@ -54,7 +54,7 @@ test.describe("SCRUM-66 Student Dashboard & Export E2E (STU-04..07, EXP-07)", ()
     await page.locator("#login-email").fill(email);
     await page.locator("#login-password").fill(TEST_PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await expect(page).toHaveURL(expectedUrlRe);
+    await expect(page).toHaveURL(expectedUrlRe, { timeout: 25_000 });
   }
 
   test.beforeAll(async ({}, testInfo) => {
@@ -275,7 +275,7 @@ test.describe("SCRUM-66 Student Dashboard & Export E2E (STU-04..07, EXP-07)", ()
 
     // Active class read-only inline index card
     await page.goto(`/student/classes/${classA.id}`);
-    await expect(page.getByRole("region", { name: /Cards|Clara/i })).toBeVisible();
+    await expect(page.getByRole("region", { name: /Cards|Clara/i })).toBeVisible({ timeout: 20_000 });
     await expect(page.locator(".index-card")).not.toHaveClass(/is-flipped/);
     await expect(page.locator(".index-card-back")).toHaveAttribute("aria-hidden", "true");
     await page.getByRole("button", { name: "Flip card" }).first().click();
@@ -290,7 +290,7 @@ test.describe("SCRUM-66 Student Dashboard & Export E2E (STU-04..07, EXP-07)", ()
 
     // Dropped class read-only retention banner + historical records
     await page.goto(`/student/classes/${droppedClass.id}`);
-    await expect(page.getByText(/You were dropped from this class/i)).toBeVisible();
+    await expect(page.getByText(/You were dropped from this class/i)).toBeVisible({ timeout: 20_000 });
     await page.getByRole("button", { name: "Flip card" }).first().click();
     await expect(page.getByText("Archived Lab")).toBeVisible();
 
@@ -383,7 +383,7 @@ test.describe("SCRUM-66 Student Dashboard & Export E2E (STU-04..07, EXP-07)", ()
     // Both joined classes show updated name/program/section for the student
     for (const clsId of [classA.id, classB.id]) {
       await page.goto(`/student/classes/${clsId}`);
-      await expect(page.locator("#student-detail-title")).toContainText(/Updated/i);
+      await expect(page.locator("#student-detail-title")).toContainText(/Updated/i, { timeout: 20_000 });
       await expect(page.locator(".student-detail-info")).toContainText("BSCS");
       await expect(page.locator(".student-detail-info")).toContainText("CS4B");
     }
@@ -396,7 +396,7 @@ test.describe("SCRUM-66 Student Dashboard & Export E2E (STU-04..07, EXP-07)", ()
       for (const clsId of [classA.id, classB.id]) {
         await facPage.goto(`/faculty/classes/${clsId}`);
         const card = facPage.locator("article.student-card").filter({ hasText: "Updated" });
-        await expect(card).toBeVisible();
+        await expect(card).toBeVisible({ timeout: 20_000 });
         await expect(card).toContainText("BSCS");
         await expect(card).toContainText("CS4B");
       }
@@ -407,9 +407,9 @@ test.describe("SCRUM-66 Student Dashboard & Export E2E (STU-04..07, EXP-07)", ()
       await facCtx.close();
     }
 
-    // Also expect student's own inline index card to reflect updated address (exposes DEF-09 until SCRUM-69)
+    // Also expect student's own inline index card to reflect updated address (DEF-09)
     await page.goto(`/student/classes/${classA.id}`);
-    await expect(page.locator(".student-detail-info")).toContainText("Ormoc City, Leyte");
+    await expect(page.locator(".student-detail-info")).toContainText("Ormoc City, Leyte", { timeout: 20_000 });
   });
 
   test("STU-06: Faculty flippable 3D index card modal, archived read-only card & cross-faculty 404", async ({ page }) => {

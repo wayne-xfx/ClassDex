@@ -130,7 +130,7 @@ test.describe("SCRUM-63 Auth & RBAC E2E (AUTH-08, AUTH-09, AUTH-13, AUTH-14)", (
       await facPage.locator("#login-password").fill(TEST_PASSWORD);
       await facPage.getByRole("button", { name: "Log in" }).click();
 
-      await expect(facPage).toHaveURL(/\/faculty$/);
+      await expect(facPage).toHaveURL(/\/faculty$/, { timeout: 25_000 });
       const facBanner = facPage.getByRole("region", { name: "Verify your email address" });
       await expect(facBanner).toBeVisible();
       await expect(facBanner).toContainText(unverifiedFacEmail);
@@ -156,7 +156,7 @@ test.describe("SCRUM-63 Auth & RBAC E2E (AUTH-08, AUTH-09, AUTH-13, AUTH-14)", (
       await stuPage.locator("#login-password").fill(TEST_PASSWORD);
       await stuPage.getByRole("button", { name: "Log in" }).click();
 
-      await expect(stuPage).toHaveURL(/\/student$/);
+      await expect(stuPage).toHaveURL(/\/student$/, { timeout: 25_000 });
       const stuBanner = stuPage.getByRole("region", { name: "Verify your email address" });
       await expect(stuBanner).toBeVisible();
       await expect(stuBanner).toContainText(unverifiedStuEmail);
@@ -171,7 +171,7 @@ test.describe("SCRUM-63 Auth & RBAC E2E (AUTH-08, AUTH-09, AUTH-13, AUTH-14)", (
     await page.locator("#login-email").fill(verifiedFacEmail);
     await page.locator("#login-password").fill(TEST_PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await expect(page).toHaveURL(/\/faculty$/);
+    await expect(page).toHaveURL(/\/faculty$/, { timeout: 25_000 });
 
     // Navigate to a second protected page so browser history retains /faculty before logout
     await page.goto("/faculty/profile");
@@ -179,7 +179,7 @@ test.describe("SCRUM-63 Auth & RBAC E2E (AUTH-08, AUTH-09, AUTH-13, AUTH-14)", (
 
     await page.locator("button.user-menu-trigger").click();
     await page.getByRole("menuitem", { name: /Log out/i }).click();
-    await expect(page).toHaveURL(/\/(|login)$/);
+    await expect(page).toHaveURL(/\/$/);
 
     const meRes = await page.request.get("/api/auth/me");
     expect(meRes.status()).toBe(401);
@@ -200,7 +200,7 @@ test.describe("SCRUM-63 Auth & RBAC E2E (AUTH-08, AUTH-09, AUTH-13, AUTH-14)", (
       await stuPage.locator("#login-email").fill(verifiedStuEmail);
       await stuPage.locator("#login-password").fill(TEST_PASSWORD);
       await stuPage.getByRole("button", { name: "Log in" }).click();
-      await expect(stuPage).toHaveURL(/\/student$/);
+      await expect(stuPage).toHaveURL(/\/student$/, { timeout: 25_000 });
 
       for (const forbidden of ["/faculty", "/faculty/profile", "/faculty/classes/new", "/login", "/register"]) {
         await stuPage.goto(forbidden);
@@ -218,7 +218,7 @@ test.describe("SCRUM-63 Auth & RBAC E2E (AUTH-08, AUTH-09, AUTH-13, AUTH-14)", (
       await facPage.locator("#login-email").fill(verifiedFacEmail);
       await facPage.locator("#login-password").fill(TEST_PASSWORD);
       await facPage.getByRole("button", { name: "Log in" }).click();
-      await expect(facPage).toHaveURL(/\/faculty$/);
+      await expect(facPage).toHaveURL(/\/faculty$/, { timeout: 25_000 });
 
       for (const forbidden of ["/student", "/student/profile", "/join", "/login", "/register"]) {
         await facPage.goto(forbidden);

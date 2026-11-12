@@ -1,7 +1,16 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import { defineConfig, devices } from "@playwright/test";
+
+const require = createRequire(import.meta.url);
+const { loadBackendTestEnv } = require("./tests/scripts/load-test-env.cjs");
+const { testHost, env: loadedTestEnv } = loadBackendTestEnv();
+if (!process.env.CLASSDEX_E2E_ENV_LOGGED) {
+  process.env.CLASSDEX_E2E_ENV_LOGGED = "1";
+  console.log(`[ClassDex E2E Startup] .env.test loaded | DB host: ${testHost} | EMAIL_MODE=${loadedTestEnv.EMAIL_MODE}`);
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const EDGE_PATH_X86 = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
@@ -123,9 +132,11 @@ export default defineConfig({
       command: `node "${path.join(__dirname, "tests/e2e/support/e2e-backend.cjs")}"`,
       url: `http://127.0.0.1:${E2E_BACKEND_PORT}/api/status`,
       reuseExistingServer: false,
+      stdout: "pipe",
       timeout: 60_000,
       env: {
         ...process.env,
+        ...loadedTestEnv,
         EMAIL_MODE: "stub",
         NODE_ENV: "test",
         E2E_BACKEND_PORT,
@@ -139,6 +150,8 @@ export default defineConfig({
       timeout: 60_000,
       env: {
         ...process.env,
+        ...loadedTestEnv,
+        EMAIL_MODE: "stub",
         E2E_BACKEND_PORT,
         VITE_RECAPTCHA_SITE_KEY:
           process.env.E2E_VITE_RECAPTCHA_SITE_KEY ||

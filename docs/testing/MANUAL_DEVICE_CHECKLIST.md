@@ -1,8 +1,21 @@
-# ClassDex — Sprint 6.1 Manual Verification Checklist (`PWD-11`, `COMPAT-08..10`)
+# ClassDex — Sprint 6.1 Manual Verification Checklist (`PWD-11`, `COMPAT-08..10`, `COMPAT-04 [firefox-mobile]`)
 
-These 4 test cases cannot be reliably executed in headless CI on Windows without real physical mobile hardware, native macOS Safari, or live inbox access. Every item below retains status **`MANUAL – NOT RUN`** in `docs/testing/TEST_CASES.csv` until executed and signed off by you.
+Four cases (`PWD-11`, `COMPAT-08..10`) retain status **`MANUAL – NOT RUN`** in `docs/testing/TEST_CASES.csv` because they require live Gmail inbox access, physical mobile devices, or native macOS Safari hardware. In addition, the `COMPAT-04` Student responsive flow (`[firefox-mobile]`) is tracked below as a quick manual check in Firefox Responsive Design Mode due to an intermittent Playwright emulation limitation (see `Known Issues` in `docs/testing/TEST_RESULTS.md`).
 
 ---
+
+## Manual Checklist Overview
+
+| Item / Test Case | Environment / Viewport | Scope | Status in `TEST_CASES.csv` |
+|---|---|---|---|
+| `PWD-11` | Real Gmail / Resend (`EMAIL_MODE=resend`) | Live inbox placement, SPF/DKIM, verification/reset/join links | `MANUAL – NOT RUN` |
+| `COMPAT-08` | Physical Android phone (Chrome Mobile) | Touch layouts, `<select>` dropdowns, reCAPTCHA modal, shuffler, 3D card flip | `MANUAL – NOT RUN` |
+| `COMPAT-09` | Physical iPhone (Mobile Safari) | Safe areas, iOS form zoom, photo upload, Web Audio shuffle, 3D card flip | `MANUAL – NOT RUN` |
+| `COMPAT-10` | Native macOS Safari Desktop | Light/Dark themes, 3D flip & `F`/`Esc` keys, `.xlsx`/`.csv` downloads, logout | `MANUAL – NOT RUN` |
+| `COMPAT-04` (`firefox-mobile` bypass) | Firefox Desktop Responsive Design Mode (~390px wide, e.g., `390×844` / `375×812`) | Student flow, mobile nav, Light/Dark theme persistence, 3D card flip, and reCAPTCHA Security check popup on `/register` and `/join` | `Known Issue (skipped)` (Student E2E on `firefox-mobile` skipped; Desktop & Tablet Firefox E2E passed) |
+
+---
+
 
 ## Pre-Check Safety Note
 
@@ -93,3 +106,25 @@ These 4 test cases cannot be reliably executed in headless CI on Windows without
   - [ ] On **Student List**, click **Download template** -> confirm `<section>_<courseCode>_<classCode>_student_list_template.xlsx` downloads with valid extension and opens cleanly in Numbers / Excel.
   - [ ] On **Data export**, download both `.xlsx` (Excel) and `.csv` (CSV UTF-8 BOM) -> confirm files download without opening raw binary gibberish in a browser tab.
 - [ ] **Session Cookies & Logout:** Log in, change password in `/settings` (or reset password), verify logout clears cookie cleanly, and Back button redirects `/faculty` or `/student` to `/login`.
+
+---
+
+## 5. `COMPAT-04` (`firefox-mobile` Known Issue Bypass) — Firefox Responsive Design Mode (~390px Wide)
+
+**Context:** In automated Playwright Firefox Mobile emulation (`375×812`), the multi-step `Student flow, themes, mobile/tablet nav, captcha timing & 3D card flip responsive check` test failed intermittently due to external reCAPTCHA CDN iframe stalls (`Loading security check…` at `compat.spec.mjs:336`) and transient Neon `pg-pool` `Connection terminated unexpectedly` disconnects during StrictMode concurrent `/records` loads (`compat.spec.mjs:388`). Both Firefox Desktop (`1280×800`) and Firefox Tablet (`768×1024`) passed all Student & Faculty flows, and Firefox Mobile passed the full Faculty flow. Use this quick manual check in desktop Firefox:
+
+**Preconditions:**
+- Open Mozilla Firefox on desktop with `Ctrl+Shift+M` (**Responsive Design Mode**) set to **~390px wide** (`390×844` or `375×812`).
+- App running locally (`http://localhost:5173`) against your configured backend (`EMAIL_MODE=stub` or `resend`).
+
+**Checklist:**
+- [ ] **reCAPTCHA Popup & Timing (`/register` & `/join`):**
+  - [ ] On `/register` in Dark theme, submit whitespace name (`"   "`) -> verify inline validation displays and the **Security check** reCAPTCHA dialog does **not** pop up prematurely.
+  - [ ] Fill valid required fields and click **Register** -> confirm the **Security check** popup fits inside the ~390px viewport with zero horizontal scroll (`scrollWidth <= innerWidth`), renders the reCAPTCHA checkbox cleanly, and closes with `×`.
+  - [ ] Repeat on `/join`: blank invite code triggers inline validation without popup; non-empty invite code opens the **Security check** dialog cleanly inside ~390px width.
+- [ ] **Light/Dark Themes & Mobile Navigation (`<= 680px`):**
+  - [ ] Sign in as a Student -> verify `/student` cards stack cleanly without horizontal overflow in Dark mode, switch to **Light** mode (`Switch to light mode` header button), and reload to confirm `localStorage["classdex-theme"]` persistence.
+  - [ ] Verify compact icon-only `.main-nav` links (`Dashboard`, `My index card`) remain reachable, legible, and labeled properly for assistive tech, then navigate to `/student/profile`.
+- [ ] **Student Flow, Profile & 3D Index Card Flip (`/student/classes/:id`):**
+  - [ ] Update **Program** / fields on `/student/profile`, click **Save index card**, and confirm redirect back to `/student`.
+  - [ ] Open an approved class record (`/student/classes/:id`) in ~390px Responsive Design Mode -> verify `#student-detail-title` renders cleanly, click **Flip card** -> confirm 3D flip (`is-flipped`) shows back-side coursework cleanly with zero clipped text or horizontal scrollbar.

@@ -132,7 +132,7 @@ function dateLabel(value) {
   if (!value) return "";
   const date = value instanceof Date ? value : new Date(value);
   return new Intl.DateTimeFormat("en-US", {
-    month: "short", day: "numeric", year: "numeric", timeZone: "UTC",
+    month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Manila",
   }).format(date);
 }
 
@@ -221,7 +221,9 @@ function buildRecordSections(classRecord) {
     const order = { MIDTERM: 0, FINALS: 1 };
     return (order[a.type] ?? 2) - (order[b.type] ?? 2);
   });
-  const quizzes = [...(classRecord.quizSessions || [])].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const quizzes = [...(classRecord.quizSessions || [])].sort(
+    (a, b) => new Date(a.date) - new Date(b.date) || new Date(a.createdAt || 0) - new Date(b.createdAt || 0),
+  );
 
   sections.push(matrixSection("Attendance", students, sessions, {
     itemLabel: (session) => dateLabel(session.date),

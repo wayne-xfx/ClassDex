@@ -86,9 +86,16 @@ export default function FacultyClass() {
       if (!confirmLeave) return;
     }
     setActiveModule(targetModule);
-    if (searchParams.has("module") && searchParams.get("module") !== targetModule) {
+    const hasModule = searchParams.has("module");
+    const hasFocus = targetModule !== "student-list" && searchParams.has("focusStudent");
+    if ((hasModule && searchParams.get("module") !== targetModule) || hasFocus) {
       const nextParams = new URLSearchParams(searchParams);
-      nextParams.set("module", targetModule);
+      if (hasModule) {
+        nextParams.set("module", targetModule);
+      }
+      if (hasFocus) {
+        nextParams.delete("focusStudent");
+      }
       setSearchParams(nextParams, { replace: true });
     }
   }
@@ -139,18 +146,23 @@ export default function FacultyClass() {
     }
   }, [notificationsParam]);
 
+  const moduleParam = searchParams.get("module");
   useEffect(() => {
-    const mod = searchParams.get("module");
-    if (mod && VALID_MODULES.has(mod) && mod !== activeModule) {
-      setActiveModule(mod);
+    if (moduleParam && VALID_MODULES.has(moduleParam)) {
+      setActiveModule(moduleParam);
     }
-  }, [searchParams, activeModule]);
+  }, [moduleParam]);
 
   useEffect(() => {
     if (activeModule !== "student-list" && searchParams.has("focusStudent")) {
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.delete("focusStudent");
-      setSearchParams(nextParams, { replace: true });
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.delete("focusStudent");
+          return next;
+        },
+        { replace: true },
+      );
     }
   }, [activeModule, searchParams, setSearchParams]);
 

@@ -247,6 +247,18 @@ test("SCRUM-65: Recording Modules API Suite (REC-01..07, REC-09..11, REC-13..15,
       "2026-11-12T00:00:00.000Z",
     );
 
+    const concurrentDecks = await Promise.all([
+      jsonReq(baseUrl, "GET", `/api/classes/${mainClass.id}/deck`, { cookie: facCookie }),
+      jsonReq(baseUrl, "GET", `/api/classes/${mainClass.id}/deck`, { cookie: facCookie }),
+      jsonReq(baseUrl, "GET", `/api/classes/${mainClass.id}/deck`, { cookie: facCookie }),
+    ]);
+    for (const deckRes of concurrentDecks) {
+      assert.equal(deckRes.status, 200);
+      assert.ok(deckRes.data.session?.id);
+      assert.equal(deckRes.data.session.id, concurrentDecks[0].data.session.id);
+      assert.equal(deckRes.data.session.startedAt, null);
+    }
+
     const createRes = await jsonReq(baseUrl, "POST", `/api/classes/${mainClass.id}/sessions/today`, {
       cookie: facCookie,
     });
@@ -782,6 +794,7 @@ test("SCRUM-65: Recording Modules API Suite (REC-01..07, REC-09..11, REC-13..15,
       body: { title: "qa_Quiz 1", totalItems: 20 },
     });
     assert.equal(createRes.status, 201);
+    assert.deepEqual(createRes.data.session.scores, []);
     const quizId = createRes.data.session.id;
 
     // Invalid bulk scores: -1, 1.5, 21
@@ -894,6 +907,8 @@ test("SCRUM-65: Recording Modules API Suite (REC-01..07, REC-09..11, REC-13..15,
       cookie: facCookie,
       body: { title: "qa_Absence Lock Quiz", totalItems: 20 },
     });
+    assert.equal(qCreate.status, 201);
+    assert.equal(qCreate.data.session.date, manilaDate().toISOString());
     lockedQuizId = qCreate.data.session.id;
 
     const trySingleQuiz = await jsonReq(
@@ -917,6 +932,47 @@ test("SCRUM-65: Recording Modules API Suite (REC-01..07, REC-09..11, REC-13..15,
     const qC = bulkQuiz.data.scores.find((s) => s.studentId === stuC.studentProfile.id);
     assert.equal(qC.isAbsent, true);
     assert.equal(qC.score, null);
+
+    // Midnight Asia/Manila regression (DEF-15): 00:30 AM Manila on Oct 29 (16:30 UTC Oct 28)
+    // must match the Oct 29 ClassSession even if stored with an un-normalized UTC timestamp.
+    const midnightSession = await prisma.classSession.create({
+      data: {
+        classId: mainClass.id,
+        date: new Date("2026-10-29T00:00:00.000Z"),
+        startedAt: new Date("2026-10-28T16:30:00.000Z"),
+        attendance: { create: [{ studentId: stuC.studentProfile.id, status: "ABSENT" }] },
+      },
+    });
+    const midnightQuiz = await prisma.quizSession.create({
+      data: {
+        classId: mainClass.id,
+        title: "qa_Midnight Manila Quiz",
+        totalItems: 10,
+        date: new Date("2026-10-28T16:30:00.000Z"),
+      },
+    });
+    const midnightSingle = await jsonReq(
+      baseUrl,
+      "PUT",
+      `/api/quizzes/${midnightQuiz.id}/scores/${stuC.studentProfile.id}`,
+      { cookie: facCookie, body: { score: 8 } },
+    );
+    assert.equal(midnightSingle.status, 409);
+    const midnightBulk = await jsonReq(baseUrl, "PUT", `/api/quizzes/${midnightQuiz.id}/scores`, {
+      cookie: facCookie,
+      body: {
+        scores: [
+          { studentId: stuA.studentProfile.id, score: 10 },
+          { studentId: stuC.studentProfile.id, score: 7 },
+        ],
+      },
+    });
+    assert.equal(midnightBulk.status, 200);
+    const midnightC = midnightBulk.data.scores.find((s) => s.studentId === stuC.studentProfile.id);
+    assert.equal(midnightC.isAbsent, true);
+    assert.equal(midnightC.score, null);
+    await prisma.quizSession.delete({ where: { id: midnightQuiz.id } });
+    await prisma.classSession.delete({ where: { id: midnightSession.id } });
   });
 
   await t.test("REC-14: Absence auto-flag reversibility on attendance correction", async () => {

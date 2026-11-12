@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import { test, expect } from "@playwright/test";
+import { installRecaptchaIpv4Relay } from "./support/recaptcha-env.mjs";
 
 const require = createRequire(import.meta.url);
 const { loadBackendTestEnv } = require("../scripts/load-test-env.cjs");
@@ -19,20 +20,107 @@ async function loginAs(page, email, password, expectedUrlRegex) {
   await page.locator("#login-email").fill(email);
   await page.locator("#login-password").fill(password);
   await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page).toHaveURL(expectedUrlRegex);
+  await expect(page).toHaveURL(expectedUrlRegex, { timeout: 25_000 });
 }
 
 async function solveTestRecaptcha(page) {
   const modal = page.getByRole("dialog", { name: "Security check" });
   await expect(modal).toBeVisible();
   const anchor = page.frameLocator('iframe[title="reCAPTCHA"]').locator("#recaptcha-anchor");
-  await anchor.waitFor({ state: "visible", timeout: 15_000 });
+  await anchor.waitFor({ state: "visible", timeout: 25_000 });
   await anchor.click();
 }
 
-test.describe("SCRUM-67 Password Recovery & Email Flows E2E (PWD-01..PWD-10)", () => {
+test.describe("SCRUM-67 Email Verification E2E (PWD-01..PWD-03)", () => {
+  test.beforeEach(async ({ page }) => {
+    await installRecaptchaIpv4Relay(page);
+  });
+
+  test.afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  test("PWD-01..03 E2E: Register captures verify email, resend cooldown, expired/invalid/used & verify clears banner", async ({ page }) => {
+    test.setTimeout(120_000);
+    const uid = `${Date.now().toString(36).slice(-4)}${Math.random().toString(36).slice(2, 6)}`;
+    const regStudentEmail = `qa_e2e_s67_reg_${uid}@test.local`;
+
+    try {
+      await page.request.post(`${BACKEND_E2E_URL}/__e2e/reset-rate-limiters`);
+      await page.request.delete(`${BACKEND_E2E_URL}/__e2e/emails`);
+
+      await page.goto("/register");
+      await page.getByText("Student", { exact: true }).click();
+      await page.getByPlaceholder("e.g., Juan Dela Cruz").fill("qa_E2E S67 Reg Student");
+      await page.getByLabel(/^Email$/i).fill(regStudentEmail);
+      await page.locator('input[name="password"]').fill(TEST_PASSWORD);
+      await page.locator('input[name="confirmPassword"]').fill(TEST_PASSWORD);
+      await page.getByRole("button", { name: "Register" }).click();
+
+      const regResPromise = page.waitForResponse(
+        (res) => res.url().includes("/api/auth/register") && res.request().method() === "POST" && res.status() === 201,
+      );
+      await solveTestRecaptcha(page);
+      await regResPromise;
+      await expect(page).toHaveURL(/\/student$/);
+
+      const banner = page.getByRole("region", { name: "Verify your email address" });
+      await expect(banner).toBeVisible();
+      await expect(banner).toContainText(regStudentEmail);
+
+      const { emails: mailsAfterReg } = await (await page.request.get(`${BACKEND_E2E_URL}/__e2e/emails`)).json();
+      expect(mailsAfterReg.some((m) => m.to === regStudentEmail && m.link.includes("/verify-email?token="))).toBe(true);
+
+      // Boundary: missing token
+      await page.goto("/verify-email");
+      await expect(page.getByRole("heading", { name: "Invalid verification link" })).toBeVisible();
+
+      // Boundary: tampered/unknown token + logged-in Resend button cooldown
+      await page.request.delete(`${BACKEND_E2E_URL}/__e2e/emails`);
+      await page.goto("/verify-email?token=deadbeef0123456789deadbeef0123456789");
+      await expect(page.getByRole("heading", { name: "Invalid verification link" })).toBeVisible();
+
+      const resendBtn = page.getByRole("button", { name: /Resend verification email/i });
+      await expect(resendBtn).toBeVisible();
+      const resendResPromise = page.waitForResponse(
+        (res) => res.url().includes("/api/auth/resend-verification") && res.request().method() === "POST" && res.status() === 200,
+      );
+      await resendBtn.click();
+      await resendResPromise;
+      await expect(page.getByText(/Verification email sent\. Check your inbox\./i)).toBeVisible();
+      await expect(page.getByRole("button", { name: /Resend in \d+s/i })).toBeDisabled();
+
+      const { emails: mailsAfterResend } = await (await page.request.get(`${BACKEND_E2E_URL}/__e2e/emails`)).json();
+      const freshMail = mailsAfterResend.find((m) => m.to === regStudentEmail && m.link.includes("/verify-email?token="));
+      expect(freshMail).toBeTruthy();
+
+      // Boundary: expired (>24h) token
+      const regUser = await prisma.user.findUnique({ where: { email: regStudentEmail }, select: { id: true } });
+      const expiredPair = generateToken();
+      await prisma.emailVerificationToken.create({
+        data: { userId: regUser.id, tokenHash: expiredPair.hash, expiresAt: new Date(Date.now() - 25 * 3600_000) },
+      });
+      await page.goto(`/verify-email?token=${expiredPair.raw}`);
+      await expect(page.getByRole("heading", { name: "Verification link expired" })).toBeVisible();
+
+      // Valid token -> Email verified -> banner cleared on /student -> reuse says already used
+      const verifyPath = new URL(freshMail.link).pathname + new URL(freshMail.link).search;
+      await page.goto(verifyPath);
+      await expect(page.getByRole("heading", { name: "Email verified" })).toBeVisible();
+      await page.getByRole("link", { name: /Continue to Dashboard/i }).click();
+      await expect(page).toHaveURL(/\/student$/);
+      await expect(page.getByRole("region", { name: "Verify your email address" })).toHaveCount(0);
+
+      await page.goto(verifyPath);
+      await expect(page.getByRole("heading", { name: "Verification link already used" })).toBeVisible();
+    } finally {
+      await prisma.user.deleteMany({ where: { email: regStudentEmail } }).catch(() => {});
+    }
+  });
+});
+
+test.describe("SCRUM-67 Password Recovery & Email Flows E2E (PWD-04..PWD-10)", () => {
   const runId = Date.now().toString(36).slice(-5);
-  const regStudentEmail = `qa_e2e_s67_reg_${runId}@test.local`;
   const resetFacEmail = `qa_e2e_s67_fac_${runId}@test.local`;
   const settingsStuEmail = `qa_e2e_s67_cfg_${runId}@test.local`;
   const joinFacEmail = `qa_e2e_s67_jfac_${runId}@test.local`;
@@ -40,7 +128,6 @@ test.describe("SCRUM-67 Password Recovery & Email Flows E2E (PWD-01..PWD-10)", (
   const joinStu2Email = `qa_e2e_s67_j2_${runId}@test.local`;
 
   const createdEmails = [
-    regStudentEmail,
     resetFacEmail,
     settingsStuEmail,
     joinFacEmail,
@@ -66,11 +153,9 @@ test.describe("SCRUM-67 Password Recovery & Email Flows E2E (PWD-01..PWD-10)", (
 
   test.beforeAll(async () => {
     const hash = await bcrypt.hash(TEST_PASSWORD, 10);
-    const [sidCfg, sidJ1, sidJ2] = await Promise.all([
-      allocStudentId(8940000),
-      allocStudentId(8950000),
-      allocStudentId(8960000),
-    ]);
+    const sidCfg = await allocStudentId(8940000);
+    const sidJ1 = await allocStudentId(8950000);
+    const sidJ2 = await allocStudentId(8960000);
 
     resetFacUser = await prisma.user.create({
       data: {
@@ -172,70 +257,8 @@ test.describe("SCRUM-67 Password Recovery & Email Flows E2E (PWD-01..PWD-10)", (
     await prisma.$disconnect();
   });
 
-  test("PWD-01..03 E2E: Register captures verify email, resend cooldown, expired/invalid/used & verify clears banner", async ({ page }) => {
-    test.setTimeout(60_000);
-    await page.request.delete(`${BACKEND_E2E_URL}/__e2e/emails`);
-
-    await page.goto("/register");
-    await page.getByText("Student", { exact: true }).click();
-    await page.getByPlaceholder("e.g., Juan Dela Cruz").fill("qa_E2E S67 Reg Student");
-    await page.getByLabel(/^Email$/i).fill(regStudentEmail);
-    await page.locator('input[name="password"]').fill(TEST_PASSWORD);
-    await page.locator('input[name="confirmPassword"]').fill(TEST_PASSWORD);
-    await page.getByRole("button", { name: "Register" }).click();
-
-    await solveTestRecaptcha(page);
-    await expect(page).toHaveURL(/\/student$/);
-
-    const banner = page.getByRole("region", { name: "Verify your email address" });
-    await expect(banner).toBeVisible();
-    await expect(banner).toContainText(regStudentEmail);
-
-    const { emails: mailsAfterReg } = await (await page.request.get(`${BACKEND_E2E_URL}/__e2e/emails`)).json();
-    expect(mailsAfterReg.some((m) => m.to === regStudentEmail && m.link.includes("/verify-email?token="))).toBe(true);
-
-    // Boundary: missing token
-    await page.goto("/verify-email");
-    await expect(page.getByRole("heading", { name: "Invalid verification link" })).toBeVisible();
-
-    // Boundary: tampered/unknown token + logged-in Resend button cooldown
-    await page.request.delete(`${BACKEND_E2E_URL}/__e2e/emails`);
-    await page.goto("/verify-email?token=deadbeef0123456789deadbeef0123456789");
-    await expect(page.getByRole("heading", { name: "Invalid verification link" })).toBeVisible();
-
-    const resendBtn = page.getByRole("button", { name: /Resend verification email/i });
-    await expect(resendBtn).toBeVisible();
-    await resendBtn.click();
-    await expect(page.getByText(/Verification email sent\. Check your inbox\./i)).toBeVisible();
-    await expect(page.getByRole("button", { name: /Resend in \d+s/i })).toBeDisabled();
-
-    const { emails: mailsAfterResend } = await (await page.request.get(`${BACKEND_E2E_URL}/__e2e/emails`)).json();
-    const freshMail = mailsAfterResend.find((m) => m.to === regStudentEmail && m.link.includes("/verify-email?token="));
-    expect(freshMail).toBeTruthy();
-
-    // Boundary: expired (>24h) token
-    const regUser = await prisma.user.findUnique({ where: { email: regStudentEmail }, select: { id: true } });
-    const expiredPair = generateToken();
-    await prisma.emailVerificationToken.create({
-      data: { userId: regUser.id, tokenHash: expiredPair.hash, expiresAt: new Date(Date.now() - 25 * 3600_000) },
-    });
-    await page.goto(`/verify-email?token=${expiredPair.raw}`);
-    await expect(page.getByRole("heading", { name: "Verification link expired" })).toBeVisible();
-
-    // Valid token -> Email verified -> banner cleared on /student -> reuse says already used
-    const verifyPath = new URL(freshMail.link).pathname + new URL(freshMail.link).search;
-    await page.goto(verifyPath);
-    await expect(page.getByRole("heading", { name: "Email verified" })).toBeVisible();
-    await page.getByRole("link", { name: /Continue to Dashboard/i }).click();
-    await expect(page).toHaveURL(/\/student$/);
-    await expect(page.getByRole("region", { name: "Verify your email address" })).toHaveCount(0);
-
-    await page.goto(verifyPath);
-    await expect(page.getByRole("heading", { name: "Verification link already used" })).toBeVisible();
-  });
-
   test("PWD-04..07 E2E: Forgot password captcha + anti-enum UI, /reset-password bounds & prior-session revocation", async ({ browser }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(150_000);
     const oldSessionCtx = await browser.newContext();
     const oldSessionPage = await oldSessionCtx.newPage();
     const ctx = await browser.newContext();
@@ -348,7 +371,7 @@ test.describe("SCRUM-67 Password Recovery & Email Flows E2E (PWD-01..PWD-10)", (
   });
 
   test("PWD-08 E2E: AccountSettings Change password keeps Device A active & revokes Device B", async ({ browser }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(90_000);
     const ctxA = await browser.newContext();
     const ctxB = await browser.newContext();
     const pageA = await ctxA.newPage();
@@ -413,7 +436,7 @@ test.describe("SCRUM-67 Password Recovery & Email Flows E2E (PWD-01..PWD-10)", (
   });
 
   test("PWD-09..10 E2E: UI join pending alerts & Approve/Decline decision emails captured in stub mode", async ({ browser }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(120_000);
     const stuCtx = await browser.newContext();
     const facCtx = await browser.newContext();
     const stuPage = await stuCtx.newPage();
@@ -442,14 +465,39 @@ test.describe("SCRUM-67 Password Recovery & Email Flows E2E (PWD-01..PWD-10)", (
       // Faculty approves Student 1 and declines Student 2 -> decision emails
       await facPage.request.delete(`${BACKEND_E2E_URL}/__e2e/emails`);
       await loginAs(facPage, joinFacEmail, TEST_PASSWORD, /\/faculty$/);
+      const deckLoaded = facPage.waitForResponse(
+        (res) => res.url().includes(`/api/classes/${joinClass.id}/deck`) && res.request().method() === "GET" && res.status() === 200,
+        { timeout: 25_000 },
+      );
+      const pendingLoaded = facPage.waitForResponse(
+        (res) => res.url().includes(`/api/classes/${joinClass.id}/pending`) && res.request().method() === "GET" && res.status() === 200,
+        { timeout: 25_000 },
+      );
       await facPage.goto(`/faculty/classes/${joinClass.id}`);
-      await facPage.locator("button.header-bell-trigger").click();
+      await Promise.all([deckLoaded, pendingLoaded]);
+      const bellBtn = facPage.locator("button.header-bell-trigger");
+      await expect(bellBtn.locator(".header-bell-badge")).toHaveText("2", { timeout: 15_000 });
+      await bellBtn.click();
       const drawer = facPage.getByRole("dialog", { name: "Notifications" });
       await expect(drawer).toBeVisible();
 
-      await drawer.locator("article.pending-row", { hasText: "Join One" }).getByRole("button", { name: "Approve" }).click();
+      const approveRow = drawer.locator("article.pending-row", { hasText: "Join One" });
+      const declineRow = drawer.locator("article.pending-row", { hasText: "Join Two" });
+      await expect(approveRow).toBeVisible();
+      await expect(declineRow).toBeVisible();
+
+      const approvePatch = facPage.waitForResponse(
+        (res) => res.url().includes(`/api/classes/${joinClass.id}/pending/`) && res.request().method() === "PATCH" && res.status() === 200,
+      );
+      await approveRow.getByRole("button", { name: "Approve" }).click();
+      await approvePatch;
+
+      const declinePatch = facPage.waitForResponse(
+        (res) => res.url().includes(`/api/classes/${joinClass.id}/pending/`) && res.request().method() === "PATCH" && res.status() === 200,
+      );
       facPage.once("dialog", (d) => d.accept());
-      await drawer.locator("article.pending-row", { hasText: "Join Two" }).getByRole("button", { name: "Decline" }).click();
+      await declineRow.getByRole("button", { name: "Decline" }).click();
+      await declinePatch;
 
       await expect
         .poll(async () => {

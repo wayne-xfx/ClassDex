@@ -7,8 +7,7 @@ export default function Dashboard({ roleLabel, nextHint }) {
   const navigate = useNavigate();
 
   async function handleLogout() {
-    await logout();
-    navigate("/", { replace: true });
+    await logout(() => navigate("/", { replace: true }));
   }
 
   return (

@@ -19,9 +19,17 @@ databaseUrl.searchParams.set("sslnegotiation", "direct");
 
 const adapter = new PrismaPg({
   connectionString: databaseUrl.toString(),
-  connectionTimeoutMillis: 10_000,
-  query_timeout: 15_000,
+  connectionTimeoutMillis: 20_000,
+  query_timeout: 30_000,
+  idleTimeoutMillis: 10_000,
+  keepAlive: true,
 });
-const prisma = new PrismaClient({ adapter });
+const prisma = new PrismaClient({
+  adapter,
+  transactionOptions: {
+    maxWait: 15_000,
+    timeout: 25_000,
+  },
+});
 
 module.exports = { prisma };
