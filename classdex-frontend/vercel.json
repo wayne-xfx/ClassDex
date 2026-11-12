@@ -27,7 +27,7 @@
           "value": "no-referrer"
         },
         {
-          "key": "Content-Security-Policy-Report-Only",
+          "key": "Content-Security-Policy",
           "value": "default-src 'self'; script-src 'self' https://www.google.com https://www.gstatic.com https://www.recaptcha.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://res.cloudinary.com https://api.classdex.me https://www.gstatic.com; font-src 'self' data:; connect-src 'self' https://api.classdex.me https://api.cloudinary.com https://www.google.com https://www.gstatic.com https://www.recaptcha.net; frame-src https://www.google.com https://www.recaptcha.net; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
         }
       ]
