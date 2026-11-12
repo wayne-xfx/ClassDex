@@ -5447,6 +5447,35 @@ app.get(
         return res.status(404).json({ message: "Class not found." });
       }
 
+      const { enrollments: studentEnrollments, ...classData } = classRecord;
+      const studentEnrollment = studentEnrollments?.[0] || null;
+      if (studentEnrollment?.status === "PENDING") {
+        return res.json({
+          student: null,
+          class: {
+            id: classData.id,
+            courseCode: classData.courseCode,
+            courseTitle: classData.courseTitle,
+            sectionName: classData.sectionName,
+            archivedAt: classData.archivedAt,
+            enrollmentStatus: "PENDING",
+            droppedAt: null,
+            joinedAt: studentEnrollment.joinedAt || null,
+            recordSummary: {
+              attendance: "—",
+              recitation: "—",
+              activities: "—",
+              quiz: "—",
+            },
+          },
+          attendance: [],
+          recitations: [],
+          activities: [],
+          projects: [],
+          quizzes: [],
+        });
+      }
+
       const [attendance, recitations, rawActivities, projects, quizzes] = await Promise.all([
         prisma.attendanceRecord.findMany({
           where: { studentId: profile.id, session: { is: { classId: classRecord.id } } },
@@ -5499,8 +5528,6 @@ app.get(
         ...item,
         session: item.activity?.session || null,
       }));
-      const { enrollments: studentEnrollments, ...classData } = classRecord;
-      const studentEnrollment = studentEnrollments?.[0] || null;
 
       return res.json({
         student: profile,

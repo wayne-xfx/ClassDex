@@ -224,11 +224,24 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
     assert.equal(res.json.student.id, fx.stuDroppedA.studentProfile.id);
   });
 
-  await t.test("AUTHZ-05b: PENDING student must not access class internal details before approval", { todo: "SEC-04" }, async () => {
+  await t.test("AUTHZ-05b: PENDING student receives minimal card header without class internals before approval", async () => {
     const res = await apiRequest(baseUrl, "GET", `/api/student/classes/${fx.facAClass1.id}/records`, {
       cookie: stuPendingACookie,
     });
-    assert.ok([403, 404].includes(res.status), `PENDING student received ${res.status} with classCode=${res.json?.class?.classCode}`);
+    assert.equal(res.status, 200);
+    assert.equal(res.json.class.enrollmentStatus, "PENDING");
+    assert.equal(res.json.class.id, fx.facAClass1.id);
+    assert.equal(res.json.class.sectionName, fx.facAClass1.sectionName);
+    assert.equal(res.json.student, null);
+    assert.equal(res.json.class.classCode, undefined);
+    assert.equal(res.json.class.description, undefined);
+    assert.equal(res.json.class.schedule, undefined);
+    assert.equal(res.json.class.faculty, undefined);
+    assert.deepEqual(res.json.attendance, []);
+    assert.deepEqual(res.json.recitations, []);
+    assert.deepEqual(res.json.activities, []);
+    assert.deepEqual(res.json.projects, []);
+    assert.deepEqual(res.json.quizzes, []);
   });
 
   await t.test("AUTHZ-05c: DECLINED and DROPPED students must not bypass instructor decision via POST /api/classes/join", async () => {
