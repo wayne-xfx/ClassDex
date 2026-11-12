@@ -124,7 +124,7 @@ function styledExcelBuffer(buffer, matrixSheetNames) {
 }
 
 function sanitizeExportValue(value) {
-  if (typeof value === "string" && /^[=+\-@]/.test(value)) return `'${value}`;
+  if (typeof value === "string" && /^(?:[=+\-@\t\r\n]| +[=+\-@])/.test(value)) return `'${value}`;
   return value;
 }
 

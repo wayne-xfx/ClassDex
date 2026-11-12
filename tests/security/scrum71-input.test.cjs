@@ -621,7 +621,7 @@ test("SCRUM-71: Input Validation, SQLi, Email Escaping, Uploads, Exports & Error
     }
   });
 
-  await t.test("INJ-12b: CSV & XLSX exports must also neutralize leading tab (\\t), CR (\\r), and leading whitespace formulas", { todo: "SEC-11" }, async () => {
+  await t.test("INJ-12b: CSV & XLSX exports must also neutralize leading tab (\\t), CR (\\r), and leading whitespace formulas", async () => {
     const prefixes = ["\t=1+1", "\r=1+1", " =1+1"];
     const formulaStudents = [];
     for (let i = 0; i < prefixes.length; i += 1) {
@@ -669,7 +669,12 @@ test("SCRUM-71: Input Validation, SQLi, Email Escaping, Uploads, Exports & Error
       const xmlMap = unzipXmlEntries(xlsxRes.buffer);
       const combinedXml = Object.values(xmlMap).join("\n");
       assert.ok(combinedXml.includes("&apos;\t=1+1"), "XLSX failed to prefix leading TAB (\\t=1+1)");
-      assert.ok(combinedXml.includes("&apos;\r=1+1") || combinedXml.includes("&apos;&#x0d;=1+1"), "XLSX failed to prefix leading CR (\\r=1+1)");
+      assert.ok(
+        combinedXml.includes("&apos;\r=1+1") ||
+          combinedXml.includes("&apos;&#x0d;=1+1") ||
+          combinedXml.includes("&apos;_x000d_=1+1"),
+        "XLSX failed to prefix leading CR (\\r=1+1)",
+      );
       assert.ok(combinedXml.includes("&apos; =1+1"), "XLSX failed to prefix leading SPACE formula ( =1+1)");
     } finally {
       await prisma.user.deleteMany({ where: { id: { in: formulaStudents } } });
