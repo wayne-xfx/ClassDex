@@ -150,7 +150,7 @@ test("SCRUM-72: Rate Limiting, Enumeration Timing, reCAPTCHA Enforcement & Resou
     assert.equal(mailsToUnv.length, 1);
   });
 
-  await t.test("RATE-03b: registration & verify-email endpoints lack per-IP rate limiting (429)", { todo: "SEC-19" }, async () => {
+  await t.test("RATE-03b: registration & verify-email endpoints enforce per-IP rate limiting (429)", async () => {
     backendIndex.resetRateLimitersForTests();
     mailer.clearStubEmails();
 
@@ -278,7 +278,7 @@ test("SCRUM-72: Rate Limiting, Enumeration Timing, reCAPTCHA Enforcement & Resou
     assert.equal(restoreCp.status, 200);
   });
 
-  await t.test("RATE-04b: reset-password and reset-password/validate endpoints must enforce rate limiting (429)", { todo: "SEC-19" }, async () => {
+  await t.test("RATE-04b: reset-password and reset-password/validate endpoints must enforce rate limiting (429)", async () => {
     backendIndex.resetRateLimitersForTests();
     const statuses = [];
     for (let i = 0; i < 15; i += 1) {

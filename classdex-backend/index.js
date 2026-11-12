@@ -182,6 +182,10 @@ const forgotPasswordEmailStore = new MemoryStore();
 const changePasswordWrongCurrentStore = new MemoryStore();
 const loginIpStore = new MemoryStore();
 const loginEmailStore = new MemoryStore();
+const registerIpStore = new MemoryStore();
+const verifyEmailIpStore = new MemoryStore();
+const resetPasswordValidateIpStore = new MemoryStore();
+const resetPasswordIpStore = new MemoryStore();
 const verifyResendCooldownByUser = new Map();
 
 function getVerifyResendCooldownSeconds() {
@@ -249,12 +253,52 @@ const loginEmailLimiter = rateLimit({
   handler: (_req, res) => res.status(429).json({ message: RATE_LIMIT_MESSAGE }),
 });
 
+const registerIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 12,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  store: registerIpStore,
+  handler: (_req, res) => res.status(429).json({ message: RATE_LIMIT_MESSAGE }),
+});
+
+const verifyEmailIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 15,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  store: verifyEmailIpStore,
+  handler: (_req, res) => res.status(429).json({ message: RATE_LIMIT_MESSAGE }),
+});
+
+const resetPasswordValidateIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  store: resetPasswordValidateIpStore,
+  handler: (_req, res) => res.status(429).json({ message: RATE_LIMIT_MESSAGE }),
+});
+
+const resetPasswordIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  store: resetPasswordIpStore,
+  handler: (_req, res) => res.status(429).json({ message: RATE_LIMIT_MESSAGE }),
+});
+
 function resetRateLimitersForTests() {
   forgotPasswordIpStore.resetAll();
   forgotPasswordEmailStore.resetAll();
   changePasswordWrongCurrentStore.resetAll();
   loginIpStore.resetAll();
   loginEmailStore.resetAll();
+  registerIpStore.resetAll();
+  verifyEmailIpStore.resetAll();
+  resetPasswordValidateIpStore.resetAll();
+  resetPasswordIpStore.resetAll();
   verifyResendCooldownByUser.clear();
 }
 
@@ -795,7 +839,7 @@ app.get("/api/status", (_req, res) => {
   res.json({ message: "ClassDex Backend is running successfully!" });
 });
 
-app.post("/api/auth/register", async (req, res) => {
+app.post("/api/auth/register", registerIpLimiter, async (req, res) => {
   try {
     if (!(await requireRecaptcha(req, res))) {
       return;
@@ -1019,7 +1063,7 @@ async function inspectResetToken(rawToken, now = new Date()) {
   return { valid: true, record };
 }
 
-app.get("/api/auth/reset-password/validate", async (req, res) => {
+app.get("/api/auth/reset-password/validate", resetPasswordValidateIpLimiter, async (req, res) => {
   try {
     const check = await inspectResetToken(req.query?.token);
     if (!check.valid) {
@@ -1032,7 +1076,7 @@ app.get("/api/auth/reset-password/validate", async (req, res) => {
   }
 });
 
-app.post("/api/auth/reset-password", async (req, res) => {
+app.post("/api/auth/reset-password", resetPasswordIpLimiter, async (req, res) => {
   try {
     const rawToken = String(req.body?.token || "").trim();
     const password = String(req.body?.password || "");
@@ -1198,7 +1242,7 @@ async function inspectVerifyToken(rawToken, now = new Date()) {
   return { valid: true, record };
 }
 
-app.post("/api/auth/verify-email", async (req, res) => {
+app.post("/api/auth/verify-email", verifyEmailIpLimiter, async (req, res) => {
   try {
     const rawToken = String(req.body?.token || "").trim();
     const initialCheck = await inspectVerifyToken(rawToken);
