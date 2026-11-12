@@ -91,6 +91,28 @@ test("uploadPhoto throws generic error in production when Cloudinary upload fail
   }
 });
 
+test("uploadPhoto throws in production when Cloudinary env vars are missing", async () => {
+  const file = makeFakeFile({ type: "image/png", size: 64 });
+  const errors = [];
+  const origError = console.error;
+  console.error = (...args) => errors.push(args.join(" "));
+  try {
+    await assert.rejects(
+      () =>
+        uploadPhoto(file, {
+          cloudName: "",
+          uploadPreset: "",
+          isDev: false,
+          readAsDataUrl: async () => "data:image/png;base64,ZmFrZQ==",
+        }),
+      /Photo upload service is not configured/,
+    );
+    assert.equal(errors.length, 1);
+  } finally {
+    console.error = origError;
+  }
+});
+
 test("uploadPhoto falls back to data URL in dev on network error", async () => {
   const file = makeFakeFile({ type: "image/png", size: 64 });
   const warnings = [];

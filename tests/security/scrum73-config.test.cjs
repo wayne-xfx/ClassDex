@@ -496,7 +496,7 @@ test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Depende
     assert.ok(false, `Frontend devDependencies use vite@${viteVer} (High, fixed in 8.3.8) and source-map-js@${smVer} (High, dev/build-only)`);
   });
 
-  await t.test("CONF-11: Cloudinary upload config avoids browser secrets, but photoUpload.js & isValidPhoto allow silent prod base64 fallback & external URLs", { todo: "SEC-30" }, async () => {
+  await t.test("CONF-11: Cloudinary upload config avoids browser secrets and rejects production base64 fallback when Cloudinary env vars are unset", async () => {
     const photoSrc = fs
       .readFileSync(path.join(repoRoot, "classdex-frontend", "src", "utils", "photoUpload.js"), "utf8")
       .replace(/\r\n/g, "\n");
