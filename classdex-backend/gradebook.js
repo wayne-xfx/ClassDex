@@ -1,7 +1,10 @@
+const MAX_GRADEBOOK_INT = 1_000_000;
+
 function isValidScore(score, maxScore) {
   return score === null || (
     Number.isInteger(score)
     && score >= 0
+    && score <= MAX_GRADEBOOK_INT
     && (maxScore === null || score <= maxScore)
   );
 }
@@ -100,6 +103,7 @@ async function createAbsentProjectScores(transaction, projectId, sessionId) {
 }
 
 module.exports = {
+  MAX_GRADEBOOK_INT,
   isValidScore,
   syncAttendanceScoreAbsence,
   createAbsentActivityScores,

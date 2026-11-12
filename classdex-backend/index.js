@@ -81,6 +81,7 @@ const {
   queueEmail,
 } = require("./email");
 const {
+  MAX_GRADEBOOK_INT,
   isValidScore,
   syncAttendanceScoreAbsence,
   createAbsentActivityScores,
@@ -3227,8 +3228,8 @@ app.get("/api/classes/:id/quizzes", requireAuth, requireRole("FACULTY"), async (
 
 app.post("/api/classes/:id/quizzes", requireAuth, requireRole("FACULTY"), async (req, res) => {
   const title = String(req.body?.title || "").trim();
-  const totalItems = Number(req.body?.totalItems);
-  if (!title || !Number.isInteger(totalItems) || totalItems < 1) return res.status(400).json({ message: "Quiz title and a positive whole-number total are required." });
+  const totalItems = req.body?.totalItems;
+  if (!title || !Number.isInteger(totalItems) || totalItems < 1 || totalItems > MAX_GRADEBOOK_INT) return res.status(400).json({ message: "Quiz title and a positive whole-number total are required." });
   try {
     if (!(await findOwnedClass(req.params.id, req.session.userId))) return res.status(404).json({ message: "Class not found." });
     const session = await prisma.quizSession.create({ data: { classId: req.params.id, title, totalItems, date: manilaDate() }, include: { scores: true } });
@@ -3238,8 +3239,8 @@ app.post("/api/classes/:id/quizzes", requireAuth, requireRole("FACULTY"), async 
 
 app.patch("/api/quizzes/:sessionId", requireAuth, requireRole("FACULTY"), async (req, res) => {
   const title = String(req.body?.title || "").trim();
-  const totalItems = Number(req.body?.totalItems);
-  if (!title || !Number.isInteger(totalItems) || totalItems < 1) return res.status(400).json({ message: "Quiz title and a positive whole-number total are required." });
+  const totalItems = req.body?.totalItems;
+  if (!title || !Number.isInteger(totalItems) || totalItems < 1 || totalItems > MAX_GRADEBOOK_INT) return res.status(400).json({ message: "Quiz title and a positive whole-number total are required." });
   try {
     const session = await prisma.quizSession.findFirst({ where: { id: req.params.sessionId, class: { is: { facultyId: req.session.userId } } }, include: { scores: { where: { score: { not: null } }, select: { studentId: true, score: true, studentProfile: { select: { name: true } } } } } });
     if (!session) return res.status(404).json({ message: "Quiz session not found." });
@@ -3274,8 +3275,8 @@ app.put("/api/quizzes/:sessionId/scores", requireAuth, requireRole("FACULTY"), a
       if (!item || typeof item.studentId !== "string" || !item.studentId.trim()) {
         return res.status(400).json({ message: "Every item must have a valid studentId." });
       }
-      const score = Number(item.score);
-      if (!Number.isInteger(score) || score < 0) {
+      const score = item.score;
+      if (!Number.isInteger(score) || score < 0 || score > MAX_GRADEBOOK_INT) {
         return res.status(400).json({ message: "Score must be a non-negative whole number." });
       }
       if (score > session.totalItems) {
@@ -3325,7 +3326,7 @@ app.put("/api/quizzes/:sessionId/scores", requireAuth, requireRole("FACULTY"), a
       rawItems.map((item) => {
         const studentId = item.studentId.trim();
         const isAbsent = absentSet.has(studentId);
-        const score = isAbsent ? null : Number(item.score);
+        const score = isAbsent ? null : item.score;
         return prisma.quizScore.upsert({
           where: {
             sessionId_studentId: {
@@ -3354,8 +3355,8 @@ app.put("/api/quizzes/:sessionId/scores", requireAuth, requireRole("FACULTY"), a
 });
 
 app.put("/api/quizzes/:sessionId/scores/:studentId", requireAuth, requireRole("FACULTY"), async (req, res) => {
-  const score = Number(req.body?.score);
-  if (!Number.isInteger(score) || score < 0) return res.status(400).json({ message: "Score must be a non-negative whole number." });
+  const score = req.body?.score;
+  if (!Number.isInteger(score) || score < 0 || score > MAX_GRADEBOOK_INT) return res.status(400).json({ message: "Score must be a non-negative whole number." });
   try {
     const session = await prisma.quizSession.findFirst({ where: { id: req.params.sessionId, class: { is: { facultyId: req.session.userId } } } });
     if (!session) return res.status(404).json({ message: "Quiz session not found." });
@@ -4284,7 +4285,7 @@ app.post(
     if (!title) {
       return res.status(400).json({ message: "Activity title is required." });
     }
-    if (maxScore !== null && (!Number.isInteger(maxScore) || maxScore < 1)) {
+    if (maxScore !== null && (!Number.isInteger(maxScore) || maxScore < 1 || maxScore > MAX_GRADEBOOK_INT)) {
       return res.status(400).json({ message: "Maximum score must be null or a positive whole number." });
     }
 
@@ -4342,7 +4343,7 @@ app.patch(
       data.title = body.title.trim();
     }
     if (Object.prototype.hasOwnProperty.call(body, "maxScore")) {
-      if (body.maxScore !== null && (!Number.isInteger(body.maxScore) || body.maxScore < 1)) {
+      if (body.maxScore !== null && (!Number.isInteger(body.maxScore) || body.maxScore < 1 || body.maxScore > MAX_GRADEBOOK_INT)) {
         return res.status(400).json({ message: "Maximum score must be null or a positive whole number." });
       }
       data.maxScore = body.maxScore;
@@ -4641,7 +4642,8 @@ app.patch(
     if (
       Object.keys(req.body || {}).some((key) => key !== "maxScore") ||
       !Number.isInteger(maxScore) ||
-      maxScore < 1
+      maxScore < 1 ||
+      maxScore > MAX_GRADEBOOK_INT
     ) {
       return res.status(400).json({
         message: "Provide only a positive whole-number maxScore.",

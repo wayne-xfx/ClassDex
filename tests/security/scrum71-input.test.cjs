@@ -280,7 +280,7 @@ test("SCRUM-71: Input Validation, SQLi, Email Escaping, Uploads, Exports & Error
     }
   });
 
-  await t.test("INJ-04b: INT4 overflow integers and string/boolean quiz score coercion must reject cleanly with 400 (never 500)", { todo: "SEC-12" }, async () => {
+  await t.test("INJ-04b: INT4 overflow integers and string/boolean quiz score coercion must reject cleanly with 400 (never 500)", async () => {
     const overflowQuiz = await apiRequest(srv.baseUrl, "POST", `/api/classes/${fx.facAClass1.id}/quizzes`, {
       cookie: facCookie,
       body: { title: "qa_OverflowQuiz", totalItems: 99_999_999_999 },
