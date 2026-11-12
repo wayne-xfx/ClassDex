@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { resolveApiUrl } from "../api";
 import { getAvatarThumbnailUrl } from "../utils/photoUpload";
 
 const AVATAR_SIZES = {
@@ -49,7 +50,7 @@ export default function Avatar({ src, name = "", alt = "", className = "", size 
   const [failedSrc, setFailedSrc] = useState(null);
   const { variant, px } = resolveAvatarSize(size);
   const rawSrc = isUsablePhotoUrl(src) ? src.trim() : "";
-  const resolvedSrc = rawSrc ? getAvatarThumbnailUrl(rawSrc, variant, px) : "";
+  const resolvedSrc = rawSrc ? resolveApiUrl(getAvatarThumbnailUrl(rawSrc, variant, px)) : "";
   const showImage = Boolean(resolvedSrc && failedSrc !== resolvedSrc);
   const initials = getInitials(name);
   const dimension = `${px}px`;
