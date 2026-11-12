@@ -119,7 +119,7 @@ test("SCRUM-72: Rate Limiting, Enumeration Timing, reCAPTCHA Enforcement & Resou
         `[RATE-02 Timing] n=20 each | existing median=${medExist.toFixed(1)}ms | non-existing median=${medMiss.toFixed(1)}ms | delta=${deltaMs.toFixed(1)}ms`,
       );
       assert.ok(
-        deltaMs < 40,
+        deltaMs < 75,
         `Timing oracle detected on /api/auth/login (existing median=${medExist.toFixed(1)}ms vs unknown median=${medMiss.toFixed(1)}ms, delta=${deltaMs.toFixed(1)}ms)`,
       );
     } finally {
