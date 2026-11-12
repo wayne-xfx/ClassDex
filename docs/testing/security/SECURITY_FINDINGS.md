@@ -19,6 +19,13 @@
 | SEC-07 | Public registration permits unrestricted self-selection of FACULTY role | Medium | A04:2021 - Insecure Design | SCRUM-70 / AUTHZ-12 | Needs decision | — |
 | SEC-08 | Class code availability check applies `excludeId` globally without ownership scoping | Low | A01:2021 - Broken Access Control | SCRUM-70 / AUTHZ-09 | Open | — |
 | SEC-09 | Student photo endpoint distinguishes nonexistent vs unauthorized profile IDs (404 vs 403) | Low | A01:2021 - Broken Access Control | SCRUM-70 / AUTHZ-19 | Open | — |
+| SEC-10 | Profile photo endpoints lack faculty validation, image magic-byte checks, and external URL allowlisting | Medium | A03:2021 - Injection | SCRUM-71 / INJ-10 | Open | — |
+| SEC-11 | CSV & XLSX spreadsheet exports fail to neutralize leading tab, carriage return, and whitespace formulas | Medium | A03:2021 - Injection | SCRUM-71 / INJ-12 | Open | — |
+| SEC-12 | Numeric quiz/activity boundaries allow INT4 overflow (HTTP 500) and non-number string/boolean coercion | Low | A03:2021 - Injection | SCRUM-71 / INJ-04 | Open | — |
+| SEC-13 | Roster import crashes on non-string `fileBase64` (HTTP 500) and parses disguised HTML inside `.xlsx` | Low | A03:2021 - Injection | SCRUM-71 / INJ-09 | Open | — |
+| SEC-14 | Null bytes (`\u0000`) trigger database HTTP 500 and text fields lack server-side length limits | Low | A03:2021 - Injection | SCRUM-71 / INJ-11 | Open | — |
+| SEC-15 | Non-string JSON objects and arrays coerce to `"[object Object]"` in class and profile text fields | Low | A03:2021 - Injection | SCRUM-71 / INJ-03 | Open | — |
+| SEC-16 | Missing Express error middleware leaks HTML stack traces on malformed JSON in non-production mode | Low | A05:2021 - Security Misconfiguration | SCRUM-71 / INJ-13 | Open | — |
 
 ---
 
@@ -193,5 +200,138 @@
   - *Expected:* Return consistent HTTP `404` when caller is unauthorized or profile/photo does not exist (matching class endpoints in `AUTHZ-19a`), avoiding existence disclosure.
   - *Actual:* Profile photo lookup runs before authorization (`L3065-L3077`), returning `404` for nonexistent/photoless profiles and `403` for existing un-authorized student profiles with a photo.
 - **Impact:** Existence oracle confirming whether a given `StudentProfile.id` exists and has an uploaded photo.
+- **Status:** `Open`
+- **Fix commit:** `—`
+
+---
+
+### SEC-10 — Profile photo endpoints lack faculty validation, image magic-byte checks, and external URL allowlisting
+- **ID:** `SEC-10`
+- **Title:** Profile photo endpoints lack faculty validation, image magic-byte checks, and external URL allowlisting
+- **Severity:** Medium
+- **OWASP category:** `A03:2021 - Injection`
+- **Found in:** `SCRUM-71` / `INJ-10` ([`scrum71-input.test.cjs`](../../../tests/security/scrum71-input.test.cjs))
+- **Affected route or file:** [`classdex-backend/index.js`](../../../classdex-backend/index.js#L1398-L1427) (`PUT /api/faculty/profile`), [`classdex-backend/index.js`](../../../classdex-backend/index.js#L278-L285) (`isValidPhoto`), [`classdex-backend/index.js`](../../../classdex-backend/index.js#L3100-L3103) (`GET /api/students/:profileId/photo`)
+- **Steps to reproduce:**
+  1. Authenticate as Faculty A and send `PUT /api/faculty/profile` with `photo: "javascript:alert(1)"`, `"data:image/svg+xml;base64,..."`, or `"http://evil.example/a.jpg"`.
+  2. Authenticate as Student A1 and send `PUT /api/student/profile` with `photo: "data:image/jpeg;base64,<base64 of HTML script>"` or `photo: "https://evil.example/phish.html"`.
+  3. Request `GET /api/students/:profileId/photo` as the student or enrolled faculty.
+- **Expected vs Actual:**
+  - *Expected:* Both profile endpoints validate `photo` strictly against real JPEG/PNG/WebP image magic bytes or allowlisted HTTPS CDN URLs (`res.cloudinary.com`), rejecting `javascript:`, `data:image/svg+xml`, spoofed MIME types, `http://`, and arbitrary third-party domains with HTTP `400`.
+  - *Actual:* `PUT /api/faculty/profile` omits `isValidPhoto` entirely (`HTTP 200`); `isValidPhoto` on student profiles trusts the base64 MIME header without inspecting magic bytes and permits any `https://\S+` domain, causing `GET /api/students/:profileId/photo` (`L3102`) to respond with `302 Found` open redirect to arbitrary external hosts. (React's [`Avatar.jsx`](../../../classdex-frontend/src/components/Avatar.jsx#L24-L35) blocks `javascript:` rendering, limiting direct browser XSS in UI views, while leaving API open redirect, tracking-pixel leakage, and direct-endpoint spoofed-MIME serving open.)
+- **Impact:** Allows storing untrusted URLs/SVGs in profile photos, serving spoofed HTML payloads under `image/jpeg`, and turning `GET /api/students/:profileId/photo` into an open redirect / tracking vector.
+- **Status:** `Open`
+- **Fix commit:** `—`
+
+---
+
+### SEC-11 — CSV & XLSX spreadsheet exports fail to neutralize leading tab, carriage return, and whitespace formulas
+- **ID:** `SEC-11`
+- **Title:** CSV & XLSX spreadsheet exports fail to neutralize leading tab, carriage return, and whitespace formulas
+- **Severity:** Medium
+- **OWASP category:** `A03:2021 - Injection`
+- **Found in:** `SCRUM-71` / `INJ-12` ([`scrum71-input.test.cjs`](../../../tests/security/scrum71-input.test.cjs))
+- **Affected route or file:** [`classdex-backend/export.js`](../../../classdex-backend/export.js#L126-L129) (`sanitizeExportValue`), used by `GET /api/classes/:id/export/csv`, `GET /api/classes/:id/export/excel`, and [`classdex-backend/index.js`](../../../classdex-backend/index.js#L2331-L2345) (`GET /api/classes/:id/roster/template`)
+- **Steps to reproduce:**
+  1. Enroll or create student/roster records whose names begin with `\t=1+1`, `\r=1+1`, or ` =1+1`.
+  2. Export `GET /api/classes/:id/export/csv?types=students` and `GET /api/classes/:id/export/excel?types=students`.
+- **Expected vs Actual:**
+  - *Expected:* All formula-injection triggers (including leading `\t`, `\r`, `\n`, and leading whitespace followed by `=`, `+`, `-`, `@`) are neutralized with a leading apostrophe (or stripped control prefix) across both CSV and XLSX outputs.
+  - *Actual:* `sanitizeExportValue` only matches `/^[=+\-@]/`, leaving `\t=1+1`, `\r=1+1`, and ` =1+1` unprefixed in exported CSV rows and XLSX `<v>` string cells (while `=`, `+`, `-`, `@` at column 0 are prefixed cleanly).
+- **Impact:** Spreadsheet software (Excel / LibreOffice / Google Sheets) that trims leading tabs, carriage returns, or whitespace can still evaluate exported cells as active DDE/spreadsheet formulas when faculty open exported class files.
+- **Status:** `Open`
+- **Fix commit:** `—`
+
+---
+
+### SEC-12 — Numeric quiz/activity boundaries allow INT4 overflow (HTTP 500) and non-number string/boolean coercion
+- **ID:** `SEC-12`
+- **Title:** Numeric quiz/activity boundaries allow INT4 overflow (HTTP 500) and non-number string/boolean coercion
+- **Severity:** Low
+- **OWASP category:** `A03:2021 - Injection`
+- **Found in:** `SCRUM-71` / `INJ-04` ([`scrum71-input.test.cjs`](../../../tests/security/scrum71-input.test.cjs))
+- **Affected route or file:** [`classdex-backend/index.js`](../../../classdex-backend/index.js#L2907-L2920) (`POST /api/classes/:id/quizzes`, `PATCH /api/quizzes/:sessionId`), [`classdex-backend/index.js`](../../../classdex-backend/index.js#L2954-L3020) (`PUT /api/quizzes/:sessionId/scores*`), [`classdex-backend/gradebook.js`](../../../classdex-backend/gradebook.js)
+- **Steps to reproduce:**
+  1. Send `POST /api/classes/:id/quizzes` with `{ title: "qa_OverflowQuiz", totalItems: 99999999999 }`.
+  2. Send `PUT /api/quizzes/:sessionId/scores/:studentId` with `{ score: "10" }`.
+- **Expected vs Actual:**
+  - *Expected:* Reject integers above PostgreSQL `INT4` / sensible domain caps and reject non-number types (`typeof score !== "number"`) cleanly with HTTP `400`.
+  - *Actual:* `Number.isInteger(99999999999)` passes check (`>= 1`) and crashes inside `prisma.quizSession.create` with HTTP `500` (`INT4` overflow); `Number(req.body?.score)` silently coerces `"10"` (and `true` -> `1`) instead of returning HTTP `400`.
+- **Impact:** Missing upper-bound and strict number-type checks trigger unnecessary server `500` errors and permit unintended JSON type coercion on scores.
+- **Status:** `Open`
+- **Fix commit:** `—`
+
+---
+
+### SEC-13 — Roster import crashes on non-string `fileBase64` (HTTP 500) and parses disguised HTML inside `.xlsx`
+- **ID:** `SEC-13`
+- **Title:** Roster import crashes on non-string `fileBase64` (HTTP 500) and parses disguised HTML inside `.xlsx`
+- **Severity:** Low
+- **OWASP category:** `A03:2021 - Injection`
+- **Found in:** `SCRUM-71` / `INJ-09` ([`scrum71-input.test.cjs`](../../../tests/security/scrum71-input.test.cjs))
+- **Affected route or file:** [`classdex-backend/index.js`](../../../classdex-backend/index.js#L2391-L2411) (`POST /api/classes/:id/roster/import`)
+- **Steps to reproduce:**
+  1. Send `POST /api/classes/:id/roster/import` with `{ fileName: "test.csv", fileBase64: { "$gt": "" } }`.
+  2. Send `POST /api/classes/:id/roster/import` with `{ fileName: "roster.html.xlsx", fileBase64: "<base64 of HTML <table>>" }`.
+- **Expected vs Actual:**
+  - *Expected:* Reject non-string `fileBase64` with HTTP `400` and validate ZIP (`PK\x03\x04`) / OLE magic bytes for `.xlsx`/`.xls` files before invoking SheetJS `XLSX.read`.
+  - *Actual:* Object `fileBase64` throws `TypeError [ERR_INVALID_ARG_TYPE]` at `Buffer.from(fileBase64, "base64")` (`L2401`) returning HTTP `500`, and disguised HTML inside `.xlsx` bypasses extension-only checks via SheetJS polyglot parsing (`HTTP 200`).
+- **Impact:** Unhandled type error `500` on malformed JSON input and bypass of file-content expectations when non-OOXML documents are uploaded with an `.xlsx` extension.
+- **Status:** `Open`
+- **Fix commit:** `—`
+
+---
+
+### SEC-14 — Null bytes (`\u0000`) trigger database HTTP 500 and text fields lack server-side length limits
+- **ID:** `SEC-14`
+- **Title:** Null bytes (`\u0000`) trigger database HTTP 500 and text fields lack server-side length limits
+- **Severity:** Low
+- **OWASP category:** `A03:2021 - Injection`
+- **Found in:** `SCRUM-71` / `INJ-11` ([`scrum71-input.test.cjs`](../../../tests/security/scrum71-input.test.cjs))
+- **Affected route or file:** [`classdex-backend/index.js`](../../../classdex-backend/index.js#L1866-L1995) (`POST /api/classes`), [`classdex-backend/index.js`](../../../classdex-backend/index.js#L273-L276) (`optionalText`)
+- **Steps to reproduce:**
+  1. Send `POST /api/classes` with `{ sectionName: "qa_Null\u0000Byte", courseCode: "QA-NULL1", courseTitle: "qa_NullByte" }`.
+  2. Send `POST /api/classes` with a `100,000`-character `sectionName`.
+- **Expected vs Actual:**
+  - *Expected:* Input middleware/validation rejects ASCII `\u0000` null bytes and oversized text fields (`> 200`–`2,000` chars per field) with HTTP `400` before reaching Prisma/PostgreSQL.
+  - *Actual:* PostgreSQL rejects `\u0000` with `P2039 / 22021: invalid byte sequence for encoding "UTF8": 0x00` resulting in HTTP `500`, and `100KB` text strings are persisted into `Class` fields (`HTTP 201`).
+- **Impact:** Unhandled `500` database exceptions on null-byte inputs and database/UI bloat from unbounded text fields up to the 8 MB JSON payload limit.
+- **Status:** `Open`
+- **Fix commit:** `—`
+
+---
+
+### SEC-15 — Non-string JSON objects and arrays coerce to `"[object Object]"` in class and profile text fields
+- **ID:** `SEC-15`
+- **Title:** Non-string JSON objects and arrays coerce to `"[object Object]"` in class and profile text fields
+- **Severity:** Low
+- **OWASP category:** `A03:2021 - Injection`
+- **Found in:** `SCRUM-71` / `INJ-03` ([`scrum71-input.test.cjs`](../../../tests/security/scrum71-input.test.cjs))
+- **Affected route or file:** [`classdex-backend/index.js`](../../../classdex-backend/index.js#L273-L276) (`optionalText`), [`L1408-L1420`](../../../classdex-backend/index.js#L1408-L1420) (`PUT /api/faculty/profile`), [`L1866-L1988`](../../../classdex-backend/index.js#L1866-L1988) (`POST /api/classes`)
+- **Steps to reproduce:**
+  1. Send `POST /api/classes` with `{ sectionName: { "$gt": "" }, courseCode: "QA-OBJ1", courseTitle: "qa_ValidCourseTitle" }`.
+  2. Send `PUT /api/faculty/profile` with `{ name: { "$gt": "" }, department: ["qa_IT"] }`.
+- **Expected vs Actual:**
+  - *Expected:* Validate `typeof field === "string"` and reject objects/arrays on text fields with HTTP `400`.
+  - *Actual:* `String(value || "").trim()` converts `{ "$gt": "" }` into the literal string `"[object Object]"` and persists it with HTTP `201`/`200` (Prisma ignores operator injection in scalar strings, so no query bypass occurs, but data integrity fails).
+- **Impact:** Corrupted `"[object Object]"` records stored on type-confused requests instead of returning HTTP `400`.
+- **Status:** `Open`
+- **Fix commit:** `—`
+
+---
+
+### SEC-16 — Missing Express error middleware leaks HTML stack traces on malformed JSON in non-production mode
+- **ID:** `SEC-16`
+- **Title:** Missing Express error middleware leaks HTML stack traces on malformed JSON in non-production mode
+- **Severity:** Low
+- **OWASP category:** `A05:2021 - Security Misconfiguration`
+- **Found in:** `SCRUM-71` / `INJ-13` ([`scrum71-input.test.cjs`](../../../tests/security/scrum71-input.test.cjs))
+- **Affected route or file:** [`classdex-backend/index.js`](../../../classdex-backend/index.js#L176) (`app.use(express.json({ limit: "8mb" }))`), [`L5578-L5583`](../../../classdex-backend/index.js#L5578-L5583) (no 4-arg `(err, req, res, next)` middleware defined)
+- **Steps to reproduce:**
+  1. Send `POST /api/auth/login` with `Content-Type: application/json` and invalid raw body `{bad-json` under test/development `NODE_ENV`.
+- **Expected vs Actual:**
+  - *Expected:* Custom Express error middleware returns consistent JSON (`{ message: "Invalid JSON request body." }` for `entity.parse.failed`, `{ message: "Payload too large." }` for `413`, generic `500` JSON otherwise) with zero stack traces or server paths in any environment.
+  - *Actual:* Under `NODE_ENV=production` (`INJ-13a`), Express's built-in finalhandler hides stack traces cleanly (returning `"Bad Request"` HTML), whereas under dev/test `NODE_ENV` (`INJ-13b`), Express returns an HTML page containing the full `SyntaxError` stack trace and local server filesystem paths.
+- **Impact:** Exposes local server filesystem paths and library stack frames when running outside `NODE_ENV=production`, and returns HTML instead of JSON API error bodies on parser failures.
 - **Status:** `Open`
 - **Fix commit:** `—`
