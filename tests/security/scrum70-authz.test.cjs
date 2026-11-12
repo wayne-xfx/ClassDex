@@ -332,7 +332,7 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
     }
   });
 
-  await t.test("AUTHZ-08c1: activity single score endpoint must require APPROVED enrollment (reject PENDING)", { todo: "SEC-02" }, async () => {
+  await t.test("AUTHZ-08c1: activity single score endpoint must require APPROVED enrollment (reject PENDING)", async () => {
     const actRes = await apiRequest(baseUrl, "PUT", `/api/activities/${fx.a1Data.activity.id}/scores/${fx.stuPendingA.studentProfile.id}`, {
       cookie: facACookie,
       body: { score: 30 },
@@ -341,9 +341,16 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
       where: { activityId: fx.a1Data.activity.id, studentId: fx.stuPendingA.studentProfile.id },
     });
     assert.equal(actRes.status, 404, `Activity scored PENDING student with ${actRes.status}`);
+    for (const unapprovedId of [fx.stuDeclinedA.studentProfile.id, fx.stuDroppedA.studentProfile.id]) {
+      const rUnapp = await apiRequest(baseUrl, "PUT", `/api/activities/${fx.a1Data.activity.id}/scores/${unapprovedId}`, {
+        cookie: facACookie,
+        body: { score: 30 },
+      });
+      assert.equal(rUnapp.status, 404, `Activity scored unapproved student ${unapprovedId} with ${rUnapp.status}`);
+    }
   });
 
-  await t.test("AUTHZ-08c2: project single score endpoint must require APPROVED enrollment (reject PENDING)", { todo: "SEC-02" }, async () => {
+  await t.test("AUTHZ-08c2: project single score endpoint must require APPROVED enrollment (reject PENDING)", async () => {
     const projRes = await apiRequest(baseUrl, "PUT", `/api/projects/${fx.a1Data.midtermProject.id}/scores/${fx.stuPendingA.studentProfile.id}`, {
       cookie: facACookie,
       body: { score: 75, sessionId: fx.a1Data.session.id },
@@ -352,6 +359,13 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
       where: { projectId: fx.a1Data.midtermProject.id, studentId: fx.stuPendingA.studentProfile.id },
     });
     assert.equal(projRes.status, 404, `Project scored PENDING student with ${projRes.status}`);
+    for (const unapprovedId of [fx.stuDeclinedA.studentProfile.id, fx.stuDroppedA.studentProfile.id]) {
+      const rUnapp = await apiRequest(baseUrl, "PUT", `/api/projects/${fx.a1Data.midtermProject.id}/scores/${unapprovedId}`, {
+        cookie: facACookie,
+        body: { score: 75, sessionId: fx.a1Data.session.id },
+      });
+      assert.equal(rUnapp.status, 404, `Project scored unapproved student ${unapprovedId} with ${rUnapp.status}`);
+    }
   });
 
   await t.test("AUTHZ-09: GET /api/classes/check-code must scope excludeId to owned classes only", { todo: "SEC-08" }, async () => {

@@ -4167,6 +4167,7 @@ app.put(
       const enrollment = await prisma.classEnrollment.findFirst({
         where: {
           classId: activity.classId,
+          status: "APPROVED",
           studentProfileId: req.params.studentId,
         },
         select: { studentProfileId: true },
@@ -4449,6 +4450,7 @@ app.put(
       const enrollment = await prisma.classEnrollment.findFirst({
         where: {
           classId: project.classId,
+          status: "APPROVED",
           studentProfileId: req.params.studentId,
         },
         select: { studentProfileId: true },
