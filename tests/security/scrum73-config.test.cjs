@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const net = require("node:net");
-const { spawn, execFileSync } = require("node:child_process");
+const { spawn, execFileSync, execSync } = require("node:child_process");
 
 const {
   QA_PASSWORD,
@@ -428,14 +428,33 @@ test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Depende
     }
   });
 
-  await t.test("CONF-09: backend dependencies must have zero reachable High/Moderate npm audit vulnerabilities", { todo: "SEC-28" }, async () => {
+  await t.test("CONF-09: backend dependencies replace xlsx with exceljs and have zero reachable High/Moderate npm audit vulnerabilities", async () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, "classdex-backend", "package.json"), "utf8"));
     const lock = JSON.parse(fs.readFileSync(path.join(repoRoot, "classdex-backend", "package-lock.json"), "utf8"));
-    const xlsxVer = lock.packages?.["node_modules/xlsx"]?.version;
-    const bodyParserVer = lock.packages?.["node_modules/body-parser"]?.version;
-    const qsVer = lock.packages?.["node_modules/qs"]?.version;
-    assert.equal(pkg.dependencies.xlsx, "^0.18.5");
-    assert.ok(false, `Backend ships vulnerable xlsx@${xlsxVer} (High, no upstream npm patch, used in POST /roster/import), body-parser@${bodyParserVer} (High, patchable), & qs@${qsVer} (Moderate, patchable)`);
+    assert.equal(pkg.dependencies.xlsx, undefined, "xlsx dependency must be removed");
+    assert.equal(lock.packages?.["node_modules/xlsx"], undefined, "xlsx must be removed from lockfile");
+    assert.ok(pkg.dependencies.exceljs, "exceljs dependency must be installed");
+    assert.ok(lock.packages?.["node_modules/exceljs"], "exceljs must be in lockfile");
+
+    let auditOut = "";
+    try {
+      auditOut = execSync("npm audit --json", {
+        cwd: path.join(repoRoot, "classdex-backend"),
+        encoding: "utf8",
+      });
+    } catch (err) {
+      auditOut = String(err.stdout || "");
+    }
+    const audit = JSON.parse(auditOut);
+    const vulns = audit.metadata?.vulnerabilities || {};
+    assert.equal(vulns.critical || 0, 0, "Expected 0 critical vulnerabilities in backend");
+    assert.equal(vulns.high || 0, 0, "Expected 0 high vulnerabilities in backend");
+    // exceljs depends transitively on uuid (<11.1.1 moderate v3/v5/v6 buf check, unreachable since exceljs only uses v4):
+    const leafAdvisories = Object.entries(audit.vulnerabilities || {})
+      .filter(([, meta]) => Array.isArray(meta?.via) && meta.via.some((v) => v && typeof v === "object" && v.source))
+      .map(([name]) => name);
+    const unexpected = leafAdvisories.filter((name) => name !== "uuid");
+    assert.deepEqual(unexpected, [], `Unexpected remaining backend leaf audit advisories: ${unexpected.join(", ")}`);
   });
 
   await t.test("CONF-10: frontend dev dependencies must keep Vite/build toolchains free of High audit advisories", { todo: "SEC-29" }, async () => {

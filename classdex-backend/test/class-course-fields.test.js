@@ -2,7 +2,24 @@ require("dotenv").config();
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const bcrypt = require("bcryptjs");
-const XLSX = require("xlsx");
+const ExcelJS = require("exceljs");
+
+function readExcelSheetRows(worksheet) {
+  if (!worksheet) return [];
+  const colCount = worksheet.columnCount || 0;
+  const rows = [];
+  for (let r = 1; r <= worksheet.rowCount; r += 1) {
+    const row = worksheet.getRow(r);
+    const width = Math.max(colCount, row.cellCount || 0);
+    const vals = [];
+    for (let c = 1; c <= width; c += 1) {
+      const v = row.getCell(c).value;
+      vals.push(v === null || v === undefined ? "" : v);
+    }
+    rows.push(vals);
+  }
+  return rows;
+}
 const { app, resetRateLimitersForTests } = require("../index");
 const { prisma } = require("../db");
 const {
@@ -370,12 +387,9 @@ test("POST /api/classes, PATCH /api/classes/:id, class list/detail/student endpo
     { headers: { Cookie: faculty1Cookie } },
   );
   assert.equal(excelCourseRes.status, 200);
-  const excelCourseWb = XLSX.read(Buffer.from(await excelCourseRes.arrayBuffer()), {
-    type: "buffer",
-  });
-  const courseInfoRows = XLSX.utils.sheet_to_json(excelCourseWb.Sheets["Class Information"], {
-    header: 1,
-  });
+  const excelCourseWb = new ExcelJS.Workbook();
+  await excelCourseWb.xlsx.load(Buffer.from(await excelCourseRes.arrayBuffer()));
+  const courseInfoRows = readExcelSheetRows(excelCourseWb.getWorksheet("Class Information"));
   assert.deepEqual(courseInfoRows[1], ["Course code", "IT 122 / 122L"]);
   assert.deepEqual(courseInfoRows[2], ["Course title", "Systems Analysis & Design"]);
   assert.deepEqual(courseInfoRows[3], ["Class name", "BSIT - AI33"]);

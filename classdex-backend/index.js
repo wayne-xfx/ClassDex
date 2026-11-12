@@ -1,6 +1,63 @@
 require("dotenv").config();
 const express = require("express");
-const XLSX = require("xlsx");
+const ExcelJS = require("exceljs");
+
+function parseCsvMatrix(csvText) {
+  const text = String(csvText || "").replace(/^\uFEFF/, "");
+  const rows = [];
+  let row = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      row.push(field);
+      field = "";
+    } else if (ch === "\r" || ch === "\n") {
+      if (ch === "\r" && text[i + 1] === "\n") i += 1;
+      row.push(field);
+      if (row.some((cell) => String(cell).trim() !== "")) rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += ch;
+    }
+  }
+  row.push(field);
+  if (row.some((cell) => String(cell).trim() !== "")) rows.push(row);
+  return rows;
+}
+
+function unwrapExcelCellValue(value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "object") {
+    if (Array.isArray(value.richText)) {
+      return value.richText.map((part) => part.text || "").join("");
+    }
+    if (Object.prototype.hasOwnProperty.call(value, "formula") || Object.prototype.hasOwnProperty.call(value, "sharedFormula")) {
+      return value.result !== undefined && value.result !== null && typeof value.result !== "object"
+        ? value.result
+        : "";
+    }
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value.text === "string") return value.text;
+    return "";
+  }
+  return value;
+}
 const cors = require("cors");
 const session = require("express-session");
 const { rateLimit, MemoryStore, ipKeyGenerator } = require("express-rate-limit");
@@ -2599,21 +2656,17 @@ app.get(
         ]);
       }
 
-      const ws = XLSX.utils.aoa_to_sheet(aoa);
-      const range = XLSX.utils.decode_range(ws["!ref"] || "A1:B8");
-      for (let R = 7; R <= range.e.r; ++R) {
-        const cellRef = XLSX.utils.encode_cell({ r: R, c: 1 });
-        if (ws[cellRef]) {
-          ws[cellRef].t = "s";
-          ws[cellRef].z = "@";
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet("Student List");
+      ws.columns = [{ width: 35 }, { width: 25 }];
+      for (let rIdx = 0; rIdx < aoa.length; rIdx += 1) {
+        const row = ws.addRow(aoa[rIdx]);
+        if (rIdx >= 7) {
+          row.getCell(2).numFmt = "@";
         }
       }
 
-      ws["!cols"] = [{ wch: 35 }, { wch: 25 }];
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Student List");
-
-      const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+      const buf = Buffer.from(await wb.xlsx.writeBuffer());
       const sectionSegment = String(classRecord.sectionName || "").trim().replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "");
       const courseSegment = String(classRecord.courseCode || "").trim().replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "");
       const templatePrefix = [
@@ -2649,8 +2702,8 @@ app.post(
       }
 
       const ext = path.extname(String(fileName)).toLowerCase();
-      if (![".xlsx", ".xls", ".csv"].includes(ext)) {
-        return res.status(400).json({ message: "Unsupported file type. Use .xlsx, .xls, or .csv." });
+      if (![".xlsx", ".csv"].includes(ext)) {
+        return res.status(400).json({ message: "Unsupported file type. Use .xlsx or .csv." });
       }
 
       const buffer = Buffer.from(fileBase64, "base64");
@@ -2658,19 +2711,34 @@ app.post(
         return res.status(400).json({ message: "File exceeds 2 MB limit." });
       }
 
-      let workbook;
-      try {
-        workbook = XLSX.read(buffer, { type: "buffer", cellFormula: false, cellHTML: false, raw: true });
-      } catch (parseErr) {
-        return res.status(400).json({ message: "Unable to parse file. Ensure it is a valid spreadsheet." });
+      let rawMatrix = [];
+      if (ext === ".csv") {
+        rawMatrix = parseCsvMatrix(buffer.toString("utf8"));
+        if (!rawMatrix.length) {
+          return res.status(400).json({ message: "Spreadsheet contains no sheets." });
+        }
+      } else {
+        const workbook = new ExcelJS.Workbook();
+        try {
+          await workbook.xlsx.load(buffer);
+        } catch (parseErr) {
+          return res.status(400).json({ message: "Unable to parse file. Ensure it is a valid spreadsheet." });
+        }
+        if (!workbook.worksheets || !workbook.worksheets.length) {
+          return res.status(400).json({ message: "Spreadsheet contains no sheets." });
+        }
+        const sheet = workbook.worksheets[0];
+        sheet.eachRow({ includeEmpty: false }, (excelRow) => {
+          const colCount = Math.max(excelRow.cellCount, (excelRow.values?.length || 1) - 1);
+          const cells = [];
+          for (let c = 1; c <= colCount; c += 1) {
+            cells.push(unwrapExcelCellValue(excelRow.getCell(c).value));
+          }
+          if (cells.some((cell) => String(cell ?? "").trim() !== "")) {
+            rawMatrix.push(cells);
+          }
+        });
       }
-
-      if (!workbook.SheetNames || !workbook.SheetNames.length) {
-        return res.status(400).json({ message: "Spreadsheet contains no sheets." });
-      }
-
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rawMatrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", blankrows: false, raw: true });
 
       const match = STUDENT_ID_PATTERN.source.match(/\\d\{(\d+)\}/);
       const digitCount = match ? Number(match[1]) : 7;
@@ -5477,7 +5545,7 @@ app.get(
         return res.status(404).json({ message: "Class not found." });
       }
 
-      const workbookBuffer = buildExcelWorkbook(classRecord, req.query.types);
+      const workbookBuffer = await buildExcelWorkbook(classRecord, req.query.types);
       const safeSectionName = classRecord.sectionName.replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "") || "class";
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename="${safeSectionName}-export.xlsx"`);

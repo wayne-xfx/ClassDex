@@ -17,7 +17,7 @@ const {
 const sec = initSecurityBackend();
 const repoRoot = path.resolve(__dirname, "../..");
 const { prisma, mailer } = sec;
-const XLSX = require(path.join(repoRoot, "classdex-backend", "node_modules", "xlsx"));
+const ExcelJS = require(path.join(repoRoot, "classdex-backend", "node_modules", "exceljs"));
 
 function findFreePort() {
   return new Promise((resolve, reject) => {
@@ -410,28 +410,26 @@ test("SCRUM-71: Input Validation, SQLi, Email Escaping, Uploads, Exports & Error
     });
     assert.equal(corruptZip.status, 400);
 
-    const wbMany = XLSX.utils.book_new();
-    const aoa = [["Full Name", "Student ID"]];
+    const wbMany = new ExcelJS.Workbook();
+    const wsMany = wbMany.addWorksheet("Student List");
+    wsMany.addRow(["Full Name", "Student ID"]);
     for (let i = 0; i < 505; i += 1) {
-      aoa.push([`qa_Student ${i}`, String(8000000 + i)]);
+      wsMany.addRow([`qa_Student ${i}`, String(8000000 + i)]);
     }
-    XLSX.utils.book_append_sheet(wbMany, XLSX.utils.aoa_to_sheet(aoa), "Student List");
-    const manyBuf = XLSX.write(wbMany, { type: "buffer", bookType: "xlsx" });
+    const manyBuf = Buffer.from(await wbMany.xlsx.writeBuffer());
     const over500 = await apiRequest(srv.baseUrl, "POST", `/api/classes/${fx.facAClass1.id}/roster/import`, {
       cookie: facCookie,
       body: { fileName: "many.xlsx", fileBase64: manyBuf.toString("base64") },
     });
     assert.equal(over500.status, 400);
 
-    const wbFormula = XLSX.utils.book_new();
-    const aoaF = [
-      ["STUDENTS", ""],
-      ["Full Name", "Student ID"],
-      [{ f: "1+1" }, "8123456"],
-      ["qa_Repetitive " + "A".repeat(200), "8123457"],
-    ];
-    XLSX.utils.book_append_sheet(wbFormula, XLSX.utils.aoa_to_sheet(aoaF), "Student List");
-    const fBuf = XLSX.write(wbFormula, { type: "buffer", bookType: "xlsx", compression: true });
+    const wbFormula = new ExcelJS.Workbook();
+    const wsFormula = wbFormula.addWorksheet("Student List");
+    wsFormula.addRow(["STUDENTS", ""]);
+    wsFormula.addRow(["Full Name", "Student ID"]);
+    wsFormula.addRow([{ formula: "1+1" }, "8123456"]);
+    wsFormula.addRow(["qa_Repetitive " + "A".repeat(200), "8123457"]);
+    const fBuf = Buffer.from(await wbFormula.xlsx.writeBuffer());
     const impF = await apiRequest(srv.baseUrl, "POST", `/api/classes/${fx.facAClass1.id}/roster/import`, {
       cookie: facCookie,
       body: { fileName: "safe.xlsx", fileBase64: fBuf.toString("base64") },

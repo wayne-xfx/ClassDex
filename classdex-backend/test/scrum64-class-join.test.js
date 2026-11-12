@@ -26,7 +26,24 @@ const dotenv = require("dotenv");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const bcrypt = require("bcryptjs");
-const XLSX = require("xlsx");
+const ExcelJS = require("exceljs");
+
+function readExcelSheetRows(worksheet) {
+  if (!worksheet) return [];
+  const colCount = worksheet.columnCount || 0;
+  const rows = [];
+  for (let r = 1; r <= worksheet.rowCount; r += 1) {
+    const row = worksheet.getRow(r);
+    const width = Math.max(colCount, row.cellCount || 0);
+    const vals = [];
+    for (let c = 1; c <= width; c += 1) {
+      const v = row.getCell(c).value;
+      vals.push(v === null || v === undefined ? "" : v);
+    }
+    rows.push(vals);
+  }
+  return rows;
+}
 const {
   app,
   resetRateLimitersForTests,
@@ -527,8 +544,9 @@ test("SCRUM-64: Class Management & Join Workflow API Suite (CLS-01..CLS-21)", as
     );
 
     const tplBuf = Buffer.from(await tplRes.arrayBuffer());
-    const wb = XLSX.read(tplBuf, { type: "buffer" });
-    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(tplBuf);
+    const rows = readExcelSheetRows(wb.worksheets[0]);
     const zeroRow = rows.find((r) => r[1] === "0123456");
     assert.ok(zeroRow, "Expected leading-zero studentId '0123456' in downloaded template");
 
@@ -545,14 +563,12 @@ test("SCRUM-64: Class Management & Join Workflow API Suite (CLS-01..CLS-21)", as
     assert.ok(roundTrip.data.warnings.length >= 1, "Expected duplicate warning against saved roster");
 
     // Numeric leading-zero coercion check (e.g. Excel strips leading zero -> 0234567 stored as 234567)
-    const numWb = XLSX.utils.book_new();
-    const numWs = XLSX.utils.aoa_to_sheet([
-      ["STUDENTS", ""],
-      ["Name", "Student ID"],
-      ["Santos, Ana", 234567],
-    ]);
-    XLSX.utils.book_append_sheet(numWb, numWs, "Sheet1");
-    const numBuf = XLSX.write(numWb, { type: "buffer", bookType: "xlsx" });
+    const numWb = new ExcelJS.Workbook();
+    const numWs = numWb.addWorksheet("Sheet1");
+    numWs.addRow(["STUDENTS", ""]);
+    numWs.addRow(["Name", "Student ID"]);
+    numWs.addRow(["Santos, Ana", 234567]);
+    const numBuf = Buffer.from(await numWb.xlsx.writeBuffer());
     const paddedRes = await jsonReq(baseUrl, "POST", `/api/classes/${classC1.id}/roster/import`, {
       cookie: fac1Cookie,
       body: { fileName: "numeric.xlsx", fileBase64: numBuf.toString("base64") },
@@ -562,13 +578,11 @@ test("SCRUM-64: Class Management & Join Workflow API Suite (CLS-01..CLS-21)", as
     assert.equal(paddedRes.data.rows[0].errors.length, 0);
 
     // CLS-11: Bad headers -> 400
-    const badHeaderWb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      badHeaderWb,
-      XLSX.utils.aoa_to_sheet([["Foo", "Bar"], ["1", "2"]]),
-      "Sheet1",
-    );
-    const badHeaderBuf = XLSX.write(badHeaderWb, { type: "buffer", bookType: "xlsx" });
+    const badHeaderWb = new ExcelJS.Workbook();
+    const badHeaderWs = badHeaderWb.addWorksheet("Sheet1");
+    badHeaderWs.addRow(["Foo", "Bar"]);
+    badHeaderWs.addRow(["1", "2"]);
+    const badHeaderBuf = Buffer.from(await badHeaderWb.xlsx.writeBuffer());
     const badHdrRes = await jsonReq(baseUrl, "POST", `/api/classes/${classC1.id}/roster/import`, {
       cookie: fac1Cookie,
       body: { fileName: "bad-headers.xlsx", fileBase64: badHeaderBuf.toString("base64") },
