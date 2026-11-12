@@ -8,7 +8,7 @@ const { loadBackendTestEnv } = require("../scripts/load-test-env.cjs");
 loadBackendTestEnv();
 
 const bcrypt = require("../../classdex-backend/node_modules/bcryptjs");
-const XLSX = require("../../classdex-backend/node_modules/xlsx");
+const ExcelJS = require("../../classdex-backend/node_modules/exceljs");
 const { prisma } = require("../../classdex-backend/db");
 
 const TEST_PASSWORD = "QaPassword123!";
@@ -503,8 +503,9 @@ test.describe("SCRUM-66 Student Dashboard & Export E2E (STU-04..07, EXP-07)", ()
     expect(xlsxDownload.suggestedFilename()).toMatch(/\.xlsx$/i);
     const xlsxPath = testInfo.outputPath(xlsxDownload.suggestedFilename());
     await xlsxDownload.saveAs(xlsxPath);
-    const wb = XLSX.readFile(xlsxPath);
-    expect(wb.SheetNames).toEqual([
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(xlsxPath);
+    expect(wb.worksheets.map((ws) => ws.name)).toEqual([
       "Class Information",
       "Student List",
       "Attendance",

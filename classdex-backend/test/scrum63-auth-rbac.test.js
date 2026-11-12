@@ -593,12 +593,12 @@ test("SCRUM-63 AUTH-01..07, AUTH-10..12, AUTH-15..16: Auth, Verification, Passwo
     const otherStu = await fetch(`${baseUrl}/api/students/${stu1ProfileId}/photo`, {
       headers: { Cookie: stu2Cookie },
     });
-    assert.equal(otherStu.status, 403);
+    assert.equal(otherStu.status, 404);
 
     const otherFac = await fetch(`${baseUrl}/api/students/${stu1ProfileId}/photo`, {
       headers: { Cookie: facBCookie },
     });
-    assert.equal(otherFac.status, 403);
+    assert.equal(otherFac.status, 404);
 
     const selfRes = await fetch(`${baseUrl}/api/students/${stu1ProfileId}/photo`, {
       headers: { Cookie: stu1Cookie },

@@ -17,7 +17,7 @@ const {
 const sec = initSecurityBackend();
 const repoRoot = path.resolve(__dirname, "../..");
 const { prisma, mailer } = sec;
-const XLSX = require(path.join(repoRoot, "classdex-backend", "node_modules", "xlsx"));
+const ExcelJS = require(path.join(repoRoot, "classdex-backend", "node_modules", "exceljs"));
 
 function findFreePort() {
   return new Promise((resolve, reject) => {
@@ -139,8 +139,14 @@ test("SCRUM-71: Input Validation, SQLi, Email Escaping, Uploads, Exports & Error
     }
 
     assert.deepEqual(unsafeHits, []);
-    assert.ok(parameterizedHits.some((h) => h.includes("index.js:1745")));
-    assert.ok(parameterizedHits.some((h) => h.includes("index.js:5022")));
+    const indexRawHits = parameterizedHits.filter((h) =>
+      /^classdex-backend[\\/]index\.js:\d+$/.test(h),
+    );
+    assert.equal(
+      indexRawHits.length,
+      2,
+      `Expected 2 parameterized $queryRaw/$executeRaw calls in classdex-backend/index.js, found ${indexRawHits.join(", ")}`,
+    );
 
     const pCounts = await apiRequest(srv.baseUrl, "GET", "/api/faculty/classes/pending-counts", { cookie: facCookie });
     assert.equal(pCounts.status, 200);
@@ -205,7 +211,7 @@ test("SCRUM-71: Input Validation, SQLi, Email Escaping, Uploads, Exports & Error
     assert.equal(afterUsers, beforeUsers);
   });
 
-  await t.test("INJ-03: Prisma/NoSQL operator objects and arrays in string fields must return 400 instead of coercing to '[object Object]'", { todo: "SEC-15" }, async () => {
+  await t.test("INJ-03: Prisma/NoSQL operator objects and arrays in string fields must return 400 instead of coercing to '[object Object]'", async () => {
     const resCls = await apiRequest(srv.baseUrl, "POST", "/api/classes", {
       cookie: facCookie,
       body: {
@@ -274,7 +280,7 @@ test("SCRUM-71: Input Validation, SQLi, Email Escaping, Uploads, Exports & Error
     }
   });
 
-  await t.test("INJ-04b: INT4 overflow integers and string/boolean quiz score coercion must reject cleanly with 400 (never 500)", { todo: "SEC-12" }, async () => {
+  await t.test("INJ-04b: INT4 overflow integers and string/boolean quiz score coercion must reject cleanly with 400 (never 500)", async () => {
     const overflowQuiz = await apiRequest(srv.baseUrl, "POST", `/api/classes/${fx.facAClass1.id}/quizzes`, {
       cookie: facCookie,
       body: { title: "qa_OverflowQuiz", totalItems: 99_999_999_999 },
@@ -404,28 +410,26 @@ test("SCRUM-71: Input Validation, SQLi, Email Escaping, Uploads, Exports & Error
     });
     assert.equal(corruptZip.status, 400);
 
-    const wbMany = XLSX.utils.book_new();
-    const aoa = [["Full Name", "Student ID"]];
+    const wbMany = new ExcelJS.Workbook();
+    const wsMany = wbMany.addWorksheet("Student List");
+    wsMany.addRow(["Full Name", "Student ID"]);
     for (let i = 0; i < 505; i += 1) {
-      aoa.push([`qa_Student ${i}`, String(8000000 + i)]);
+      wsMany.addRow([`qa_Student ${i}`, String(8000000 + i)]);
     }
-    XLSX.utils.book_append_sheet(wbMany, XLSX.utils.aoa_to_sheet(aoa), "Student List");
-    const manyBuf = XLSX.write(wbMany, { type: "buffer", bookType: "xlsx" });
+    const manyBuf = Buffer.from(await wbMany.xlsx.writeBuffer());
     const over500 = await apiRequest(srv.baseUrl, "POST", `/api/classes/${fx.facAClass1.id}/roster/import`, {
       cookie: facCookie,
       body: { fileName: "many.xlsx", fileBase64: manyBuf.toString("base64") },
     });
     assert.equal(over500.status, 400);
 
-    const wbFormula = XLSX.utils.book_new();
-    const aoaF = [
-      ["STUDENTS", ""],
-      ["Full Name", "Student ID"],
-      [{ f: "1+1" }, "8123456"],
-      ["qa_Repetitive " + "A".repeat(200), "8123457"],
-    ];
-    XLSX.utils.book_append_sheet(wbFormula, XLSX.utils.aoa_to_sheet(aoaF), "Student List");
-    const fBuf = XLSX.write(wbFormula, { type: "buffer", bookType: "xlsx", compression: true });
+    const wbFormula = new ExcelJS.Workbook();
+    const wsFormula = wbFormula.addWorksheet("Student List");
+    wsFormula.addRow(["STUDENTS", ""]);
+    wsFormula.addRow(["Full Name", "Student ID"]);
+    wsFormula.addRow([{ formula: "1+1" }, "8123456"]);
+    wsFormula.addRow(["qa_Repetitive " + "A".repeat(200), "8123457"]);
+    const fBuf = Buffer.from(await wbFormula.xlsx.writeBuffer());
     const impF = await apiRequest(srv.baseUrl, "POST", `/api/classes/${fx.facAClass1.id}/roster/import`, {
       cookie: facCookie,
       body: { fileName: "safe.xlsx", fileBase64: fBuf.toString("base64") },
@@ -435,7 +439,7 @@ test("SCRUM-71: Input Validation, SQLi, Email Escaping, Uploads, Exports & Error
     assert.equal(impF.json.rows[1].studentId, "8123457");
   });
 
-  await t.test("INJ-09b: roster import must reject non-string fileBase64 (400) and disguised HTML content inside .xlsx extension", { todo: "SEC-13" }, async () => {
+  await t.test("INJ-09b: roster import must reject non-string fileBase64 (400) and disguised HTML content inside .xlsx extension", async () => {
     const badTypeB64 = await apiRequest(srv.baseUrl, "POST", `/api/classes/${fx.facAClass1.id}/roster/import`, {
       cookie: facCookie,
       body: { fileName: "test.csv", fileBase64: { $gt: "" } },
@@ -450,7 +454,7 @@ test("SCRUM-71: Input Validation, SQLi, Email Escaping, Uploads, Exports & Error
     assert.equal(htmlInXlsx.status, 400, `Expected 400 for HTML bytes inside .xlsx, got ${htmlInXlsx.status}`);
   });
 
-  await t.test("INJ-10a: faculty profile photo endpoint must enforce isValidPhoto and reject SVG/javascript/http payloads", { todo: "SEC-10" }, async () => {
+  await t.test("INJ-10a: faculty profile photo endpoint must enforce isValidPhoto and reject SVG/javascript/http payloads", async () => {
     for (const badPhoto of [
       "javascript:alert(1)",
       "data:image/svg+xml;base64," + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="window.__xss=9"></svg>').toString("base64"),
@@ -464,7 +468,7 @@ test("SCRUM-71: Input Validation, SQLi, Email Escaping, Uploads, Exports & Error
     }
   });
 
-  await t.test("INJ-10b: student profile photo must validate image magic bytes and disallow arbitrary external 302 redirect URLs", { todo: "SEC-10" }, async () => {
+  await t.test("INJ-10b: student profile photo must validate image magic bytes and disallow arbitrary external 302 redirect URLs", async () => {
     try {
       const fakeJpg = `data:image/jpeg;base64,${Buffer.from("<html><script>window.__xss=8</script></html>").toString("base64")}`;
       const rFake = await apiRequest(srv.baseUrl, "PUT", "/api/student/profile", {
@@ -531,7 +535,7 @@ test("SCRUM-71: Input Validation, SQLi, Email Escaping, Uploads, Exports & Error
     });
   });
 
-  await t.test("INJ-11b: null bytes (\\u0000) and >100KB text fields must reject cleanly with 400 (never 500)", { todo: "SEC-14" }, async () => {
+  await t.test("INJ-11b: null bytes (\\u0000) and >100KB text fields must reject cleanly with 400 (never 500)", async () => {
     const rNull = await apiRequest(srv.baseUrl, "POST", "/api/classes", {
       cookie: facCookie,
       body: {
@@ -615,7 +619,7 @@ test("SCRUM-71: Input Validation, SQLi, Email Escaping, Uploads, Exports & Error
     }
   });
 
-  await t.test("INJ-12b: CSV & XLSX exports must also neutralize leading tab (\\t), CR (\\r), and leading whitespace formulas", { todo: "SEC-11" }, async () => {
+  await t.test("INJ-12b: CSV & XLSX exports must also neutralize leading tab (\\t), CR (\\r), and leading whitespace formulas", async () => {
     const prefixes = ["\t=1+1", "\r=1+1", " =1+1"];
     const formulaStudents = [];
     for (let i = 0; i < prefixes.length; i += 1) {
@@ -663,7 +667,12 @@ test("SCRUM-71: Input Validation, SQLi, Email Escaping, Uploads, Exports & Error
       const xmlMap = unzipXmlEntries(xlsxRes.buffer);
       const combinedXml = Object.values(xmlMap).join("\n");
       assert.ok(combinedXml.includes("&apos;\t=1+1"), "XLSX failed to prefix leading TAB (\\t=1+1)");
-      assert.ok(combinedXml.includes("&apos;\r=1+1") || combinedXml.includes("&apos;&#x0d;=1+1"), "XLSX failed to prefix leading CR (\\r=1+1)");
+      assert.ok(
+        combinedXml.includes("&apos;\r=1+1") ||
+          combinedXml.includes("&apos;&#x0d;=1+1") ||
+          combinedXml.includes("&apos;_x000d_=1+1"),
+        "XLSX failed to prefix leading CR (\\r=1+1)",
+      );
       assert.ok(combinedXml.includes("&apos; =1+1"), "XLSX failed to prefix leading SPACE formula ( =1+1)");
     } finally {
       await prisma.user.deleteMany({ where: { id: { in: formulaStudents } } });
@@ -707,7 +716,7 @@ test("SCRUM-71: Input Validation, SQLi, Email Escaping, Uploads, Exports & Error
     }
   });
 
-  await t.test("INJ-13b: malformed JSON & middleware errors must use custom JSON error handler without leaking stack traces in dev/test", { todo: "SEC-16" }, async () => {
+  await t.test("INJ-13b: malformed JSON & middleware errors must use custom JSON error handler without leaking stack traces in dev/test", async () => {
     const testMalformed = await rawHttpRequest(srv.baseUrl, "POST", "/api/auth/login", {
       rawBody: "{bad-json",
       headers: { "Content-Type": "application/json" },

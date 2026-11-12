@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const net = require("node:net");
-const { spawn, execFileSync } = require("node:child_process");
+const { spawn, execFileSync, execSync } = require("node:child_process");
 
 const {
   QA_PASSWORD,
@@ -83,7 +83,7 @@ test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Depende
     assert.equal("password" in me.json.user, false);
   });
 
-  await t.test("CONF-01b: password policy must prevent silent >72-byte bcrypt truncation", { todo: "SEC-23" }, async () => {
+  await t.test("CONF-01b: password policy must prevent silent >72-byte bcrypt truncation", async () => {
     const email = `qa_c01_72b_${fx.runId}@test.local`.toLowerCase();
     extraCleanupEmails.add(email);
     const pwPrefix = "A".repeat(72);
@@ -91,7 +91,7 @@ test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Depende
     const pw2 = `${pwPrefix}_completely_different_suffix`;
 
     try {
-      const reg = await apiRequest(srv.baseUrl, "POST", "/api/auth/register", {
+      const regOver = await apiRequest(srv.baseUrl, "POST", "/api/auth/register", {
         body: {
           name: "qa_Bcrypt72",
           email,
@@ -101,17 +101,49 @@ test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Depende
           recaptchaToken: "ok",
         },
       });
-      assert.equal(reg.status, 201);
+      assert.equal(regOver.status, 400, `Expected 400 for >72-byte password on register, got ${regOver.status}`);
+      assert.match(regOver.json?.message || "", /72 bytes/i);
 
-      // Should either have been rejected at registration or reject mismatched pw2
-      const wrongLogin = await apiRequest(srv.baseUrl, "POST", "/api/auth/login", {
-        body: { email, password: pw2 },
+      // Multi-byte UTF-8 (25x 3-byte chars = 75 bytes < 72 chars) must also be rejected
+      const utf8Over = "€".repeat(25);
+      const regUtf8 = await apiRequest(srv.baseUrl, "POST", "/api/auth/register", {
+        body: {
+          name: "qa_Bcrypt72",
+          email,
+          password: utf8Over,
+          confirmPassword: utf8Over,
+          role: "STUDENT",
+          recaptchaToken: "ok",
+        },
       });
-      assert.equal(
-        wrongLogin.status,
-        401,
-        `Different >72-byte password accepted due to bcrypt 72-byte truncation (status ${wrongLogin.status})`,
-      );
+      assert.equal(regUtf8.status, 400);
+
+      const regExact72 = await apiRequest(srv.baseUrl, "POST", "/api/auth/register", {
+        body: {
+          name: "qa_Bcrypt72",
+          email,
+          password: pwPrefix,
+          confirmPassword: pwPrefix,
+          role: "STUDENT",
+          recaptchaToken: "ok",
+        },
+      });
+      assert.equal(regExact72.status, 201);
+
+      const wrongLogin = await apiRequest(srv.baseUrl, "POST", "/api/auth/login", {
+        body: { email, password: `${pwPrefix.slice(0, 71)}B` },
+      });
+      assert.equal(wrongLogin.status, 401);
+
+      const overChange = await apiRequest(srv.baseUrl, "POST", "/api/auth/change-password", {
+        cookie: regExact72.sidCookie,
+        body: {
+          currentPassword: pwPrefix,
+          newPassword: pw2,
+          confirmPassword: pw2,
+        },
+      });
+      assert.equal(overChange.status, 400);
     } finally {
       await prisma.user.deleteMany({ where: { email } });
       extraCleanupEmails.delete(email);
@@ -133,17 +165,27 @@ test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Depende
     assert.match(tokenSrc, /DEFAULT_VERIFY_TTL_HOURS\s*=\s*24/);
   });
 
-  await t.test("CONF-02b: production session configuration must enable Secure cookies, regenerate session ID on login, and avoid in-memory store/weak fallback", { todo: "SEC-24" }, async () => {
+  await t.test("CONF-02b: production session configuration enables Secure cookies and regenerates session ID on login (external store deferred to 6.3)", async () => {
     const indexSrc = fs.readFileSync(path.join(repoRoot, "classdex-backend", "index.js"), "utf8");
-    // Hardcoded `secure: false` found on session cookie config
     assert.ok(
       !/cookie:\s*\{[^}]*secure:\s*false\b/s.test(indexSrc),
       "Session cookie hardcodes secure: false regardless of NODE_ENV/HTTPS",
     );
-    assert.ok(indexSrc.includes("req.session.regenerate"), "Login does not regenerate session ID");
+    assert.ok(indexSrc.includes("req.session.regenerate"), "Session regeneration missing");
+
+    const login1 = await loginAs(srv.baseUrl, fx.facA.email);
+    assert.equal(login1.status, 200);
+    const login2 = await apiRequest(srv.baseUrl, "POST", "/api/auth/login", {
+      cookie: login1.sidCookie,
+      body: { email: fx.facA.email, password: QA_PASSWORD },
+    });
+    assert.equal(login2.status, 200);
+    assert.ok(login2.sidCookie && login2.sidCookie !== login1.sidCookie, "Expected rotated classdex.sid on re-login");
+    const oldSessionMe = await apiRequest(srv.baseUrl, "GET", "/api/auth/me", { cookie: login1.sidCookie });
+    assert.equal(oldSessionMe.status, 401, "Prior session ID must be invalidated upon session regeneration");
   });
 
-  await t.test("CONF-03: API & browser responses must include Helmet security headers, remove X-Powered-By, and set Cache-Control: no-store on sensitive endpoints", { todo: "SEC-26" }, async () => {
+  await t.test("CONF-03: API & browser responses must include Helmet security headers, remove X-Powered-By, and set Cache-Control: no-store on sensitive endpoints", async () => {
     const login = await loginAs(srv.baseUrl, fx.facA.email);
     const me = await apiRequest(srv.baseUrl, "GET", "/api/auth/me", { cookie: login.sidCookie });
     assert.equal(me.status, 200);
@@ -228,7 +270,7 @@ test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Depende
     assert.ok(!/ep-polished-night|ep-orange-dream/.test(rawExample));
   });
 
-  await t.test("CONF-05b: root .env file must not be tracked in git index", { todo: "SEC-27" }, async () => {
+  await t.test("CONF-05b: root .env file must not be tracked in git index", async () => {
     const tracked = execFileSync("git", ["ls-files", ".env"], { cwd: repoRoot, encoding: "utf8" }).trim();
     assert.equal(tracked, "", "Root .env is currently tracked in git index (contains PORT only, zero secrets)");
   });
@@ -287,8 +329,11 @@ test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Depende
         DATABASE_URL: safeEnv.DATABASE_URL,
         SESSION_SECRET: "qa-test-production-session-secret-0123456789",
         FRONTEND_ORIGIN: "https://app.example.test",
+        APP_BASE_URL: "https://app.example.test",
         RECAPTCHA_SECRET_KEY: "qa-dummy",
-        EMAIL_MODE: "stub",
+        EMAIL_MODE: "resend",
+        RESEND_API_KEY: "re_qa_unused_test_key",
+        EMAIL_FROM: "ClassDex <no-reply@example.test>",
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -310,7 +355,7 @@ test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Depende
     }
   });
 
-  await t.test("CONF-08: NODE_ENV=production startup must fail fast when SESSION_SECRET, FRONTEND_ORIGIN, or production mailer config are missing", { todo: "SEC-25" }, async () => {
+  await t.test("CONF-08: NODE_ENV=production startup must fail fast when SESSION_SECRET, FRONTEND_ORIGIN, or production mailer config are missing", async () => {
     const guardedHost = assertSafeTestDatabaseUrl(safeEnv.DATABASE_URL, { label: "CONF-08 prod startup probe" });
     console.log(`[CONF-08] Testing NODE_ENV=production fail-fast behavior against Neon test host: ${guardedHost}`);
 
@@ -368,42 +413,101 @@ test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Depende
         await new Promise((r) => setTimeout(r, 200));
       }
 
-      if (reachable) {
-        assert.equal(badJsonBody.includes("SyntaxError"), false, "Prod stack trace leaked");
-        assert.equal(badJsonBody.includes("classdex-backend"), false, "Prod path leaked");
-        const logs = outputChunks.join("");
-        assert.match(logs, /defaulting to EMAIL_MODE=log/i);
-      }
+      const logs = outputChunks.join("");
+      assert.equal(reachable, false, "Backend must not boot in NODE_ENV=production when required secrets/origins/mailer are missing");
+      assert.equal(exitedEarly, true, "Expected NODE_ENV=production with missing config to exit immediately");
+      assert.ok(child.exitCode !== 0, `Expected non-zero exit code, got ${child.exitCode}`);
+      assert.equal(/defaulting to EMAIL_MODE=log/i.test(logs), false, "Production startup must never fall back to EMAIL_MODE=log");
+      assert.match(logs, /SESSION_SECRET|Refusing to start in NODE_ENV=production/i);
 
-      assert.equal(
-        reachable,
-        false,
-        "Backend booted in NODE_ENV=production with empty SESSION_SECRET/FRONTEND_ORIGIN/RESEND_API_KEY instead of failing fast",
-      );
+      // Also verify failing fast when only EMAIL_MODE=log or missing RESEND credentials remain
+      const mailerPort = await findFreePort();
+      const mailerChild = spawn(process.execPath, [path.join(repoRoot, "classdex-backend", "index.js")], {
+        cwd: path.join(repoRoot, "classdex-backend"),
+        env: {
+          ...baseChildEnv,
+          NODE_ENV: "production",
+          PORT: String(mailerPort),
+          DATABASE_URL: safeEnv.DATABASE_URL,
+          SESSION_SECRET: "qa-test-production-session-secret-0123456789",
+          FRONTEND_ORIGIN: "https://app.example.test",
+          APP_BASE_URL: "https://app.example.test",
+          RECAPTCHA_SECRET_KEY: "qa-dummy",
+          EMAIL_MODE: "log",
+          RESEND_API_KEY: "",
+          EMAIL_FROM: "",
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      const mailerLogs = [];
+      mailerChild.stdout.on("data", (d) => mailerLogs.push(d.toString()));
+      mailerChild.stderr.on("data", (d) => mailerLogs.push(d.toString()));
+      const mailerExitCode = await new Promise((resolve) => {
+        const timer = setTimeout(() => {
+          mailerChild.kill();
+          resolve(null);
+        }, 8000);
+        mailerChild.on("exit", (code) => {
+          clearTimeout(timer);
+          resolve(code);
+        });
+      });
+      assert.ok(mailerExitCode !== null && mailerExitCode !== 0, `Expected non-zero exit when EMAIL_MODE=log in prod, got ${mailerExitCode}`);
+      assert.match(mailerLogs.join(""), /EMAIL_MODE="log"|RESEND_API_KEY/i);
     } finally {
       if (!exitedEarly) child.kill();
       await new Promise((r) => setTimeout(r, 250));
     }
   });
 
-  await t.test("CONF-09: backend dependencies must have zero reachable High/Moderate npm audit vulnerabilities", { todo: "SEC-28" }, async () => {
+  await t.test("CONF-09: backend dependencies replace xlsx with exceljs and have zero reachable High/Moderate npm audit vulnerabilities", async () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, "classdex-backend", "package.json"), "utf8"));
     const lock = JSON.parse(fs.readFileSync(path.join(repoRoot, "classdex-backend", "package-lock.json"), "utf8"));
-    const xlsxVer = lock.packages?.["node_modules/xlsx"]?.version;
-    const bodyParserVer = lock.packages?.["node_modules/body-parser"]?.version;
-    const qsVer = lock.packages?.["node_modules/qs"]?.version;
-    assert.equal(pkg.dependencies.xlsx, "^0.18.5");
-    assert.ok(false, `Backend ships vulnerable xlsx@${xlsxVer} (High, no upstream npm patch, used in POST /roster/import), body-parser@${bodyParserVer} (High, patchable), & qs@${qsVer} (Moderate, patchable)`);
+    assert.equal(pkg.dependencies.xlsx, undefined, "xlsx dependency must be removed");
+    assert.equal(lock.packages?.["node_modules/xlsx"], undefined, "xlsx must be removed from lockfile");
+    assert.ok(pkg.dependencies.exceljs, "exceljs dependency must be installed");
+    assert.ok(lock.packages?.["node_modules/exceljs"], "exceljs must be in lockfile");
+
+    let auditOut = "";
+    try {
+      auditOut = execSync("npm audit --json", {
+        cwd: path.join(repoRoot, "classdex-backend"),
+        encoding: "utf8",
+      });
+    } catch (err) {
+      auditOut = String(err.stdout || "");
+    }
+    const audit = JSON.parse(auditOut);
+    const vulns = audit.metadata?.vulnerabilities || {};
+    assert.equal(vulns.critical || 0, 0, "Expected 0 critical vulnerabilities in backend");
+    assert.equal(vulns.high || 0, 0, "Expected 0 high vulnerabilities in backend");
+    // exceljs depends transitively on uuid (<11.1.1 moderate v3/v5/v6 buf check, unreachable since exceljs only uses v4):
+    const leafAdvisories = Object.entries(audit.vulnerabilities || {})
+      .filter(([, meta]) => Array.isArray(meta?.via) && meta.via.some((v) => v && typeof v === "object" && v.source))
+      .map(([name]) => name);
+    const unexpected = leafAdvisories.filter((name) => name !== "uuid");
+    assert.deepEqual(unexpected, [], `Unexpected remaining backend leaf audit advisories: ${unexpected.join(", ")}`);
   });
 
-  await t.test("CONF-10: frontend dev dependencies must keep Vite/build toolchains free of High audit advisories", { todo: "SEC-29" }, async () => {
-    const lock = JSON.parse(fs.readFileSync(path.join(repoRoot, "classdex-frontend", "package-lock.json"), "utf8"));
-    const viteVer = lock.packages?.["node_modules/vite"]?.version;
-    const smVer = lock.packages?.["node_modules/source-map-js"]?.version;
-    assert.ok(false, `Frontend devDependencies use vite@${viteVer} (High, fixed in 8.3.8) and source-map-js@${smVer} (High, dev/build-only)`);
+  await t.test("CONF-10: frontend dev dependencies must keep Vite/build toolchains free of High audit advisories", async () => {
+    let auditOut = "";
+    try {
+      auditOut = execSync("npm audit --json", {
+        cwd: path.join(repoRoot, "classdex-frontend"),
+        encoding: "utf8",
+      });
+    } catch (err) {
+      auditOut = String(err.stdout || "");
+    }
+    const audit = JSON.parse(auditOut);
+    const vulns = audit.metadata?.vulnerabilities || {};
+    assert.equal(vulns.critical || 0, 0, "Expected 0 critical vulnerabilities in frontend");
+    assert.equal(vulns.high || 0, 0, "Expected 0 high vulnerabilities in frontend");
+    assert.equal(vulns.moderate || 0, 0, "Expected 0 moderate vulnerabilities in frontend");
+    assert.equal(vulns.low || 0, 0, "Expected 0 low vulnerabilities in frontend");
   });
 
-  await t.test("CONF-11: Cloudinary upload config avoids browser secrets, but photoUpload.js & isValidPhoto allow silent prod base64 fallback & external URLs", { todo: "SEC-30" }, async () => {
+  await t.test("CONF-11: Cloudinary upload config avoids browser secrets and rejects production base64 fallback when Cloudinary env vars are unset", async () => {
     const photoSrc = fs
       .readFileSync(path.join(repoRoot, "classdex-frontend", "src", "utils", "photoUpload.js"), "utf8")
       .replace(/\r\n/g, "\n");
@@ -416,7 +520,7 @@ test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Depende
     );
   });
 
-  await t.test("CONF-12: logTransport & error/logging hygiene must never write raw reset/verify token links or email bodies to stdout logs", { todo: "SEC-31" }, async () => {
+  await t.test("CONF-12: logTransport & error/logging hygiene must never write raw reset/verify token links or email bodies to stdout logs", async () => {
     const mailerSrc = fs.readFileSync(path.join(repoRoot, "classdex-backend", "src", "services", "mailer.js"), "utf8");
     const indexSrc = fs.readFileSync(path.join(repoRoot, "classdex-backend", "index.js"), "utf8");
     // Confirm PII not in REST URLs

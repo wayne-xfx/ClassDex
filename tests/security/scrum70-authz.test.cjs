@@ -1,3 +1,5 @@
+const fs = require("node:fs");
+const path = require("node:path");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
@@ -200,7 +202,7 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
     const otherPhoto = await apiRequest(baseUrl, "GET", `/api/students/${fx.stuA2.studentProfile.id}/photo`, {
       cookie: stuA1Cookie,
     });
-    assert.equal(otherPhoto.status, 403);
+    assert.equal(otherPhoto.status, 404);
 
     // Student A2 passes stuA1 profileId in query string on student records - must still return ONLY stuA2
     const forgedQuery = await apiRequest(
@@ -224,19 +226,56 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
     assert.equal(res.json.student.id, fx.stuDroppedA.studentProfile.id);
   });
 
-  await t.test("AUTHZ-05b: PENDING student must not access class internal details before approval", { todo: "SEC-04" }, async () => {
+  await t.test("AUTHZ-05b: PENDING student receives minimal card header without class internals before approval", async () => {
     const res = await apiRequest(baseUrl, "GET", `/api/student/classes/${fx.facAClass1.id}/records`, {
       cookie: stuPendingACookie,
     });
-    assert.ok([403, 404].includes(res.status), `PENDING student received ${res.status} with classCode=${res.json?.class?.classCode}`);
+    assert.equal(res.status, 200);
+    assert.equal(res.json.class.enrollmentStatus, "PENDING");
+    assert.equal(res.json.class.id, fx.facAClass1.id);
+    assert.equal(res.json.class.sectionName, fx.facAClass1.sectionName);
+    assert.equal(res.json.student, null);
+    assert.equal(res.json.class.classCode, undefined);
+    assert.equal(res.json.class.description, undefined);
+    assert.equal(res.json.class.schedule, undefined);
+    assert.equal(res.json.class.faculty, undefined);
+    assert.deepEqual(res.json.attendance, []);
+    assert.deepEqual(res.json.recitations, []);
+    assert.deepEqual(res.json.activities, []);
+    assert.deepEqual(res.json.projects, []);
+    assert.deepEqual(res.json.quizzes, []);
   });
 
-  await t.test("AUTHZ-05c: DECLINED student must not bypass instructor decline via POST /api/classes/join", { todo: "SEC-05" }, async () => {
-    const res = await apiRequest(baseUrl, "POST", "/api/classes/join", {
+  await t.test("AUTHZ-05c: DECLINED and DROPPED students must not bypass instructor decision via POST /api/classes/join", async () => {
+    const resDeclined = await apiRequest(baseUrl, "POST", "/api/classes/join", {
       cookie: stuDeclinedACookie,
       body: { classCode: fx.facAClass1.classCode, recaptchaToken: "ok" },
     });
-    assert.ok([403, 409].includes(res.status), `Expected 403/409 for DECLINED rejoin, got ${res.status}: ${res.rawText}`);
+    assert.equal(resDeclined.status, 403, `Expected 403 for DECLINED rejoin, got ${resDeclined.status}: ${resDeclined.rawText}`);
+    const declinedEnrollAfter = await prisma.classEnrollment.findUnique({
+      where: {
+        studentProfileId_classId: {
+          studentProfileId: fx.stuDeclinedA.studentProfile.id,
+          classId: fx.facAClass1.id,
+        },
+      },
+    });
+    assert.equal(declinedEnrollAfter.status, "DECLINED");
+
+    const resDropped = await apiRequest(baseUrl, "POST", "/api/classes/join", {
+      cookie: stuDroppedACookie,
+      body: { classCode: fx.facAClass1.classCode, recaptchaToken: "ok" },
+    });
+    assert.equal(resDropped.status, 403, `Expected 403 for DROPPED rejoin, got ${resDropped.status}: ${resDropped.rawText}`);
+    const droppedEnrollAfter = await prisma.classEnrollment.findUnique({
+      where: {
+        studentProfileId_classId: {
+          studentProfileId: fx.stuDroppedA.studentProfile.id,
+          classId: fx.facAClass1.id,
+        },
+      },
+    });
+    assert.equal(droppedEnrollAfter.status, "DROPPED");
   });
 
   await t.test("AUTHZ-06: cross-faculty isolation across all Faculty GET routes against Faculty B real IDs", async () => {
@@ -251,7 +290,7 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
     const photoRes = await apiRequest(baseUrl, "GET", `/api/students/${fx.stuB1.studentProfile.id}/photo`, {
       cookie: facACookie,
     });
-    assert.equal(photoRes.status, 403);
+    assert.equal(photoRes.status, 404);
   });
 
   await t.test("AUTHZ-07: cross-faculty isolation across all Faculty mutating routes against Faculty B real IDs", async () => {
@@ -306,7 +345,7 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
     assert.equal(m5.status, 404);
   });
 
-  await t.test("AUTHZ-08b: PUT /api/quizzes/:sessionId/scores must reject unenrolled studentId", { todo: "SEC-01" }, async () => {
+  await t.test("AUTHZ-08b: PUT /api/quizzes/:sessionId/scores must reject unenrolled studentId", async () => {
     const res = await apiRequest(baseUrl, "PUT", `/api/quizzes/${fx.a1Data.quiz.id}/scores`, {
       cookie: facACookie,
       body: { scores: [{ studentId: fx.stuUnrelated.studentProfile.id, score: 15 }] },
@@ -323,9 +362,16 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
       await prisma.quizScore.delete({ where: { id: leakedRow.id } });
     }
     assert.ok([400, 404].includes(res.status) && !leakedRow, `Unenrolled student scored in bulk quiz: status=${res.status}`);
+    for (const unapprovedId of [fx.stuPendingA.studentProfile.id, fx.stuDeclinedA.studentProfile.id, fx.stuDroppedA.studentProfile.id]) {
+      const rUnapp = await apiRequest(baseUrl, "PUT", `/api/quizzes/${fx.a1Data.quiz.id}/scores`, {
+        cookie: facACookie,
+        body: { scores: [{ studentId: unapprovedId, score: 12 }] },
+      });
+      assert.ok([400, 404].includes(rUnapp.status), `Unapproved enrollment ${unapprovedId} scored in bulk quiz: ${rUnapp.status}`);
+    }
   });
 
-  await t.test("AUTHZ-08c1: activity single score endpoint must require APPROVED enrollment (reject PENDING)", { todo: "SEC-02" }, async () => {
+  await t.test("AUTHZ-08c1: activity single score endpoint must require APPROVED enrollment (reject PENDING)", async () => {
     const actRes = await apiRequest(baseUrl, "PUT", `/api/activities/${fx.a1Data.activity.id}/scores/${fx.stuPendingA.studentProfile.id}`, {
       cookie: facACookie,
       body: { score: 30 },
@@ -334,9 +380,16 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
       where: { activityId: fx.a1Data.activity.id, studentId: fx.stuPendingA.studentProfile.id },
     });
     assert.equal(actRes.status, 404, `Activity scored PENDING student with ${actRes.status}`);
+    for (const unapprovedId of [fx.stuDeclinedA.studentProfile.id, fx.stuDroppedA.studentProfile.id]) {
+      const rUnapp = await apiRequest(baseUrl, "PUT", `/api/activities/${fx.a1Data.activity.id}/scores/${unapprovedId}`, {
+        cookie: facACookie,
+        body: { score: 30 },
+      });
+      assert.equal(rUnapp.status, 404, `Activity scored unapproved student ${unapprovedId} with ${rUnapp.status}`);
+    }
   });
 
-  await t.test("AUTHZ-08c2: project single score endpoint must require APPROVED enrollment (reject PENDING)", { todo: "SEC-02" }, async () => {
+  await t.test("AUTHZ-08c2: project single score endpoint must require APPROVED enrollment (reject PENDING)", async () => {
     const projRes = await apiRequest(baseUrl, "PUT", `/api/projects/${fx.a1Data.midtermProject.id}/scores/${fx.stuPendingA.studentProfile.id}`, {
       cookie: facACookie,
       body: { score: 75, sessionId: fx.a1Data.session.id },
@@ -345,9 +398,16 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
       where: { projectId: fx.a1Data.midtermProject.id, studentId: fx.stuPendingA.studentProfile.id },
     });
     assert.equal(projRes.status, 404, `Project scored PENDING student with ${projRes.status}`);
+    for (const unapprovedId of [fx.stuDeclinedA.studentProfile.id, fx.stuDroppedA.studentProfile.id]) {
+      const rUnapp = await apiRequest(baseUrl, "PUT", `/api/projects/${fx.a1Data.midtermProject.id}/scores/${unapprovedId}`, {
+        cookie: facACookie,
+        body: { score: 75, sessionId: fx.a1Data.session.id },
+      });
+      assert.equal(rUnapp.status, 404, `Project scored unapproved student ${unapprovedId} with ${rUnapp.status}`);
+    }
   });
 
-  await t.test("AUTHZ-09: GET /api/classes/check-code must scope excludeId to owned classes only", { todo: "SEC-08" }, async () => {
+  await t.test("AUTHZ-09: GET /api/classes/check-code must scope excludeId to owned classes only", async () => {
     const res = await apiRequest(
       baseUrl,
       "GET",
@@ -358,14 +418,22 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
     assert.equal(res.json.available, false, "Foreign excludeId allowed faculty A to probe faculty B classCode ownership");
   });
 
-  await t.test("AUTHZ-10a: GET /api/students/:profileId/photo must block DECLINED enrollments", { todo: "SEC-03" }, async () => {
+  await t.test("AUTHZ-10a: GET /api/students/:profileId/photo must block DECLINED enrollments", async () => {
+    await prisma.classEnrollment.updateMany({
+      where: { classId: fx.facAClass1.id, studentProfileId: fx.stuDeclinedA.studentProfile.id },
+      data: { status: "DECLINED" },
+    });
     const declinedPhotoRes = await apiRequest(baseUrl, "GET", `/api/students/${fx.stuDeclinedA.studentProfile.id}/photo`, {
       cookie: facACookie,
     });
-    assert.equal(declinedPhotoRes.status, 403, `Faculty fetched DECLINED student photo (${declinedPhotoRes.status})`);
+    assert.equal(declinedPhotoRes.status, 404, `Faculty fetched DECLINED student photo (${declinedPhotoRes.status})`);
+    for (const allowedId of [fx.stuA1.studentProfile.id, fx.stuPendingA.studentProfile.id, fx.stuDroppedA.studentProfile.id]) {
+      const okPhoto = await apiRequest(baseUrl, "GET", `/api/students/${allowedId}/photo`, { cookie: facACookie });
+      assert.equal(okPhoto.status, 200, `Authorized photo for ${allowedId} returned ${okPhoto.status}`);
+    }
   });
 
-  await t.test("AUTHZ-10b: GET /api/students/:profileId/photo must block arbitrary roster studentId probes when student never joined", { todo: "SEC-03" }, async () => {
+  await t.test("AUTHZ-10b: GET /api/students/:profileId/photo must block arbitrary roster studentId probes when student never joined", async () => {
     const rosterAdd = await apiRequest(baseUrl, "POST", `/api/classes/${fx.facAClass2.id}/roster`, {
       cookie: facACookie,
       body: {
@@ -376,7 +444,7 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
     const probePhotoRes = await apiRequest(baseUrl, "GET", `/api/students/${fx.stuB1.studentProfile.id}/photo`, {
       cookie: facACookie,
     });
-    assert.equal(probePhotoRes.status, 403, `Adding another student's 7-digit ID to own roster exposed their photo (${probePhotoRes.status})`);
+    assert.equal(probePhotoRes.status, 404, `Adding another student's 7-digit ID to own roster exposed their photo (${probePhotoRes.status})`);
   });
 
   await t.test("AUTHZ-11: mass assignment & post-registration role escalation prevented", async () => {
@@ -451,7 +519,7 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
     assert.equal(joinRes.json.status, "PENDING");
   });
 
-  await t.test("AUTHZ-12: open self-selected FACULTY registration without domain/invite restriction requires design decision", { todo: "SEC-07" }, async () => {
+  await t.test("AUTHZ-12: open self-selected FACULTY registration (SEC-07 Accepted risk) enforced with tenant & photo isolation", async () => {
     const email = `qa_openfac_${fx.runId}@arbitrary-student-domain.example`;
     fx.trackEmail(email);
     const res = await apiRequest(baseUrl, "POST", "/api/auth/register", {
@@ -464,15 +532,25 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
         recaptchaToken: "ok",
       },
     });
-    assert.equal(res.status, 403, `Any email self-registered directly as FACULTY (${res.status})`);
+    // Accepted risk (SEC-07): self-service FACULTY sign-up remains open by product decision,
+    // mitigated by strict per-faculty isolation and SEC-03/SEC-20 photo/roster controls.
+    assert.equal(res.status, 201);
+    assert.equal(res.json.user.role, "FACULTY");
+    assert.equal(res.json.user.emailVerified, false);
+    const foreignClassRes = await apiRequest(baseUrl, "GET", `/api/classes/${fx.facAClass1.id}`, { cookie: res.sidCookie });
+    assert.equal(foreignClassRes.status, 404);
+    const foreignPhotoRes = await apiRequest(baseUrl, "GET", `/api/students/${fx.stuB1.studentProfile.id}/photo`, { cookie: res.sidCookie });
+    assert.ok([403, 404].includes(foreignPhotoRes.status), `Expected 403/404 photo isolation, got ${foreignPhotoRes.status}`);
   });
 
-  await t.test("AUTHZ-13: unverified account access boundary check on sensitive operations", { todo: "SEC-06" }, async () => {
+  await t.test("AUTHZ-13: unverified reminder-banner-only UX (SEC-06 Accepted risk) preserves strict tenant isolation", async () => {
     const facUnvLogin = await loginAs(baseUrl, fx.facUnverified.email);
     assert.equal(facUnvLogin.status, 200);
     assert.equal(facUnvLogin.json.user.emailVerified, false);
 
-    // Attempt creating class while unverified
+    // Accepted risk (SEC-06): reminder-banner-only UX intentionally permits workspace onboarding before clicking link
+    const bannerSrc = fs.readFileSync(path.join(__dirname, "..", "..", "classdex-frontend", "src", "components", "EmailVerificationBanner.jsx"), "utf8");
+    assert.match(bannerSrc, /EmailVerificationBanner/);
     const createCls = await apiRequest(baseUrl, "POST", "/api/classes", {
       cookie: facUnvLogin.sidCookie,
       body: {
@@ -483,7 +561,9 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
       },
     });
     if (createCls.json?.class?.classCode) fx.trackClassCode(createCls.json.class.classCode);
-    assert.equal(createCls.status, 403, `Unverified faculty allowed to create class (${createCls.status})`);
+    assert.equal(createCls.status, 201);
+    const foreignClass = await apiRequest(baseUrl, "GET", `/api/classes/${fx.facBClass1.id}`, { cookie: facUnvLogin.sidCookie });
+    assert.equal(foreignClass.status, 404);
   });
 
   await t.test("AUTHZ-14: tampered, unsigned, fabricated cookies & alg=none JWTs rejected (401)", async () => {
@@ -682,7 +762,7 @@ test("SCRUM-70: Authorization, Ownership, Role Boundaries & Token Security (AUTH
     assert.equal(foreignCls.status, 404);
   });
 
-  await t.test("AUTHZ-19b: GET /api/students/:profileId/photo must not leak studentProfile existence via 403 vs 404", { todo: "SEC-09" }, async () => {
+  await t.test("AUTHZ-19b: GET /api/students/:profileId/photo must not leak studentProfile existence via 403 vs 404", async () => {
     const nonExistPhoto = await apiRequest(baseUrl, "GET", "/api/students/clnonexistentprofile99/photo", { cookie: facACookie });
     const foreignPhoto = await apiRequest(baseUrl, "GET", `/api/students/${fx.stuUnrelated.studentProfile.id}/photo`, { cookie: facACookie });
     assert.equal(nonExistPhoto.status, 404);

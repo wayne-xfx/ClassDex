@@ -28,6 +28,9 @@ function validateCourseFields({ courseCode, courseTitle } = {}, { partial = fals
   const shouldCheckTitle = !partial || courseTitle !== undefined;
 
   if (shouldCheckCode) {
+    if (typeof courseCode !== "string") {
+      return { ...COURSE_CODE_ERROR };
+    }
     const normalizedCode = normalizeCourseCode(courseCode);
     if (
       normalizedCode.length < 2 ||
@@ -39,6 +42,9 @@ function validateCourseFields({ courseCode, courseTitle } = {}, { partial = fals
   }
 
   if (shouldCheckTitle) {
+    if (typeof courseTitle !== "string") {
+      return { ...COURSE_TITLE_ERROR };
+    }
     const normalizedTitle = normalizeCourseTitle(courseTitle);
     if (normalizedTitle.length < 2 || normalizedTitle.length > 120) {
       return { ...COURSE_TITLE_ERROR };
