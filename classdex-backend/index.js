@@ -410,6 +410,34 @@ app.use(
   }),
 );
 app.use(express.json({ limit: "8mb" }));
+
+function containsNullByte(root) {
+  if (root === undefined || root === null) return false;
+  const stack = [root];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (typeof current === "string") {
+      if (current.includes("\u0000")) return true;
+    } else if (Array.isArray(current)) {
+      for (let i = 0; i < current.length; i += 1) {
+        stack.push(current[i]);
+      }
+    } else if (current && typeof current === "object") {
+      const values = Object.values(current);
+      for (let i = 0; i < values.length; i += 1) {
+        stack.push(values[i]);
+      }
+    }
+  }
+  return false;
+}
+
+app.use((req, res, next) => {
+  if (containsNullByte(req.body) || containsNullByte(req.query) || containsNullByte(req.params)) {
+    return res.status(400).json({ message: "Invalid control character in input." });
+  }
+  return next();
+});
 app.use(
   session({
     name: "classdex.sid",
@@ -516,6 +544,20 @@ function requireRole(role) {
 function optionalText(value) {
   const text = String(value || "").trim();
   return text || null;
+}
+
+function parseOptionalString(value, { maxLength = 2000 } = {}) {
+  if (value === undefined || value === null) {
+    return { ok: true, value: null };
+  }
+  if (typeof value !== "string") {
+    return { ok: false, reason: "type" };
+  }
+  const text = value.trim();
+  if (text.length > maxLength) {
+    return { ok: false, reason: "length", maxLength };
+  }
+  return { ok: true, value: text || null };
 }
 
 const CLOUDINARY_PHOTO_URL_RE =
@@ -2250,10 +2292,23 @@ app.post(
     }
     const courseCode = normalizeCourseCode(req.body?.courseCode);
     const courseTitle = normalizeCourseTitle(req.body?.courseTitle);
-    const sectionName = String(req.body?.sectionName || "").trim();
-    let classCode = normalizeClassCode(req.body?.classCode);
-    if (!sectionName) {
+    const sectionName = typeof req.body?.sectionName === "string" ? req.body.sectionName.trim() : "";
+    if (typeof req.body?.sectionName !== "string" || !sectionName) {
       return res.status(400).json({ field: "sectionName", message: "Section name is required." });
+    }
+    if (sectionName.length > 120) {
+      return res.status(400).json({ field: "sectionName", message: "Section name must be 120 characters or fewer." });
+    }
+    if (req.body?.classCode !== undefined && req.body?.classCode !== null && typeof req.body.classCode !== "string") {
+      return res.status(400).json({ field: "classCode", message: "Use 3–20 letters, numbers, or hyphens for the class code." });
+    }
+    let classCode = normalizeClassCode(req.body?.classCode);
+    const parsedDescription = parseOptionalString(req.body?.description, { maxLength: 2000 });
+    if (!parsedDescription.ok) {
+      return res.status(400).json({
+        field: "description",
+        message: parsedDescription.reason === "length" ? "Description must be 2000 characters or fewer." : "Description must be valid text.",
+      });
     }
     if (classCode && !/^[A-Z0-9-]{3,20}$/.test(classCode)) {
       return res.status(400).json({
@@ -2291,7 +2346,7 @@ app.post(
           courseTitle,
           sectionName,
           classCode,
-          description: optionalText(req.body?.description),
+          description: parsedDescription.value,
           schedule: parsedSchedule.schedule,
           scheduleDays: parsedSchedule.scheduleDays,
           scheduleStartTime: parsedSchedule.scheduleStartTime,
@@ -4068,14 +4123,22 @@ app.patch(
       }
 
       if (req.body?.sectionName !== undefined) {
-        const sectionName = String(req.body.sectionName || "").trim();
-        if (!sectionName) {
+        if (typeof req.body.sectionName !== "string" || !req.body.sectionName.trim()) {
           return res.status(400).json({ field: "sectionName", message: "Section name is required." });
+        }
+        const sectionName = req.body.sectionName.trim();
+        if (sectionName.length > 120) {
+          return res.status(400).json({ field: "sectionName", message: "Section name must be 120 characters or fewer." });
         }
         updateData.sectionName = sectionName;
       }
 
       if (req.body?.classCode !== undefined) {
+        if (typeof req.body.classCode !== "string") {
+          return res.status(400).json({
+            message: "Use 3–20 letters, numbers, or hyphens for the class code.",
+          });
+        }
         const classCode = normalizeClassCode(req.body.classCode);
         if (!/^[A-Z0-9-]{3,20}$/.test(classCode)) {
           return res.status(400).json({
@@ -4086,7 +4149,14 @@ app.patch(
       }
 
       if (req.body?.description !== undefined) {
-        updateData.description = optionalText(req.body.description);
+        const parsedDescription = parseOptionalString(req.body.description, { maxLength: 2000 });
+        if (!parsedDescription.ok) {
+          return res.status(400).json({
+            field: "description",
+            message: parsedDescription.reason === "length" ? "Description must be 2000 characters or fewer." : "Description must be valid text.",
+          });
+        }
+        updateData.description = parsedDescription.value;
       }
 
       const hasScheduleField = [

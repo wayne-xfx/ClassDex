@@ -535,7 +535,7 @@ test("SCRUM-71: Input Validation, SQLi, Email Escaping, Uploads, Exports & Error
     });
   });
 
-  await t.test("INJ-11b: null bytes (\\u0000) and >100KB text fields must reject cleanly with 400 (never 500)", { todo: "SEC-14" }, async () => {
+  await t.test("INJ-11b: null bytes (\\u0000) and >100KB text fields must reject cleanly with 400 (never 500)", async () => {
     const rNull = await apiRequest(srv.baseUrl, "POST", "/api/classes", {
       cookie: facCookie,
       body: {
