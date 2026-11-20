@@ -11892,3 +11892,306 @@ textarea {
     animation: none;
   }
 }
+
+/* ==========================================================================
+   Task 6a: Shared Tokens, Focus Rings, Reduced Motion & Mobile Layout Polish
+   (Frozen index card selectors intentionally untouched)
+   ========================================================================== */
+
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --transition-fast: 160ms ease;
+  --transition-base: 220ms ease;
+}
+
+/* Consistent focus-visible rings & tactile press feedback */
+.icon-button:focus-visible,
+.class-shell-tab:focus-visible,
+.class-shell-back:focus-visible,
+.export-link-btn:focus-visible,
+.recitation-mode-btn:focus-visible,
+.auth-submit-btn:focus-visible,
+.auth-secondary-btn:focus-visible,
+.auth-inline-link:focus-visible,
+.auth-back-link:focus-visible,
+.text-link:focus-visible,
+.back-link:focus-visible,
+.prompt-skip:focus-visible,
+.student-list-undo-btn:focus-visible,
+.header-notification-item:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--royal) 62%, transparent);
+  outline-offset: 2px;
+}
+
+.button:active:not(:disabled),
+.icon-button:active:not(:disabled) {
+  transform: translateY(0) scale(0.985);
+}
+
+/* Fix negative margin overlap on Faculty/Student dashboard class cards */
+.class-card-section-line {
+  margin: 4px 0 0;
+}
+
+/* Prevent ClassShell header overflow at 320px (does not touch frozen index cards) */
+.class-shell,
+.class-shell-header,
+.class-shell-header-main,
+.class-shell-heading,
+.class-shell-title-row,
+.class-shell-chips {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.class-shell-description,
+.class-shell-section-line,
+.class-shell-heading h1 {
+  overflow-wrap: break-word;
+  word-break: normal;
+  max-width: 100%;
+}
+
+.class-shell-chip {
+  max-width: 100%;
+}
+
+.class-shell-schedule-text {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+/* ClassShell horizontal tab bar scroll fade hint & >=44px mobile tap targets */
+.class-shell-tabs-wrap {
+  position: relative;
+}
+
+@media (max-width: 767px) {
+  .class-shell-tabs-wrap::after {
+    content: "";
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    bottom: 4px;
+    width: 28px;
+    border-radius: 0 12px 12px 0;
+    pointer-events: none;
+    background: linear-gradient(to right, transparent, var(--card));
+  }
+
+  .class-shell-back,
+  .class-shell-invite-btn,
+  .class-shell-more-btn,
+  .class-shell-tab {
+    min-height: 44px;
+  }
+
+  .class-shell-more-btn {
+    min-width: 44px;
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/* Dashboard section heading & Active/Archived tabs on mobile */
+@media (max-width: 560px) {
+  .faculty-dashboard-content .section-heading {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .dashboard-archive-tabs {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .dashboard-archive-tabs .button {
+    width: 100%;
+    min-height: 44px;
+    white-space: nowrap;
+    justify-content: center;
+  }
+}
+
+/* Export module mobile polish */
+.export-quick-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.export-link-btn {
+  white-space: nowrap;
+  min-height: 36px;
+  padding: 4px 6px;
+  border-radius: 8px;
+}
+
+@media (max-width: 480px) {
+  .export-summary-strip {
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .export-section-header {
+    gap: 10px;
+  }
+
+  .export-link-btn {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
+/* Recitation mode row & tap target polish */
+@media (max-width: 600px) {
+  .recitation-mode-block {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .recitation-mode-btn,
+  .recitation-settings-btn {
+    min-height: 44px;
+  }
+}
+
+/* Auth & form card consistent tap targets on mobile */
+.auth-submit-btn,
+.auth-secondary-btn {
+  min-height: 44px;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
+}
+
+.auth-inline-link,
+.auth-back-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+}
+
+/* Dashboard & profile loading skeletons */
+.dashboard-skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.dashboard-skeleton-card {
+  display: grid;
+  gap: 14px;
+  min-height: 240px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--card);
+}
+
+.dashboard-skeleton-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dashboard-skeleton-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+}
+
+.dashboard-skeleton-pill {
+  width: 68px;
+  height: 26px;
+  border-radius: 999px;
+}
+
+.dashboard-skeleton-title {
+  width: 72%;
+  height: 20px;
+  border-radius: 8px;
+}
+
+.dashboard-skeleton-sub {
+  width: 48%;
+  height: 14px;
+  border-radius: 6px;
+}
+
+.dashboard-skeleton-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.dashboard-skeleton-btn {
+  height: 38px;
+  border-radius: 10px;
+}
+
+.profile-skeleton-stack {
+  display: grid;
+  gap: 16px;
+}
+
+.profile-skeleton-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.profile-skeleton-avatar {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.profile-skeleton-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.profile-skeleton-input {
+  height: 46px;
+  border-radius: 11px;
+}
+
+@media (max-width: 900px) {
+  .dashboard-skeleton-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .dashboard-skeleton-grid,
+  .profile-skeleton-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Global reduced-motion respect (excludes nothing; keeps UI snappy & accessible) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
