@@ -11966,11 +11966,8 @@ textarea {
   overflow-wrap: break-word;
 }
 
-/* ClassShell horizontal tab bar scroll fade hint & >=44px mobile tap targets */
-.class-shell-tabs-wrap {
-  position: relative;
-}
-
+/* ClassShell horizontal tab bar scroll fade hint & >=44px mobile tap targets
+   (keeps existing position: sticky from base rules so ::after anchors cleanly without shifting top offset) */
 @media (max-width: 767px) {
   .class-shell-tabs-wrap::after {
     content: "";
