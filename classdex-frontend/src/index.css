@@ -11551,3 +11551,344 @@ textarea {
     padding-left: 42px !important;
   }
 }
+
+/* ==========================================================================
+   Task 5: Notifications Bottom Sheet (<640px) & Viewport-Safe Desktop Popover
+   ========================================================================== */
+
+.header-notifications-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: -120px;
+  width: min(352px, calc(100vw - 24px));
+  max-height: min(440px, calc(100dvh - 104px));
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-floating);
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+}
+
+@media (min-width: 640px) and (max-width: 1024px) {
+  .header-notifications-popover {
+    right: -156px;
+  }
+}
+
+.header-notifications-popover:focus,
+.pending-drawer:focus {
+  outline: none;
+}
+
+.header-notifications-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 6px 10px 8px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 6px;
+}
+
+.header-notifications-title-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.header-notifications-title-row strong {
+  font-size: 15px;
+  font-weight: 740;
+  color: var(--navy);
+}
+
+.notifications-close-btn {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 10px;
+}
+
+.header-notification-item {
+  min-height: 52px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.header-notification-item:hover {
+  background: color-mix(in srgb, var(--royal) 7%, var(--card));
+  border-color: color-mix(in srgb, var(--royal) 20%, var(--line));
+}
+
+.header-notifications-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.header-notifications-empty strong,
+.pending-empty strong {
+  color: var(--navy);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.header-notifications-empty span:last-child,
+.pending-empty span:last-child {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.notifications-empty-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  margin-bottom: 4px;
+  background: color-mix(in srgb, var(--accent-present) 12%, var(--card));
+  color: var(--status-present-text);
+}
+
+.notifications-sheet-handle {
+  display: none;
+}
+
+/* Mobile bottom sheet backdrop & panel for AppShell global bell (< 640px) */
+.notifications-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(10, 22, 46, 0.56);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: captcha-fade-in 180ms ease;
+}
+
+[data-theme="dark"] .notifications-sheet-backdrop {
+  background: rgba(5, 10, 22, 0.72);
+}
+
+.header-notifications-popover.is-mobile-sheet {
+  position: relative;
+  top: auto;
+  right: auto;
+  left: auto;
+  width: 100%;
+  max-width: 100%;
+  max-height: min(82dvh, calc(100dvh - 56px));
+  border-radius: 22px 22px 0 0;
+  border-bottom: 0;
+  padding: 10px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  box-shadow: 0 -16px 48px rgba(10, 22, 46, 0.28);
+  animation: sheet-slide-up 200ms ease;
+}
+
+.header-notifications-popover.is-mobile-sheet .notifications-sheet-handle {
+  display: block;
+  width: 38px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line-strong);
+  margin: 0 auto 10px;
+  flex: 0 0 auto;
+}
+
+.header-notifications-popover.is-mobile-sheet .notifications-close-btn {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* Class-managed notifications drawer (desktop >= 640px) & bottom sheet (< 640px) */
+.pending-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(10, 22, 46, 0.52);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+[data-theme="dark"] .pending-overlay {
+  background: rgba(5, 10, 22, 0.72);
+}
+
+.pending-drawer {
+  width: min(36rem, calc(100vw - 24px));
+  max-width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  padding: 20px 22px 28px;
+  background: var(--card);
+  color: var(--ink);
+  border-left: 1px solid var(--line);
+  box-shadow: -16px 0 48px rgba(10, 22, 46, 0.2);
+}
+
+.pending-drawer .pending-heading {
+  position: sticky;
+  top: -20px;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -20px -22px 16px;
+  padding: 20px 22px 14px;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+}
+
+.pending-drawer .pending-heading .icon-button {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.pending-row {
+  gap: 12px;
+  padding: 14px;
+  border-radius: 14px;
+}
+
+.pending-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pending-actions .button,
+.pending-actions-warning .button,
+.notifications-read-actions .button {
+  min-height: 44px;
+}
+
+.pending-empty {
+  min-height: 220px;
+  border-radius: 16px;
+  padding: 28px 20px;
+  gap: 6px;
+}
+
+@media (max-width: 639px) {
+  .pending-overlay {
+    align-items: flex-end;
+    justify-content: center;
+  }
+
+  .pending-drawer {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    max-height: min(86dvh, calc(100dvh - 48px));
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    border-radius: 22px 22px 0 0;
+    padding: 10px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    box-shadow: 0 -16px 48px rgba(10, 22, 46, 0.28);
+    animation: sheet-slide-up 200ms ease;
+  }
+
+  .pending-drawer .notifications-sheet-handle {
+    display: block;
+    width: 38px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--line-strong);
+    margin: 0 auto 10px;
+  }
+
+  .pending-drawer .pending-heading {
+    top: -10px;
+    margin: 0 -16px 14px;
+    padding: 8px 16px 12px;
+  }
+
+  .pending-drawer .pending-heading h2 {
+    font-size: 18px;
+  }
+
+  .pending-drawer .pending-heading p {
+    font-size: 12.5px;
+  }
+
+  .pending-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    padding: 12px;
+  }
+
+  .pending-actions,
+  .pending-actions-warning {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .pending-actions-warning .button:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .pending-actions .button,
+  .pending-actions-warning .button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .notifications-read-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .notifications-read-actions .button {
+    width: 100%;
+  }
+}
+
+@keyframes sheet-slide-up {
+  from {
+    opacity: 0.7;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notifications-sheet-backdrop,
+  .header-notifications-popover.is-mobile-sheet,
+  .pending-drawer {
+    animation: none;
+  }
+}

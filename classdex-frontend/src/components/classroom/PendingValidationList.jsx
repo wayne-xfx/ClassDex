@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import Avatar from "../Avatar";
 import Icon from "../Icon";
 import { formatProgramSection, formatStudentDisplayName } from "./studentNames";
@@ -74,7 +75,7 @@ export default function PendingValidationList({
   const unreadWarnings = absenceWarnings.filter((warning) => !warning.isRead).length;
   const canMarkAllRead = unreadAutoApproved + unreadWarnings > 0;
 
-  return (
+  return createPortal(
     <div
       className="pending-overlay"
       role="presentation"
@@ -90,6 +91,7 @@ export default function PendingValidationList({
         tabIndex={-1}
         ref={dialogRef}
       >
+        <div className="notifications-sheet-handle" aria-hidden="true" />
         <div className="pending-heading">
           <div>
             <span className="eyebrow">
@@ -331,14 +333,17 @@ export default function PendingValidationList({
           </div>
         ) : (
           <div className="empty-state pending-empty">
-            <Icon name="check" />
-            <strong>All caught up</strong>
+            <span className="notifications-empty-icon" aria-hidden="true">
+              <Icon name="check" size={20} />
+            </span>
+            <strong>You&apos;re all caught up.</strong>
             <span>
               New unmatched join requests and 7-absence drop warnings will appear here.
             </span>
           </div>
         )}
       </aside>
-    </div>
+    </div>,
+    document.body,
   );
 }

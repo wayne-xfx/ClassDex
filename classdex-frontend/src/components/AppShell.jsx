@@ -1,5 +1,6 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
 import Avatar from "./Avatar";
@@ -31,16 +32,38 @@ export default function AppShell({
   const [globalCounts, setGlobalCounts] = useState({});
   const [facultyClasses, setFacultyClasses] = useState([]);
   const [globalLoaded, setGlobalLoaded] = useState(false);
+  const [isMobileSheet, setIsMobileSheet] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(max-width: 639px)").matches : false,
+  );
 
   const headerRef = useRef(null);
   const userMenuRef = useRef(null);
   const bellWrapRef = useRef(null);
   const bellButtonRef = useRef(null);
+  const sheetDialogRef = useRef(null);
   const pollInFlightRef = useRef(false);
 
   const faculty = user?.role === "FACULTY";
   const profilePath = faculty ? "/faculty/profile" : "/student/profile";
   const isClassManagedNotifications = typeof onToggleNotifications === "function";
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 639px)");
+    const update = () => setIsMobileSheet(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    if (!globalBellOpen || !isMobileSheet || isClassManagedNotifications) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const frame = window.requestAnimationFrame(() => sheetDialogRef.current?.focus());
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [globalBellOpen, isClassManagedNotifications, isMobileSheet]);
 
   useEffect(() => {
     const headerEl = headerRef.current;
@@ -94,6 +117,11 @@ export default function AppShell({
     };
   }, [faculty, isClassManagedNotifications, refreshGlobalNotifications]);
 
+  const closeGlobalBell = useCallback(() => {
+    setGlobalBellOpen(false);
+    window.requestAnimationFrame(() => bellButtonRef.current?.focus());
+  }, []);
+
   useEffect(() => {
     if (!userMenuOpen && !globalBellOpen) return undefined;
 
@@ -101,7 +129,12 @@ export default function AppShell({
       if (userMenuOpen && userMenuRef.current && !userMenuRef.current.contains(event.target)) {
         setUserMenuOpen(false);
       }
-      if (globalBellOpen && bellWrapRef.current && !bellWrapRef.current.contains(event.target)) {
+      if (
+        globalBellOpen &&
+        !isMobileSheet &&
+        bellWrapRef.current &&
+        !bellWrapRef.current.contains(event.target)
+      ) {
         setGlobalBellOpen(false);
       }
     }
@@ -109,11 +142,28 @@ export default function AppShell({
     function handleKeyDown(event) {
       if (event.key === "Escape") {
         if (globalBellOpen) {
-          setGlobalBellOpen(false);
-          bellButtonRef.current?.focus();
+          closeGlobalBell();
         }
         if (userMenuOpen) {
           setUserMenuOpen(false);
+        }
+        return;
+      }
+      if (event.key === "Tab" && globalBellOpen && isMobileSheet && sheetDialogRef.current) {
+        const focusable = [
+          ...sheetDialogRef.current.querySelectorAll(
+            'a[href], button:not(:disabled), [tabindex]:not([tabindex="-1"])',
+          ),
+        ];
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
         }
       }
     }
@@ -124,7 +174,7 @@ export default function AppShell({
       document.removeEventListener("mousedown", handleMouseDown);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [globalBellOpen, userMenuOpen]);
+  }, [closeGlobalBell, globalBellOpen, isMobileSheet, userMenuOpen]);
 
   const classNotificationRows = useMemo(() => {
     const classById = new Map(facultyClasses.map((item) => [item.id, item]));
@@ -234,17 +284,27 @@ export default function AppShell({
                   ) : null}
                 </button>
 
-                {!isClassManagedNotifications && globalBellOpen ? (
+                {!isClassManagedNotifications && globalBellOpen && !isMobileSheet ? (
                   <div
                     className="header-notifications-popover"
                     role="dialog"
-                    aria-label="Class notifications"
+                    aria-label="Notifications"
                   >
                     <div className="header-notifications-head">
-                      <strong>Notifications</strong>
-                      {effectiveBellCount > 0 ? (
-                        <span className="notification-badge">{effectiveBellCount} unread</span>
-                      ) : null}
+                      <div className="header-notifications-title-row">
+                        <strong>Notifications</strong>
+                        {effectiveBellCount > 0 ? (
+                          <span className="notification-badge">{effectiveBellCount} unread</span>
+                        ) : null}
+                      </div>
+                      <button
+                        type="button"
+                        className="icon-button notifications-close-btn"
+                        aria-label="Close notifications"
+                        onClick={closeGlobalBell}
+                      >
+                        <Icon name="x" size={16} />
+                      </button>
                     </div>
                     {!globalLoaded ? (
                       <div className="header-notifications-empty" role="status">
@@ -270,12 +330,88 @@ export default function AppShell({
                       </div>
                     ) : (
                       <div className="header-notifications-empty">
-                        <Icon name="check" size={16} />
-                        <span>All caught up — no unread notifications.</span>
+                        <span className="notifications-empty-icon" aria-hidden="true">
+                          <Icon name="check" size={18} />
+                        </span>
+                        <strong>You&apos;re all caught up.</strong>
+                        <span>No unread class notifications right now.</span>
                       </div>
                     )}
                   </div>
                 ) : null}
+
+                {!isClassManagedNotifications && globalBellOpen && isMobileSheet
+                  ? createPortal(
+                      <div
+                        className="notifications-sheet-backdrop"
+                        role="presentation"
+                        onMouseDown={(event) => {
+                          if (event.target === event.currentTarget) closeGlobalBell();
+                        }}
+                      >
+                        <div
+                          ref={sheetDialogRef}
+                          tabIndex={-1}
+                          className="header-notifications-popover is-mobile-sheet"
+                          role="dialog"
+                          aria-modal="true"
+                          aria-label="Notifications"
+                        >
+                          <div className="notifications-sheet-handle" aria-hidden="true" />
+                          <div className="header-notifications-head">
+                            <div className="header-notifications-title-row">
+                              <strong>Notifications</strong>
+                              {effectiveBellCount > 0 ? (
+                                <span className="notification-badge">
+                                  {effectiveBellCount} unread
+                                </span>
+                              ) : null}
+                            </div>
+                            <button
+                              type="button"
+                              className="icon-button notifications-close-btn"
+                              aria-label="Close notifications"
+                              onClick={closeGlobalBell}
+                            >
+                              <Icon name="x" size={18} />
+                            </button>
+                          </div>
+                          {!globalLoaded ? (
+                            <div className="header-notifications-empty" role="status">
+                              <span>Loading notifications…</span>
+                            </div>
+                          ) : classNotificationRows.length > 0 ? (
+                            <div className="header-notifications-list">
+                              {classNotificationRows.map((item) => (
+                                <Link
+                                  key={item.id}
+                                  to={`/faculty/classes/${item.id}?notifications=1`}
+                                  className="header-notification-item"
+                                  onClick={() => setGlobalBellOpen(false)}
+                                >
+                                  <div className="header-notification-copy">
+                                    <strong>{item.label}</strong>
+                                    {item.classCode ? <span>Code {item.classCode}</span> : null}
+                                  </div>
+                                  <span className="notification-badge">{item.count}</span>
+                                  <Icon name="chevron" size={14} />
+                                </Link>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="header-notifications-empty">
+                              <span className="notifications-empty-icon" aria-hidden="true">
+                                <Icon name="check" size={18} />
+                              </span>
+                              <strong>You&apos;re all caught up.</strong>
+                              <span>No unread class notifications right now.</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>,
+                      document.body,
+                    )
+                  : null}
               </div>
             ) : null}
 
