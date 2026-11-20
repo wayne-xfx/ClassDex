@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTheme } from "../context/useTheme";
+import Icon from "./Icon";
 
 const SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY || "";
 const CALLBACK_NAME = "__classDexRecaptchaReady";
@@ -144,18 +145,88 @@ const RecaptchaWidget = forwardRef(function RecaptchaWidget({ onChange, onClose,
   }, [attempt, compact, theme]);
 
   return createPortal(
-    <div className="captcha-modal-backdrop">
-      <section className="captcha-modal" ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="captcha-modal-title" tabIndex={-1}>
-        <button ref={closeButtonRef} type="button" className="captcha-modal-close" aria-label="Close security check" onClick={() => onCloseRef.current?.()}>
-          <span aria-hidden="true">×</span>
-        </button>
-        <h2 id="captcha-modal-title">Security check</h2>
-        <div className="recaptcha-widget">
-          <div className="recaptcha-frame" aria-label="Security check">
-            <div key={`${theme}-${compact ? "compact" : "normal"}-${attempt}`} ref={containerRef} />
+    <div
+      className="captcha-modal-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onCloseRef.current?.();
+      }}
+    >
+      <section
+        className={`captcha-modal${compact ? " is-compact" : ""}`}
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="captcha-modal-title"
+        aria-describedby="captcha-modal-desc"
+        tabIndex={-1}
+      >
+        <header className="captcha-modal-header">
+          <div className="captcha-modal-title-group">
+            <span className="captcha-modal-icon" aria-hidden="true">
+              <Icon name="shield" size={18} />
+            </span>
+            <div className="captcha-modal-heading">
+              <h2 id="captcha-modal-title">Security check</h2>
+              <p id="captcha-modal-desc" className="captcha-modal-subtitle">
+                Quick check to keep ClassDex safe.
+              </p>
+            </div>
           </div>
-          {status === "loading" ? <span className="field-hint" role="status">Loading security check…</span> : null}
-          {error ? <div className="recaptcha-retry"><span className="field-hint" role="status">{error}</span>{status === "error" ? <button type="button" className="button button-quiet" onClick={() => { setStatus("loading"); setError(""); setAttempt((value) => value + 1); }}>Retry</button> : null}</div> : null}
+          <button
+            ref={closeButtonRef}
+            type="button"
+            className="captcha-modal-close"
+            aria-label="Close security check"
+            onClick={() => onCloseRef.current?.()}
+          >
+            <Icon name="x" size={18} />
+          </button>
+        </header>
+
+        <div className="recaptcha-widget">
+          <div
+            className={`recaptcha-frame-shell${status === "loading" ? " is-loading" : ""}${compact ? " is-compact" : ""}`}
+          >
+            {status === "loading" ? (
+              <div className="recaptcha-skeleton" aria-hidden="true">
+                <span className="recaptcha-skeleton-box" />
+                <div className="recaptcha-skeleton-lines">
+                  <span className="recaptcha-skeleton-line" />
+                  <span className="recaptcha-skeleton-line is-short" />
+                </div>
+                <span className="recaptcha-skeleton-spinner" />
+              </div>
+            ) : null}
+            <div className="recaptcha-frame" aria-label="Security check">
+              <div key={`${theme}-${compact ? "compact" : "normal"}-${attempt}`} ref={containerRef} />
+            </div>
+          </div>
+          {status === "loading" ? (
+            <span className="sr-only" role="status">
+              Loading security check…
+            </span>
+          ) : null}
+          {error ? (
+            <div className="recaptcha-retry">
+              <span className="recaptcha-error-text" role="status">
+                <Icon name="alert" size={15} />
+                <span>{error}</span>
+              </span>
+              {status === "error" ? (
+                <button
+                  type="button"
+                  className="button button-secondary button-small"
+                  onClick={() => {
+                    setStatus("loading");
+                    setError("");
+                    setAttempt((value) => value + 1);
+                  }}
+                >
+                  Retry
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </section>
     </div>,
