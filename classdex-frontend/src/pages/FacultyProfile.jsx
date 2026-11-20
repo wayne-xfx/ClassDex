@@ -6,7 +6,7 @@ import Icon from "../components/Icon";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { uploadPhoto } from "../utils/photoUpload";
-import { ErrorState, PageHeader } from "../components/DesignSystem";
+import { ErrorState, PageHeader, Skeleton } from "../components/DesignSystem";
 
 const EMPTY_FORM = {
   name: "",
@@ -109,7 +109,21 @@ export default function FacultyProfile() {
           />
         ) : (
           <form className="panel profile-panel" onSubmit={handleSubmit}>
-            {loading ? <p className="muted">Loading your profile…</p> : (
+            {loading ? (
+              <div className="profile-skeleton-stack" role="status" aria-label="Loading your profile">
+                <span className="sr-only">Loading your profile…</span>
+                <div className="profile-skeleton-head">
+                  <Skeleton className="profile-skeleton-avatar" />
+                  <Skeleton className="dashboard-skeleton-title" />
+                </div>
+                <div className="profile-skeleton-fields">
+                  <Skeleton className="profile-skeleton-input" />
+                  <Skeleton className="profile-skeleton-input" />
+                  <Skeleton className="profile-skeleton-input" />
+                  <Skeleton className="profile-skeleton-input" />
+                </div>
+              </div>
+            ) : (
               <>
                 <div className="photo-upload">
                   <Avatar src={form.photo} name={form.name || user?.name} alt="Faculty profile" size="lg" className="photo-preview" />

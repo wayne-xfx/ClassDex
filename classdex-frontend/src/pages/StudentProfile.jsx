@@ -6,7 +6,7 @@ import Icon from "../components/Icon";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { uploadPhoto } from "../utils/photoUpload";
-import { ErrorState, PageHeader } from "../components/DesignSystem";
+import { ErrorState, PageHeader, Skeleton } from "../components/DesignSystem";
 
 function emptyForm(user) {
   return {
@@ -154,7 +154,19 @@ export default function StudentProfile() {
         ) : (
           <form className="panel profile-panel" onSubmit={handleSubmit}>
             {loading ? (
-              <p className="muted">Loading your index card…</p>
+              <div className="profile-skeleton-stack" role="status" aria-label="Loading your index card">
+                <span className="sr-only">Loading your index card…</span>
+                <div className="profile-skeleton-head">
+                  <Skeleton className="profile-skeleton-avatar" />
+                  <Skeleton className="dashboard-skeleton-title" />
+                </div>
+                <div className="profile-skeleton-fields">
+                  <Skeleton className="profile-skeleton-input" />
+                  <Skeleton className="profile-skeleton-input" />
+                  <Skeleton className="profile-skeleton-input" />
+                  <Skeleton className="profile-skeleton-input" />
+                </div>
+              </div>
             ) : (
               <>
                 <div className="photo-upload">

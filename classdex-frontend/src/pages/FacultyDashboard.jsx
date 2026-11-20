@@ -5,7 +5,7 @@ import EmailVerificationBanner from "../components/EmailVerificationBanner";
 import Icon from "../components/Icon";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
-import { ErrorState, PageHeader } from "../components/DesignSystem";
+import { ErrorState, PageHeader, Skeleton } from "../components/DesignSystem";
 import { getClassDisplay } from "../utils/classDisplay";
 import { formatClassSchedule } from "../utils/schedule";
 import { getScheduleStatus, partitionAndOrderClasses } from "../utils/classOrdering";
@@ -329,7 +329,23 @@ export default function FacultyDashboard() {
         </div>
 
         {loading ? (
-          <div className="loading-card">Loading your classes…</div>
+          <div className="dashboard-skeleton-grid" role="status" aria-label="Loading your classes">
+            <span className="sr-only">Loading your classes…</span>
+            {Array.from({ length: 3 }, (_, idx) => (
+              <div className="dashboard-skeleton-card" key={idx} aria-hidden="true">
+                <div className="dashboard-skeleton-head">
+                  <Skeleton className="dashboard-skeleton-icon" />
+                  <Skeleton className="dashboard-skeleton-pill" />
+                </div>
+                <Skeleton className="dashboard-skeleton-title" />
+                <Skeleton className="dashboard-skeleton-sub" />
+                <div className="dashboard-skeleton-actions">
+                  <Skeleton className="dashboard-skeleton-btn" />
+                  <Skeleton className="dashboard-skeleton-btn" />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : loadError ? (
           <ErrorState
             title="Unable to load your classes"
