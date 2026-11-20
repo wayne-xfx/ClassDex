@@ -10695,3 +10695,312 @@ textarea {
     animation: none;
   }
 }
+
+/* ==========================================================================
+   Task 3: Attendance Filter Chips (Single Row), Action Row & Baseline Sync
+   ========================================================================== */
+
+.attendance-filter-pills-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  margin: 0 0 16px;
+}
+
+.attendance-filter-pills {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+.attendance-filter-pill {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 620;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.attendance-filter-pill:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--royal) 62%, transparent);
+  outline-offset: 2px;
+}
+
+.attendance-pill-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 720;
+  line-height: 1.35;
+  background: color-mix(in srgb, currentColor 11%, transparent);
+}
+
+/* Aligned search + Grid/List toggle baseline */
+.attendance-module .attendance-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.attendance-module .attendance-roster-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 8px;
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+.attendance-module .attendance-roster-actions .deck-search {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  height: 44px;
+  min-height: 44px;
+}
+
+.attendance-module .layout-toggle {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 44px;
+  min-height: 44px;
+  padding: 3px;
+  flex: 0 0 auto;
+}
+
+.attendance-module .layout-toggle button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 100%;
+  min-height: 36px;
+  padding: 0 11px;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+/* Equal-height, consistent action buttons */
+.attendance-module .attendance-toolbar-actions {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+.attendance-module .attendance-toolbar-actions .button {
+  min-height: 44px;
+  padding: 8px 13px;
+  font-size: 12.5px;
+  font-weight: 680;
+  line-height: 1.25;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  .attendance-module .attendance-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .attendance-module .attendance-roster-actions {
+    width: 100%;
+    flex: none;
+  }
+
+  .attendance-module .attendance-toolbar-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .attendance-module .attendance-toolbar-actions .button {
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+    padding: 8px 8px;
+    font-size: 12px;
+    line-height: 1.2;
+    white-space: normal;
+    text-align: center;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 560px) {
+  .attendance-module .attendance-toolbar-actions {
+    gap: 6px;
+  }
+
+  .attendance-module .attendance-toolbar-actions .button {
+    flex-direction: column;
+    gap: 4px;
+    min-height: 54px;
+    padding: 8px 6px;
+    font-size: 11.5px;
+    line-height: 1.22;
+  }
+
+  .attendance-module .attendance-toolbar-actions .button svg {
+    flex: 0 0 auto;
+  }
+}
+
+/* Single-row fit with icons down to 500px */
+@media (max-width: 620px) and (min-width: 500px) {
+  .attendance-filter-pills {
+    gap: 4px;
+  }
+
+  .attendance-filter-pill {
+    padding: 0 8px;
+    gap: 4px;
+    font-size: 11.5px;
+    min-height: 40px;
+  }
+
+  .attendance-filter-pill > svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  .attendance-pill-count {
+    padding: 1px 5px;
+    font-size: 10.5px;
+    min-width: 16px;
+  }
+}
+
+/* 360px - 499px: fit all 5 chips in ONE row without scrolling by dropping icons */
+@media (max-width: 499px) and (min-width: 360px) {
+  .attendance-filter-pills {
+    gap: 4px;
+    justify-content: space-between;
+  }
+
+  .attendance-filter-pill {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 40px;
+    padding: 0 6px;
+    gap: 3px;
+    font-size: 11px;
+    letter-spacing: -0.01em;
+  }
+
+  .attendance-filter-pill > svg {
+    display: none;
+  }
+
+  .attendance-pill-count {
+    padding: 1px 4px;
+    font-size: 10.5px;
+    min-width: 15px;
+  }
+}
+
+@media (max-width: 389px) and (min-width: 360px) {
+  .attendance-module .attendance-toolbar-actions .button {
+    font-size: 10.5px;
+    letter-spacing: -0.02em;
+    padding: 8px 3px;
+  }
+
+  .attendance-module .layout-toggle button {
+    padding: 0 8px;
+    font-size: 11.5px;
+    gap: 4px;
+  }
+}
+
+/* <= 359px (e.g. 320px): single-line horizontal scroll with hidden scrollbar, snap & edge fade */
+@media (max-width: 359px) {
+  .attendance-filter-pills-wrap::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 24px;
+    pointer-events: none;
+    background: linear-gradient(to right, transparent, var(--paper));
+  }
+
+  .attendance-filter-pills {
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-wrap: nowrap;
+    gap: 5px;
+    padding-right: 22px;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .attendance-filter-pills::-webkit-scrollbar {
+    display: none;
+  }
+
+  .attendance-filter-pill {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+    min-height: 40px;
+    padding: 0 9px;
+    gap: 4px;
+    font-size: 11.5px;
+  }
+
+  .attendance-filter-pill > svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  .attendance-module .attendance-roster-actions {
+    gap: 6px;
+  }
+
+  .attendance-module .layout-toggle button {
+    padding: 0 7px;
+    font-size: 11px;
+    gap: 3px;
+  }
+
+  .attendance-module .attendance-toolbar-actions {
+    gap: 5px;
+  }
+
+  .attendance-module .attendance-toolbar-actions .button {
+    font-size: 9.75px;
+    letter-spacing: -0.025em;
+    padding: 7px 2px;
+    min-height: 52px;
+  }
+}

@@ -339,62 +339,64 @@ export default function AttendanceModule({
       </section>
 
       {/* Filter pills */}
-      <div className="attendance-filter-pills" role="tablist" aria-label="Filter students by attendance status">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeFilter === "ALL"}
-          className={`attendance-filter-pill${activeFilter === "ALL" ? " is-active" : ""}`}
-          onClick={() => setActiveFilter("ALL")}
-        >
-          <Icon name="users" size={15} />
-          <span>All</span>
-          <strong className="attendance-pill-count">{students.length}</strong>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeFilter === "PRESENT"}
-          className={`attendance-filter-pill pill-present${activeFilter === "PRESENT" ? " is-active" : ""}`}
-          onClick={() => setActiveFilter("PRESENT")}
-        >
-          <Icon name="check" size={15} />
-          <span>Present</span>
-          <strong className="attendance-pill-count">{counts.PRESENT}</strong>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeFilter === "LATE"}
-          className={`attendance-filter-pill pill-late${activeFilter === "LATE" ? " is-active" : ""}`}
-          onClick={() => setActiveFilter("LATE")}
-        >
-          <Icon name="clock" size={15} />
-          <span>Late</span>
-          <strong className="attendance-pill-count">{counts.LATE}</strong>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeFilter === "ABSENT"}
-          className={`attendance-filter-pill pill-absent${activeFilter === "ABSENT" ? " is-active" : ""}`}
-          onClick={() => setActiveFilter("ABSENT")}
-        >
-          <Icon name="alert" size={15} />
-          <span>Absent</span>
-          <strong className="attendance-pill-count">{counts.ABSENT}</strong>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeFilter === "UNMARKED"}
-          className={`attendance-filter-pill pill-unmarked${activeFilter === "UNMARKED" ? " is-active" : ""}`}
-          onClick={() => setActiveFilter("UNMARKED")}
-        >
-          <Icon name="info" size={15} />
-          <span>Unmarked</span>
-          <strong className="attendance-pill-count">{counts.UNMARKED}</strong>
-        </button>
+      <div className="attendance-filter-pills-wrap">
+        <div className="attendance-filter-pills" role="tablist" aria-label="Filter students by attendance status">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeFilter === "ALL"}
+            className={`attendance-filter-pill${activeFilter === "ALL" ? " is-active" : ""}`}
+            onClick={() => setActiveFilter("ALL")}
+          >
+            <Icon name="users" size={14} />
+            <span>All</span>
+            <strong className="attendance-pill-count">{students.length}</strong>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeFilter === "PRESENT"}
+            className={`attendance-filter-pill pill-present${activeFilter === "PRESENT" ? " is-active" : ""}`}
+            onClick={() => setActiveFilter("PRESENT")}
+          >
+            <Icon name="check" size={14} />
+            <span>Present</span>
+            <strong className="attendance-pill-count">{counts.PRESENT}</strong>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeFilter === "LATE"}
+            className={`attendance-filter-pill pill-late${activeFilter === "LATE" ? " is-active" : ""}`}
+            onClick={() => setActiveFilter("LATE")}
+          >
+            <Icon name="clock" size={14} />
+            <span>Late</span>
+            <strong className="attendance-pill-count">{counts.LATE}</strong>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeFilter === "ABSENT"}
+            className={`attendance-filter-pill pill-absent${activeFilter === "ABSENT" ? " is-active" : ""}`}
+            onClick={() => setActiveFilter("ABSENT")}
+          >
+            <Icon name="alert" size={14} />
+            <span>Absent</span>
+            <strong className="attendance-pill-count">{counts.ABSENT}</strong>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeFilter === "UNMARKED"}
+            className={`attendance-filter-pill pill-unmarked${activeFilter === "UNMARKED" ? " is-active" : ""}`}
+            onClick={() => setActiveFilter("UNMARKED")}
+          >
+            <Icon name="info" size={14} />
+            <span>Unmarked</span>
+            <strong className="attendance-pill-count">{counts.UNMARKED}</strong>
+          </button>
+        </div>
       </div>
 
       {takingAttendance ? (
