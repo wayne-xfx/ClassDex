@@ -267,7 +267,7 @@ test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Depende
 
     // Verify our workspace history contains zero real Resend/Postgres credentials (placeholders only)
     const rawExample = fs.readFileSync(path.join(repoRoot, "classdex-backend", ".env.example"), "utf8");
-    assert.ok(!/ep-polished-night|ep-orange-dream/.test(rawExample));
+    assert.ok(!/ep-polished-night|ep-orange-dream|ep-solitary-water|ep-still-firefly/.test(rawExample));
   });
 
   await t.test("CONF-05b: root .env file must not be tracked in git index", async () => {
@@ -297,6 +297,8 @@ test("SCRUM-73: Security Configuration, Headers, CORS, Production Mode & Depende
       "DATABASE_URL",
       "ep-polished-night",
       "ep-orange-dream",
+      "ep-solitary-water",
+      "ep-still-firefly",
     ];
     for (const file of files) {
       if (/\.(png|svg|ico)$/i.test(file)) continue;

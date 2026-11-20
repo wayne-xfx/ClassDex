@@ -1,8 +1,9 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const ALLOWED_TEST_DB_HOST_MARKER = "ep-orange-dream-b3a6qov0";
+const ALLOWED_TEST_DB_HOST_MARKER = "ep-solitary-water-azkjdhr2";
 const PROD_NEON_HOST_MARKER = "ep-polished-night-b3hs4no6";
+const LIVE_PROD_NEON_HOST_MARKER = "ep-still-firefly-ao1zyh81";
 
 function resolveRepoRoot() {
   return path.resolve(__dirname, "..", "..");
@@ -56,7 +57,10 @@ function assertSafeTestDatabaseUrl(
     );
   }
 
-  if (normalizedHost.includes(PROD_NEON_HOST_MARKER)) {
+  if (
+    normalizedHost.includes(PROD_NEON_HOST_MARKER) ||
+    normalizedHost.includes(LIVE_PROD_NEON_HOST_MARKER)
+  ) {
     throw new Error(
       `Refusing to run tests against production database host (${host}).`,
     );
