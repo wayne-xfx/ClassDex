@@ -754,7 +754,7 @@ export default function StudentListManager({
                               className={`input sl-name-input ${!readOnly && row.nameError ? "input-invalid" : ""}`}
                               value={row.name}
                               disabled={readOnly}
-                              aria-label={`Student name for row ${index + 1}`}
+                              aria-label={`Row ${index + 1} full name`}
                               aria-invalid={!readOnly && row.nameError ? "true" : undefined}
                               onChange={(event) => updateRow(index, "name", event.target.value)}
                               onBlur={() => normalizeRowName(index)}
@@ -770,7 +770,7 @@ export default function StudentListManager({
                               maxLength={7}
                               value={row.studentId}
                               disabled={readOnly}
-                              aria-label={`Student ID for ${row.name || `row ${index + 1}`}`}
+                              aria-label={`Row ${index + 1} ID for ${row.name || `student ${index + 1}`}`}
                               aria-invalid={!readOnly && row.idError ? "true" : undefined}
                               onChange={(event) =>
                                 updateRow(index, "studentId", event.target.value.replace(/\D/g, "").slice(0, 7))
