@@ -542,8 +542,8 @@ export default function StudentListManager({
         }
       />
 
-      <div className="flex items-center justify-between flex-wrap gap-3 border-b border-slate-200 dark:border-slate-800 pb-3 mt-4">
-        <div className="flex gap-2" role="tablist">
+      <div className="student-list-subnav">
+        <div className="student-list-tabs" role="tablist">
           <button
             type="button"
             role="tab"
@@ -652,16 +652,29 @@ export default function StudentListManager({
                     />
                   </label>
                   <div className="student-list-import-actions">
-                    <button type="button" className="button button-quiet" onClick={importPasted} disabled={!pasteValue.trim()}>
+                    <button
+                      type="button"
+                      className="button button-quiet student-list-paste-btn"
+                      onClick={importPasted}
+                      disabled={!pasteValue.trim()}
+                    >
                       Add pasted rows
                     </button>
-                    <button type="button" className="button button-quiet" onClick={downloadTemplate}>
-                      <Icon name="download" /> Download template
-                    </button>
-                    <label className="button button-quiet">
-                      <Icon name="upload" /> Import student list
-                      <input type="file" accept=".csv,.xlsx,.xls" hidden onChange={handleFile} />
-                    </label>
+                    <div className="student-list-file-actions">
+                      <button
+                        type="button"
+                        className="button button-secondary student-list-file-btn"
+                        onClick={downloadTemplate}
+                      >
+                        <Icon name="download" size={15} />
+                        <span>Download template</span>
+                      </button>
+                      <label className="button button-secondary student-list-file-btn">
+                        <Icon name="upload" size={15} />
+                        <span>Import student list</span>
+                        <input type="file" accept=".csv,.xlsx,.xls" hidden onChange={handleFile} />
+                      </label>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -669,11 +682,11 @@ export default function StudentListManager({
           ) : null}
 
           <div className="student-list-preview-heading">
-            <div>
+            <div className="student-list-status-summary">
               <h3>
                 {readOnly || (!isDirty && !invalidCount) ? "Student list" : "Student list preview"}
               </h3>
-              <span>
+              <span className="student-list-status-line">
                 {filteredRowsWithIndices.length} {filteredRowsWithIndices.length === 1 ? "row" : "rows"}
                 {searchTerm ? ` (filtered from ${rows.length})` : ""}
                 {!readOnly && invalidCount
@@ -688,7 +701,9 @@ export default function StudentListManager({
             {!readOnly ? (
               <button
                 type="button"
-                className="button button-primary"
+                className={`button button-primary student-list-save-btn${
+                  !isDirty && !invalidCount && rows.length ? " is-all-saved" : ""
+                }`}
                 onClick={saveStudentList}
                 disabled={saving || !rows.length || Boolean(invalidCount) || !isDirty}
               >
@@ -705,7 +720,7 @@ export default function StudentListManager({
             <ModuleSkeleton aria-label="Loading student list" />
           ) : rows.length ? (
             <div className="student-list-table-wrap">
-              <table className="student-list-table">
+              <table className="student-list-table student-list-active-table">
                 <thead>
                   <tr>
                     <th>Name</th>
@@ -725,45 +740,50 @@ export default function StudentListManager({
                     return (
                       <tr
                         key={row.id || `draft-${index}`}
-                        className={isFocused ? "is-focused-student-row" : ""}
+                        className={`student-list-row${isFocused ? " is-focused-student-row" : ""}`}
                         ref={(el) => {
                           if (el && isFocused) {
                             el.scrollIntoView({ behavior: "smooth", block: "center" });
                           }
                         }}
                       >
-                        <td>
+                        <td className="sl-cell-name">
                           <div className="student-list-name-cell">
                             <Avatar src={row.photo} name={row.name} size="sm" className="student-list-avatar" />
                             <input
-                              className={`input ${!readOnly && row.nameError ? "input-invalid" : ""}`}
+                              className={`input sl-name-input ${!readOnly && row.nameError ? "input-invalid" : ""}`}
                               value={row.name}
                               disabled={readOnly}
+                              aria-label={`Student name for row ${index + 1}`}
                               aria-invalid={!readOnly && row.nameError ? "true" : undefined}
                               onChange={(event) => updateRow(index, "name", event.target.value)}
                               onBlur={() => normalizeRowName(index)}
                             />
                           </div>
                         </td>
-                        <td>
-                          <input
-                            className={`input ${!readOnly && row.idError ? "input-invalid" : ""}`}
-                            inputMode="numeric"
-                            maxLength={7}
-                            value={row.studentId}
-                            disabled={readOnly}
-                            aria-invalid={!readOnly && row.idError ? "true" : undefined}
-                            onChange={(event) =>
-                              updateRow(index, "studentId", event.target.value.replace(/\D/g, "").slice(0, 7))
-                            }
-                          />
+                        <td className="sl-cell-id">
+                          <div className="sl-id-wrap">
+                            <span className="sl-id-prefix" aria-hidden="true">ID</span>
+                            <input
+                              className={`input sl-id-input ${!readOnly && row.idError ? "input-invalid" : ""}`}
+                              inputMode="numeric"
+                              maxLength={7}
+                              value={row.studentId}
+                              disabled={readOnly}
+                              aria-label={`Student ID for ${row.name || `row ${index + 1}`}`}
+                              aria-invalid={!readOnly && row.idError ? "true" : undefined}
+                              onChange={(event) =>
+                                updateRow(index, "studentId", event.target.value.replace(/\D/g, "").slice(0, 7))
+                              }
+                            />
+                          </div>
                         </td>
-                        <td>
+                        <td className="sl-cell-status">
                           {readOnly ? (
-                            <span className="student-list-row-valid">Read-only</span>
+                            <span className="student-list-row-valid student-list-badge">Read-only</span>
                           ) : row.status === "invalid" ? (
                             <div className="student-list-status-cell">
-                              <span className="student-list-row-error">{row.statusLabel}</span>
+                              <span className="student-list-row-error student-list-badge">{row.statusLabel}</span>
                               {row.id && row.isModified ? (
                                 <button
                                   type="button"
@@ -776,7 +796,7 @@ export default function StudentListManager({
                             </div>
                           ) : row.status === "unsaved-new" || row.status === "unsaved-edited" ? (
                             <div className="student-list-status-cell">
-                              <span className="student-list-row-pending">{row.statusLabel}</span>
+                              <span className="student-list-row-pending student-list-badge">{row.statusLabel}</span>
                               {row.status === "unsaved-edited" ? (
                                 <button
                                   type="button"
@@ -788,14 +808,14 @@ export default function StudentListManager({
                               ) : null}
                             </div>
                           ) : (
-                            <span className="student-list-row-valid">{row.statusLabel}</span>
+                            <span className="student-list-row-valid student-list-badge">{row.statusLabel}</span>
                           )}
                         </td>
                         {!readOnly ? (
-                          <td>
+                          <td className="sl-cell-action">
                             <button
                               type="button"
-                              className="icon-button"
+                              className="icon-button student-list-remove-btn"
                               aria-label={`Remove ${row.name || "row"}`}
                               onClick={() => promptRemoveRow(index)}
                             >
@@ -836,7 +856,7 @@ export default function StudentListManager({
             <ModuleSkeleton aria-label="Loading drop list" />
           ) : dropList.length ? (
             <div className="student-list-table-wrap">
-              <table className="student-list-table">
+              <table className="student-list-table student-list-drop-table">
                 <thead>
                   <tr>
                     <th>

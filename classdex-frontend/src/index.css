@@ -10258,8 +10258,22 @@ textarea {
 }
 
 @media (max-width: 900px) {
+  .app-header-inner {
+    gap: 12px;
+    padding: 0 18px;
+  }
+
   .app-header .brand {
-    width: 176px;
+    width: 164px;
+  }
+
+  .app-header .nav-link {
+    white-space: nowrap;
+    padding: 9px 10px;
+  }
+
+  .app-header .header-user {
+    max-width: 112px;
   }
 }
 
@@ -11002,5 +11016,538 @@ textarea {
     letter-spacing: -0.025em;
     padding: 7px 2px;
     min-height: 52px;
+  }
+}
+
+/* ==========================================================================
+   Task 4: Student List Mobile Cards, File Actions & Compact Save Status
+   ========================================================================== */
+
+.student-list-manager {
+  min-width: 0;
+  max-width: 100%;
+  margin: 16px 0 32px;
+  padding: 24px;
+}
+
+.student-list-subnav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-bottom: 14px;
+  margin-top: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.student-list-tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.student-list-tabs .button {
+  min-height: 44px;
+}
+
+.student-list-search-bar {
+  flex: 1 1 220px;
+  max-width: 340px;
+  min-width: 0;
+}
+
+.student-list-import-box {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--paper) 55%, var(--card));
+}
+
+.student-list-import-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.student-list-paste-btn {
+  justify-self: start;
+  min-height: 40px;
+}
+
+.student-list-file-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.student-list-file-btn {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 10px;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 660;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.student-list-file-btn svg {
+  flex: 0 0 auto;
+}
+
+.student-list-preview-heading {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 22px 0 12px;
+}
+
+.student-list-status-summary {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.student-list-status-summary h3 {
+  margin: 0;
+  color: var(--navy);
+  font-size: 16px;
+  font-weight: 720;
+}
+
+.student-list-status-line {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.student-list-save-btn {
+  width: auto !important;
+  flex: 0 0 auto;
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 11px;
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.student-list-save-btn:disabled {
+  background: var(--surface-muted);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  box-shadow: none;
+  opacity: 0.78;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.student-list-save-btn:disabled.is-all-saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: color-mix(in srgb, var(--accent-present) 11%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--accent-present) 30%, var(--line));
+  color: var(--status-present-text);
+  box-shadow: none;
+  opacity: 1;
+  cursor: default;
+}
+
+.student-list-save-btn:disabled.is-all-saved::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+  flex: 0 0 auto;
+}
+
+/* Status badges with dot + text (never color alone) */
+.student-list-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 660;
+  line-height: 1.3;
+  white-space: normal;
+}
+
+.student-list-badge::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+  flex: 0 0 auto;
+}
+
+.student-list-row-valid.student-list-badge {
+  background: color-mix(in srgb, var(--accent-present) 12%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--accent-present) 28%, var(--line));
+  color: var(--status-present-text);
+}
+
+.student-list-row-pending.student-list-badge {
+  background: color-mix(in srgb, var(--royal) 12%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--royal) 30%, var(--line));
+  color: var(--royal);
+}
+
+.student-list-row-error.student-list-badge {
+  background: color-mix(in srgb, var(--accent-red) 12%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--accent-red) 32%, var(--line));
+  color: var(--status-absent-text);
+}
+
+.student-list-undo-btn {
+  min-height: 30px;
+  padding: 2px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 620;
+  cursor: pointer;
+  transition: border-color 150ms ease, color 150ms ease, background-color 150ms ease;
+}
+
+.student-list-undo-btn:hover {
+  border-color: var(--royal);
+  color: var(--royal);
+  background: color-mix(in srgb, var(--royal) 6%, var(--card));
+}
+
+/* Desktop table polish (>= 768px) */
+.student-list-table-wrap {
+  margin-top: 8px;
+  overflow-x: auto;
+}
+
+.student-list-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.student-list-table th {
+  font-size: 11.5px;
+  font-weight: 720;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.student-list-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.student-list-table tbody tr:hover {
+  background: color-mix(in srgb, var(--royal) 3%, transparent);
+}
+
+.student-list-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sl-name-input {
+  min-width: 0;
+  flex: 1 1 auto;
+  height: 42px;
+}
+
+.sl-id-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sl-id-prefix {
+  display: none;
+}
+
+.sl-id-input {
+  width: 120px;
+  min-width: 108px;
+  height: 42px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.student-list-remove-btn {
+  width: 40px;
+  height: 40px;
+  font-size: 18px;
+  color: var(--muted);
+}
+
+.student-list-remove-btn:hover {
+  border-color: color-mix(in srgb, var(--accent-red) 45%, var(--line));
+  color: var(--accent-red);
+  background: color-mix(in srgb, var(--accent-red) 8%, var(--card));
+}
+
+/* Mobile stacked card layout (< 768px) */
+@media (max-width: 767px) {
+  .student-list-manager {
+    padding: 16px;
+    margin: 12px 0 24px;
+  }
+
+  .student-list-subnav {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .student-list-tabs {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .student-list-tabs .button {
+    width: 100%;
+    padding: 0 8px;
+    font-size: 12.5px;
+    white-space: nowrap;
+  }
+
+  .student-list-search-bar {
+    flex: none;
+    width: 100%;
+    max-width: none;
+  }
+
+  .student-list-input-grid,
+  .student-list-entry-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .student-list-entry-form .button {
+    width: 100%;
+  }
+
+  .student-list-paste-btn {
+    width: 100%;
+    justify-self: stretch;
+  }
+
+  .student-list-preview-heading {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 18px 0 12px;
+  }
+
+  .student-list-table-wrap {
+    overflow-x: visible;
+    margin-inline: 0;
+  }
+
+  .student-list-active-table,
+  .student-list-drop-table {
+    display: block;
+    width: 100%;
+  }
+
+  .student-list-active-table thead,
+  .student-list-drop-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .student-list-active-table tbody,
+  .student-list-drop-table tbody {
+    display: grid;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .student-list-active-table tbody tr.student-list-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px;
+    row-gap: 8px;
+    column-gap: 6px;
+    align-items: center;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--paper) 38%, var(--card));
+    box-shadow: 0 2px 8px rgba(18, 38, 79, 0.04);
+  }
+
+  .student-list-active-table tbody tr.student-list-row:hover {
+    background: color-mix(in srgb, var(--paper) 38%, var(--card));
+  }
+
+  .student-list-active-table tbody tr.student-list-row td {
+    display: block;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+  }
+
+  .student-list-active-table td.sl-cell-name {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .student-list-active-table td.sl-cell-action {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex !important;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .student-list-active-table td.sl-cell-id {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    padding-left: 46px !important;
+  }
+
+  .student-list-active-table td.sl-cell-status {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    padding-left: 46px !important;
+  }
+
+  .student-list-active-table .student-list-name-cell {
+    gap: 10px;
+  }
+
+  .student-list-active-table .sl-name-input {
+    height: 40px;
+    padding: 0 10px;
+    font-size: 13.5px;
+    font-weight: 600;
+    text-overflow: clip;
+  }
+
+  .student-list-active-table .sl-id-prefix {
+    display: inline-block;
+    font-size: 11.5px;
+    font-weight: 720;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    flex: 0 0 auto;
+  }
+
+  .student-list-active-table .sl-id-input {
+    width: 112px;
+    min-width: 108px;
+    max-width: 100%;
+    height: 36px;
+    padding: 0 10px;
+    font-size: 13.5px;
+    font-weight: 620;
+    font-variant-numeric: tabular-nums;
+    text-overflow: clip;
+  }
+
+  .student-list-remove-btn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Drop list stacked cards below 768px */
+  .student-list-drop-table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--paper) 38%, var(--card));
+  }
+
+  .student-list-drop-table tbody td {
+    display: block;
+    padding: 0;
+    border: 0;
+    font-size: 13px;
+  }
+
+  .student-list-drop-table tbody td:nth-child(2)::before {
+    content: "ID ";
+    font-weight: 700;
+    color: var(--muted);
+  }
+
+  .student-list-drop-table tbody td:nth-child(3)::before {
+    content: "Dropped · ";
+    color: var(--muted);
+  }
+
+  .student-list-drop-table tbody td:nth-child(5) {
+    margin-top: 4px;
+  }
+
+  .student-list-drop-table tbody td:nth-child(5) .button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 440px) and (min-width: 361px) {
+  .student-list-file-btn {
+    padding: 0 6px;
+    gap: 4px;
+    font-size: 11px;
+  }
+
+  .student-list-file-btn svg {
+    width: 13px;
+    height: 13px;
+  }
+}
+
+@media (max-width: 360px) {
+  .student-list-manager {
+    padding: 12px;
+  }
+
+  .student-list-file-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .student-list-tabs .button {
+    font-size: 11.5px;
+    gap: 5px;
+    padding: 0 6px;
+  }
+
+  .student-list-active-table td.sl-cell-id,
+  .student-list-active-table td.sl-cell-status {
+    padding-left: 42px !important;
   }
 }
