@@ -29,6 +29,7 @@ test.describe("SCRUM-65 Recording Modules E2E (REC-08, REC-12, REC-16)", () => {
   let stu3;
   let recitationClass;
   let quizClass;
+  let projectsClass;
   let warnClassA;
   let warnClassB;
   let warnClassC;
@@ -153,19 +154,51 @@ test.describe("SCRUM-65 Recording Modules E2E (REC-08, REC-12, REC-16)", () => {
       return cls;
     };
 
-    [recitationClass, quizClass, warnClassA, warnClassB, warnClassC] = await Promise.all([
+    [recitationClass, quizClass, projectsClass, warnClassA, warnClassB, warnClassC] = await Promise.all([
       makeClass("REC", [stu1, stu2, stu3]),
       makeClass("QUIZ", [stu1, stu2]),
+      makeClass("PROJ", [stu1, stu2, stu3]),
       makeClass("WARNA", [stu1]),
       makeClass("WARNB", [stu1]),
       makeClass("WARNC", [stu1]),
     ]);
 
-    // Seed today's session in recitationClass + 7 historical ABSENT sessions for warnClassA/B/C
-    await Promise.all([
+    const yesterday = new Date(manilaDate().getTime() - 86_400_000);
+    const projectsClassFull = await prisma.project.findMany({
+      where: { classId: projectsClass.id },
+      select: { id: true, type: true },
+    });
+    const projMidterm = projectsClassFull.find((p) => p.type === "MIDTERM");
+
+    // Seed today's session in recitationClass + projectsClass (with stale yesterday ProjectScore.isAbsent=true for stu2) + 7 historical ABSENT sessions for warnClassA/B/C
+    const [, yesterdayProjSession] = await Promise.all([
       prisma.classSession.create({
         data: {
           classId: recitationClass.id,
+          date: manilaDate(),
+          startedAt: new Date(),
+          attendance: {
+            create: [
+              { studentId: stu1.studentProfile.id, status: "PRESENT" },
+              { studentId: stu2.studentProfile.id, status: "LATE" },
+              { studentId: stu3.studentProfile.id, status: "ABSENT" },
+            ],
+          },
+        },
+      }),
+      prisma.classSession.create({
+        data: {
+          classId: projectsClass.id,
+          date: yesterday,
+          startedAt: yesterday,
+          attendance: {
+            create: [{ studentId: stu2.studentProfile.id, status: "ABSENT" }],
+          },
+        },
+      }),
+      prisma.classSession.create({
+        data: {
+          classId: projectsClass.id,
           date: manilaDate(),
           startedAt: new Date(),
           attendance: {
@@ -195,6 +228,18 @@ test.describe("SCRUM-65 Recording Modules E2E (REC-08, REC-12, REC-16)", () => {
         }),
       ),
     ]);
+
+    if (projMidterm && yesterdayProjSession) {
+      await prisma.projectScore.create({
+        data: {
+          projectId: projMidterm.id,
+          studentId: stu2.studentProfile.id,
+          sessionId: yesterdayProjSession.id,
+          score: null,
+          isAbsent: true,
+        },
+      });
+    }
   });
 
   test.afterAll(async () => {
@@ -571,5 +616,76 @@ test.describe("SCRUM-65 Recording Modules E2E (REC-08, REC-12, REC-16)", () => {
     // Must mark the warning row read and clear unread bell badge
     await expect(warningRow).toHaveClass(/pending-row-read/, { timeout: 5000 });
     await expect(bellTrigger.locator(".header-bell-badge")).toHaveCount(0);
+  });
+
+  test("PROJ-01: Projects absent count matches Attendance tab and Out of field allows typing, clearing, and saving", async ({
+    page,
+  }) => {
+    await loginAsFaculty(page);
+    await page.goto(`/faculty/classes/${projectsClass.id}?module=projects`);
+
+    await expect(page.locator(".scoring-absence-banner")).toContainText(
+      "1 student is absent and locked for this session.",
+    );
+
+    const midtermCard = page.locator(".project-card-midterm");
+    await midtermCard.getByRole("button", { name: /Start scoring|Continue scoring/i }).click();
+
+    await expect(page.locator(".scoring-absence-banner")).toContainText(
+      "1 student is absent and locked for this session.",
+    );
+
+    // Exactly 1 Absent badge (stu3 only); stu1 (Present) and stu2 (Late, even with stale yesterday isAbsent=true) are unlocked
+    await expect(page.locator(".scoring-row .design-status-pill")).toHaveCount(1);
+    const stu1Row = page.locator(".scoring-row", { hasText: stu1.studentProfile.studentId });
+    const stu2Row = page.locator(".scoring-row", { hasText: stu2.studentProfile.studentId });
+    const stu3Row = page.locator(".scoring-row", { hasText: stu3.studentProfile.studentId });
+
+    await expect(stu1Row.locator(".design-status-pill")).toHaveCount(0);
+    await expect(stu1Row.locator("input.scoring-input")).toBeEnabled();
+    await expect(stu2Row.locator(".design-status-pill")).toHaveCount(0);
+    await expect(stu2Row.locator("input.scoring-input")).toBeEnabled();
+    await expect(stu3Row.locator(".design-status-pill")).toContainText("Absent");
+    await expect(stu3Row.locator("input.scoring-input")).toBeDisabled();
+
+    // "Out of" field accepts typing, clearing, retyping, and saves on "Save maximum"
+    const outOfInput = page.locator(".project-score-settings input");
+    await outOfInput.click();
+    await outOfInput.type("50");
+    await expect(outOfInput).toHaveValue("50");
+    await outOfInput.fill("");
+    await expect(outOfInput).toHaveValue("");
+    await outOfInput.type("100");
+    await expect(outOfInput).toHaveValue("100");
+
+    const patchProject = page.waitForResponse(
+      (res) =>
+        res.url().includes("/api/projects/") &&
+        res.request().method() === "PATCH" &&
+        res.status() === 200,
+    );
+    await page.getByRole("button", { name: "Save maximum" }).click();
+    await patchProject;
+    await expect(outOfInput).toHaveValue("100");
+    await expect(page.getByText(/Maximum score: 100\./)).toBeVisible();
+
+    // Save score for stu2 (whose stale yesterday ProjectScore had isAbsent=true)
+    const putScore = page.waitForResponse(
+      (res) =>
+        res.url().includes(`/scores/${stu2.studentProfile.id}`) &&
+        res.request().method() === "PUT" &&
+        res.status() === 200,
+    );
+    await stu2Row.locator("input.scoring-input").fill("85");
+    await stu2Row.locator("input.scoring-input").press("Enter");
+    await putScore;
+
+    // Reload and verify maxScore and score persist
+    await page.goto(`/faculty/classes/${projectsClass.id}?module=projects`);
+    await page.locator(".project-card-midterm").getByRole("button", { name: /Continue scoring|View results/i }).click();
+    await expect(page.locator(".project-score-settings input")).toHaveValue("100");
+    await expect(
+      page.locator(".scoring-row", { hasText: stu2.studentProfile.studentId }).locator("input.scoring-input"),
+    ).toHaveValue("85");
   });
 });

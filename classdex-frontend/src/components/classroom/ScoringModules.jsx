@@ -23,6 +23,10 @@ function getRelatedStudentId(row) {
     || row.profile?.id;
 }
 
+function isStudentAbsentInSession(student) {
+  return student?.status === "ABSENT";
+}
+
 function formatScoreRows(response, students, currentSessionId, activeSessionId) {
   const rows = getRows(response);
   const isTodaySession = Boolean(
@@ -33,7 +37,7 @@ function formatScoreRows(response, students, currentSessionId, activeSessionId) 
     const scoreRow = rows.find((row) => getRelatedStudentId(row) === student.id);
     const scoreIsAbsent = Boolean(scoreRow?.isAbsent || scoreRow?.absent);
     const isAbsent = isTodaySession
-      ? Boolean(scoreIsAbsent || student.status === "ABSENT")
+      ? isStudentAbsentInSession(student)
       : scoreIsAbsent;
     return {
       student,
@@ -514,7 +518,7 @@ export function ActivitiesModule({ classId, sessionId, students = [], tabCache, 
   }
 
   const isTodaySession = Boolean(sessionId && active?.sessionId === sessionId);
-  const rosterAbsentCount = students.filter((student) => student.status === "ABSENT").length;
+  const rosterAbsentCount = students.filter(isStudentAbsentInSession).length;
   const currentAbsentCount = isTodaySession
     ? rosterAbsentCount
     : entries.filter((e) => e.isAbsent).length;
@@ -779,7 +783,7 @@ export function ProjectsModule({ classId, sessionId, students = [], tabCache, re
   }, [activeProjectId, sessionId, studentIdsKey, tabCache]);
 
   const entries = useMemo(() => {
-    return formatScoreRows(rawScores, students, sessionId, sessionId);
+    return formatScoreRows(rawScores, students, sessionId, undefined);
   }, [rawScores, students, sessionId]);
 
   function openProject(project, focusMaxScore = false) {
@@ -828,8 +832,17 @@ export function ProjectsModule({ classId, sessionId, students = [], tabCache, re
     setError("");
     try {
       const response = await api.updateProject(active.id, { maxScore: score });
-      setProjects((current) => current.map((project) => project.id === active.id ? response.project : project));
-      setActive(response.project);
+      setProjects((current) => {
+        const next = current.map((project) =>
+          project.id === active.id ? { ...project, ...response.project } : project,
+        );
+        tabCache?.set(cacheKey, next);
+        return next;
+      });
+      setActive((current) => (current ? { ...current, ...response.project } : response.project));
+      setMaxScoreInput(
+        response.project?.maxScore == null ? "" : String(response.project.maxScore),
+      );
     } catch (saveError) {
       setError(saveError.message);
     } finally {
@@ -837,7 +850,8 @@ export function ProjectsModule({ classId, sessionId, students = [], tabCache, re
     }
   }
 
-  const rosterAbsentCount = students.filter((student) => student.status === "ABSENT").length;
+  const rosterAbsentCount = students.filter(isStudentAbsentInSession).length;
+  const sheetAbsentCount = entries.filter((entry) => entry.isAbsent).length;
 
   if (active) {
     return (
@@ -855,7 +869,7 @@ export function ProjectsModule({ classId, sessionId, students = [], tabCache, re
                 step="1"
                 inputMode="numeric"
                 value={maxScoreInput}
-                onChange={(event) => /^d*$/.test(event.target.value) && setMaxScoreInput(event.target.value)}
+                onChange={(event) => /^\d*$/.test(event.target.value) && setMaxScoreInput(event.target.value)}
                 onPaste={(event) => { if (!/^\d+$/.test(event.clipboardData.getData("text"))) event.preventDefault(); }}
               />
             </label>
@@ -867,7 +881,7 @@ export function ProjectsModule({ classId, sessionId, students = [], tabCache, re
             title={active.type === "MIDTERM" ? "Midterm Project" : "Finals Project"}
             maxScore={active.maxScore}
             entries={entries}
-            absentCount={rosterAbsentCount}
+            absentCount={sheetAbsentCount}
             onSave={saveProjectScore}
             readOnly={readOnly}
             back={() => { setActive(null); setError(""); }}
